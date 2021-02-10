@@ -1,6 +1,6 @@
 # RatiouUp
 
-Tool to fake upload on your torrents
+Tool to fake upload on your torrents.
 
 ## Features
 * WebUI
@@ -8,6 +8,6 @@ Tool to fake upload on your torrents
 
 ## Deployment
 ```shell
-docker run -d --name RatioUp --restart unless-stopped -v PATH:/data
+docker run -d --name RatioUp --restart unless-stopped -v PATH:/data slundi/ratioup
 ```
 Change the **PATH** in order to keep your configuration.
