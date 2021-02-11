@@ -1,4 +1,10 @@
 use std::collections::HashMap;
+use serde::Deserialize;
+use std::error::Error;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+use globset::Glob;
 
 enum Refresh {
     NEVER,
@@ -8,6 +14,7 @@ enum Refresh {
 }
 enum Key_Case {NONE, LOWER, UPPER}
 enum Case {LOWER, UPPER}
+#[derive(Deserialize, Debug)]
 enum Algorithm_Method {
     HASH_NO_LEADING_ZERO,
     HASH,
@@ -17,6 +24,7 @@ enum Algorithm_Method {
     /// RANDOM_POOL_WITH_CHECKSUM,
 }
 
+#[derive(Deserialize, Debug)]
 struct Algorithm {
     method: Algorithm_Method,
     ///for HASH_NO_LEADING_ZERO, HASH methods
@@ -30,11 +38,12 @@ struct Algorithm {
     /// for RANDOM_POOL_WITH_CHECKSUM
     prefix: String,
     /// for RANDOM_POOL_WITH_CHECKSUM
-    character_pool: String,
+    character_pool: Option<String>,
     /// for RANDOM_POOL_WITH_CHECKSUM
-    base:u8,
+    base: Option<u8>,
 }
 
+#[derive(Deserialize, Debug)]
 struct Generator {
     algorithm: Algorithm,
     refresh_on: Refresh,
@@ -42,17 +51,37 @@ struct Generator {
     refresh_every: u8,
 }
 
+#[derive(Deserialize, Debug)]
 struct URL_Encocer {
     encoding_exclusion_pattern: String,
     /// if the encoded hex string should be in upper case or no
     uppercase_encoded_hex: bool,
 }
 
+#[derive(Deserialize, Debug)]
 struct Client {
     key_generator: Generator,
     peer_id_generator = Generator,
     url_encoder = URL_Encocer,
+    //https://docs.rs/reqwest/0.11.0/reqwest/
     request_headers: HashMap<String, String>,
     num_want: u16,
     num_want_on_stom: u16,
+}
+
+fn read_config_file<P: AsRef<Path>>(path: P) -> Result<Client, Box<Error>> {
+    let file = File::open(path).expect("File should open in read only");
+    let reader = BufReader::new(file); //remove buffer?
+    let c = serde_json::from_reader(reader).expect("Unable to parse configuration file: JSON not valid!");
+    Ok(c);
+}
+
+fn list_clients<P: AsRef<Path>>(path: P) -> Vec<String> {
+    let mut result=vec<String>::with_capacity();
+    let glob = Glob::new("*.client")?.compile_matcher();
+    for entry in glob("*.client").expect("Failed to browse client folder") {
+        match entry {
+            Ok(path) => println!("{:?}", path.display()),
+            Err(e) => println!("{:?}", e),
+        }
 }

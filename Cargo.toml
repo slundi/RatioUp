@@ -7,3 +7,5 @@ edition = '2018'
 serde_json = "*"
 lava_torrent = "*"
 regex = "*"
+reqwest = { version = "*", features = ["json"] }
+globset = "*"
