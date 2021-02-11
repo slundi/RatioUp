@@ -1,0 +1,9 @@
+[package]
+name = "RatioUp"
+version = "0.1.0"
+edition = '2018'
+
+[dependencies]
+serde_json = "*"
+lava_torrent = "*"
+regex = "*"
