@@ -90,7 +90,7 @@ impl Client<'_> {
     }
 }
 
-/// URL encode a string. t does NOT change the casing of the regular characters, but it lower all encoded characters.
+/// URL encode a string. It does NOT change the casing of the regular characters, but it lower all encoded characters.
 ///
 /// # Arguments
 ///

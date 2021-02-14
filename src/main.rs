@@ -1,4 +1,7 @@
+extern crate rand;
+
 mod client;
+mod algorithm;
 
 fn main() {
     let c:  client::Client;

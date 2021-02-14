@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = '2018'
 
 [dependencies]
-lazy_static = "*"
+rand = "*"
+rand_regex = "*"
+#lazy_static = "*"
 serde_json = "*"
 lava_torrent = "*"
 regex = "*"
