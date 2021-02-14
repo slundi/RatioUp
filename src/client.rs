@@ -97,13 +97,11 @@ impl Client<'_> {
 /// * `pattern` - regular expression pattern reprented by string slice
 /// * `data` - data to process
 /// * `uppercase` - if the output should be in upper case
-pub fn get_encoded_URL<'a>(pattern: &str, data: &str, uppercase: bool) -> String {
+pub fn get_URL_encoded_char<'a>(pattern: &str, c: char, uppercase: bool) -> String {
     let mut hex=String::from("");
-    for c in data.chars() {
-        if Regex::new(pattern).unwrap().is_match(&String::from(c)) {return String::from(c);}
-        if c==0 as char {hex.push_str("%00")}
-        else {hex.push_str(&format!("%{:02}", c));}
-    }
+    if !pattern.is_empty() && Regex::new(pattern).unwrap().is_match(&String::from(c)) {return String::from(c);}
+    if c==0 as char {hex.push_str("%00")}
+    else {hex.push_str(&format!("%{:02x}", c as u8));}
     if uppercase {return hex.to_uppercase();} else {return hex;}
 }
 
@@ -186,39 +184,39 @@ pub fn load_clients() -> BTreeMap<&'static str, Client<'static>> {
 //******************************************* TESTS
 #[cfg(test)]
 mod tests {
-    use super::get_encoded_URL;
+    use super::*;
     #[test]
     fn should_encode_chars() {
-        assert_eq!(get_encoded_URL("", &String::from(0x00 as char), false), "%00");
-        assert_eq!(get_encoded_URL("", &String::from(0x01 as char), false), "%01");
-        assert_eq!(get_encoded_URL("", &String::from(0x10 as char), false), "%10");
-        assert_eq!(get_encoded_URL("", &String::from(0x1e as char), false), "%1e");
-        assert_eq!(get_encoded_URL("", &String::from(0x32 as char), false), "%32");
-        assert_eq!(get_encoded_URL("", &String::from(0x7a as char), false), "%7a");
-        assert_eq!(get_encoded_URL("", &String::from(0xff as char), false), "%ff");
+        assert_eq!(get_URL_encoded_char("", 0x00 as char, false), "%00");
+        assert_eq!(get_URL_encoded_char("", 0x01 as char, false), "%01");
+        assert_eq!(get_URL_encoded_char("", 0x10 as char, false), "%10");
+        assert_eq!(get_URL_encoded_char("", 0x1e as char, false), "%1e");
+        assert_eq!(get_URL_encoded_char("", 0x32 as char, false), "%32");
+        assert_eq!(get_URL_encoded_char("", 0x7a as char, false), "%7a");
+        assert_eq!(get_URL_encoded_char("", 0xff as char, false), "%ff");
     }
     #[test]
     fn should_not_encode_if_regex_dot_star() {
-        assert_eq!(get_encoded_URL(r".*", &String::from(0x32 as char), false), "2");
-        assert_eq!(get_encoded_URL(r".*", &String::from(0x6e as char), false), "n");
-        assert_eq!(get_encoded_URL(r".*", &String::from(0x7a as char), false), "z");
+        assert_eq!(get_URL_encoded_char(r".*", 0x32 as char, false), "2");
+        assert_eq!(get_URL_encoded_char(r".*", 0x6e as char, false), "n");
+        assert_eq!(get_URL_encoded_char(r".*", 0x7a as char, false), "z");
     }
     #[test]
     fn should_not_encode_excluded_chars() {
-        assert_eq!(get_encoded_URL(r"[a-zA-Z0-9]", &String::from(0x00 as char), false), "%00");
-        assert_eq!(get_encoded_URL(r"[a-zA-Z0-9]", &String::from(0x10 as char), false), "%10");
-        assert_eq!(get_encoded_URL(r"[a-zA-Z0-9]", &String::from(0x1e as char), false), "%1e");
-        assert_eq!(get_encoded_URL(r"[a-zA-Z0-9]", &String::from(0x32 as char), false), "2");
-        assert_eq!(get_encoded_URL(r"[a-zA-Z0-9]", &String::from(0x7a as char), false), "z");
-        assert_eq!(get_encoded_URL(r"[a-zA-Z0-9]", &String::from(0xff as char), false), "%ff");
+        assert_eq!(get_URL_encoded_char(r"[a-zA-Z0-9]", 0x00 as char, false), "%00");
+        assert_eq!(get_URL_encoded_char(r"[a-zA-Z0-9]", 0x10 as char, false), "%10");
+        assert_eq!(get_URL_encoded_char(r"[a-zA-Z0-9]", 0x1e as char, false), "%1e");
+        assert_eq!(get_URL_encoded_char(r"[a-zA-Z0-9]", 0x32 as char, false), "2");
+        assert_eq!(get_URL_encoded_char(r"[a-zA-Z0-9]", 0x7a as char, false), "z");
+        assert_eq!(get_URL_encoded_char(r"[a-zA-Z0-9]", 0xff as char, false), "%ff");
     }
     #[test]
     fn should_not_encode_translate_case_if_not_encoded_char() {
-        assert_eq!(get_encoded_URL(r"[a-zA-Z0-9]", &String::from(0x79 as char), true), "y");
-        assert_eq!(get_encoded_URL(r"[a-zA-Z0-9]", &String::from(0x59 as char), true), "Y");
+        assert_eq!(get_URL_encoded_char(r"[a-zA-Z0-9]", 0x79 as char, true), "y");
+        assert_eq!(get_URL_encoded_char(r"[a-zA-Z0-9]", 0x59 as char, true), "Y");
     }
     #[test]
     fn should_translate_case_if_encoded_char() {
-        assert_eq!(get_encoded_URL(r"[a-zA-Z0-9]", &String::from(0xae as char), true), "%AE");
+        assert_eq!(get_URL_encoded_char(r"[a-zA-Z0-9]", 0xae as char, true), "%AE");
     }
 }
