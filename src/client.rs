@@ -97,12 +97,18 @@ impl Client<'_> {
 /// * `pattern` - regular expression pattern reprented by string slice
 /// * `data` - data to process
 /// * `uppercase` - if the output should be in upper case
-pub fn get_URL_encoded_char<'a>(pattern: &str, c: char, uppercase: bool) -> String {
+fn get_URL_encoded_char<'a>(pattern: &str, c: char, uppercase: bool) -> String {
     let mut hex=String::from("");
     if !pattern.is_empty() && Regex::new(pattern).unwrap().is_match(&String::from(c)) {return String::from(c);}
     if c==0 as char {hex.push_str("%00")}
     else {hex.push_str(&format!("%{:02x}", c as u8));}
     if uppercase {return hex.to_uppercase();} else {return hex;}
+}
+
+pub fn get_URL_encoded(pattern: &str, data: &str, uppercase: bool) -> String {
+    let mut r = String::with_capacity(128);
+    for c in data.chars() {r.push_str(&get_URL_encoded_char(pattern, c, uppercase));}
+    return r;
 }
 
 pub fn load_clients() -> BTreeMap<&'static str, Client<'static>> {
@@ -185,6 +191,7 @@ pub fn load_clients() -> BTreeMap<&'static str, Client<'static>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::iter::FromIterator;
     #[test]
     fn should_encode_chars() {
         assert_eq!(get_URL_encoded_char("", 0x00 as char, false), "%00");
@@ -218,5 +225,10 @@ mod tests {
     #[test]
     fn should_translate_case_if_encoded_char() {
         assert_eq!(get_URL_encoded_char(r"[a-zA-Z0-9]", 0xae as char, true), "%AE");
+    }
+    #[test]
+    fn should_encode() {
+        assert_eq!(get_URL_encoded("[a-zA-Z0-9]", &String::from_iter(vec!['a', 0x11 as char, 'q', 0xf3 as char]), false), "a%11q%f3");
+        assert_eq!(get_URL_encoded("", &String::from_iter(vec![0xA2 as char, 0x11 as char, 0xf3 as char]), true), "%A2%11%F3");
     }
 }
