@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html><head>
+<title>Ratio Up</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="css/bulma.min.css">
+<link rel="stylesheet" href="css/bulma-dark.min.css">
+</head><body class="has-navbar-fixed-top">
+<nav id="top" class="navbar is-fixed-top">
+    <div class="navbar-brand">
+        <img class="navbar-item" src="https://bulma.io/images/bulma-logo.png" width="112" height="28" alt="Ratio Up" />
+        <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navbarBasicExample">
+            <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+        </a>
+      </div>
+      <div id="navbarBasicExample" class="navbar-menu"><div class="navbar-end">
+            <a class="navbar-item" href="javascript:start_stop()">Start/Stop</a>
+            <a class="navbar-item" href="javascript:update()">Update</a>
+            <a class="navbar-item" href="javascript:configuration()">Configuration</a>
+      </div></div>
+</nav>
+<div id="content"></div>
+<div class="modal" id="configuration">
+    <div class="modal-background"></div><div class="modal-card">
+          <header class="modal-card-head"><p class="modal-card-title">Configuration</p><a href="javascript:configuration()" class="delete" aria-label="close"></a></header>
+          <section class="modal-card-body">
+            <!-- Content ... -->
+          </section>
+          <footer class="modal-card-foot">
+            <button class="button is-success">Save changes</button><button class="button">Cancel</button>
+          </footer>
+        </div>
+      </div>
+<script>
+function start_stop() {}
+function refresh() {}
+function configuration() {document.getElementById("configuration").classList.toggle("is-active");}
+document.onkeydown = function(evt) {
+    evt = evt || window.event;
+    if (evt.keyCode == 27) {document.getElementById("configuration").classList.remove("is-active");}
+};
+</script>
+</body>
+</html>
