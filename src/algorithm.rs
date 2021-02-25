@@ -1,4 +1,4 @@
-use rand::{SeedableRng, Rng};
+use rand::Rng;
 
 const HASH_SYMBOLS: &str = "abcdef0123456789ABCDEF";
 
@@ -15,14 +15,34 @@ pub fn hash(length: usize, no_leading_zero: bool, uppercase: Option<bool>) -> St
     return h;
 }
 
+/// Generate a string from a regex pattern
 pub fn regex(pattern: &str) -> String {
-    /*let mut gen=Generator::new(pattern, , DEFAULT_MAX_REPEAT).unwrap();
-    let mut buffer = vec![];
-    gen.generate(&mut buffer).unwrap();
-    return String::from_utf8(buffer).unwrap();*/
     let mut rng=rand::thread_rng();
     let gen = rand_regex::Regex::compile(pattern, 100).unwrap();
     let out = (&mut rng).sample_iter(&gen).nth(64).unwrap();
+    return out;
+}
+
+/// Return a hex string from a random integer between 1 and 2147483647
+pub fn digit_range_transformed_to_hex_without_leading_zero() -> String {
+    let mut rng = rand::thread_rng();
+    return format!("{:x}", rng.gen_range(1u32..2147483647u32)).to_uppercase();
+}
+
+/// Used for some peer ID generation
+pub fn random_pool_with_checksum(length: usize, prefix: &str, characters_pool: &str) -> String {
+    if prefix.is_empty() {panic!("algorithm prefix must not be null or empty.");}
+    if characters_pool.is_empty() {panic!("algorithm character pool must not be null or empty.");}
+    let mut out=String::with_capacity(length);
+    out.push_str(prefix);
+    let mut rng=rand::thread_rng();
+    //TODO:
+    let length:usize=rng.gen_range(10usize..50usize);
+    let mut h=String::with_capacity(length);
+    while h.len() < length {
+
+    }
+    //out.push_str(&format!("{:x}", ));
     return out;
 }
 
@@ -52,5 +72,10 @@ mod tests {
         assert_eq!(re.is_match(&regex("-lt0D60-[\u{0001}-\u{00ff}]{12}")), true);
         re=Regex::new("-AZ5750-[a-zA-Z0-9]{12}").unwrap();
         assert_eq!(re.is_match(&regex("-AZ5750-[a-zA-Z0-9]{12}")), true)
+    }
+    #[test]
+    fn is_digit_range_to_hex_ok() {
+        let re=Regex::new(r"[A-Z0-9]+").unwrap();
+        assert_eq!(re.is_match(&digit_range_transformed_to_hex_without_leading_zero()), true);
     }
 }

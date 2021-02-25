@@ -12,3 +12,7 @@ lava_torrent = "*"
 regex = "*"
 reqwest = { version = "*", features = ["json"] }
 globset = "*"
+actix = "*"
+actix-web = "*"
+actix-files = "*"
+clap = "*"

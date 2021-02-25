@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use regex::Regex;
 
+use crate::algorithm;
+
 //refresh interval
 const NEVER: u8 = 0;
 const TIMED_OR_AFTER_STARTED_ANNOUNCE: u8 = 1;
@@ -17,6 +19,7 @@ const HASH: u8 = 11;
 const HASH_NO_LEADING_ZERO: u8 = 11;
 const DIGIT_RANGE_TRANSFORMED_TO_HEX_WITHOUT_LEADING_ZEROES: u8 = 12; //inclusive bounds: from 1 to 2147483647
 const RANDOM_POOL_WITH_CHECKSUM: u8 = 13;
+const PEER_ID_LENGTH: usize = 20;
 
 #[derive(Default)]
 pub struct Client<'a> {
@@ -88,6 +91,13 @@ impl Client<'_> {
         //TODO: replace tags
         return self.query;
     }
+    #[allow(non_snake_case)]
+    fn get_peer_ID(self: &Self) -> String {
+        let mut out=String::new();
+        if self.peer_algorithm == REGEX {out=algorithm::regex(self.peer_pattern);}
+
+        return out;
+    }
 }
 
 /// URL encode a string. It does NOT change the casing of the regular characters, but it lower all encoded characters.
@@ -97,6 +107,7 @@ impl Client<'_> {
 /// * `pattern` - regular expression pattern reprented by string slice
 /// * `data` - data to process
 /// * `uppercase` - if the output should be in upper case
+#[allow(non_snake_case)]
 fn get_URL_encoded_char<'a>(pattern: &str, c: char, uppercase: bool) -> String {
     let mut hex=String::from("");
     if !pattern.is_empty() && Regex::new(pattern).unwrap().is_match(&String::from(c)) {return String::from(c);}
@@ -105,6 +116,7 @@ fn get_URL_encoded_char<'a>(pattern: &str, c: char, uppercase: bool) -> String {
     if uppercase {return hex.to_uppercase();} else {return hex;}
 }
 
+#[allow(non_snake_case)]
 pub fn get_URL_encoded(pattern: &str, data: &str, uppercase: bool) -> String {
     let mut r = String::with_capacity(128);
     for c in data.chars() {r.push_str(&get_URL_encoded_char(pattern, c, uppercase));}
