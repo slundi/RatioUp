@@ -67,7 +67,7 @@
   </div>
 </div>
 <script>
-var socket=new WebSocket((window.location.protocol.toLowerCase()=='http'?'ws://':'ws://')+window.location.host);
+var socket=new WebSocket((window.location.protocol.toLowerCase()=='http'?'ws://':'ws://')+window.location.host+'/ws/');
 socket.onerror=function(error) {console.log('WebSocket Error: '+error);};
 socket.onopen=function(event) {console.log('Connected to: '+event.currentTarget.url);};
 // Handle messages sent by the server.
@@ -76,9 +76,15 @@ socket.onmessage = function(event) {
   //messagesList.innerHTML += '<li class="received"><span>Received:</span>' + message + '</li>';
 };
 socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};
+socket.onmessage = function(e) {
+  console.log(e.data);
+}
 function start_stop() {socket.send("toggle-start");}
 function update() {socket.send("update");}
 function apply_configuration() {
+  //TODO
+}
+function upload_torrent() {
   //TODO
 }
 function configuration() {document.getElementById("configuration").classList.toggle("is-active");}
