@@ -10,6 +10,7 @@ use actix_web::{middleware, web, App, Error, HttpRequest, HttpResponse, HttpServ
 use actix_web_actors::ws;
 use actix_files::Files;
 use serde_json::{Map, Value};
+use log::{info, trace, warn};
 
 mod client;
 mod algorithm;
@@ -102,8 +103,13 @@ async fn main() -> std::io::Result<()> {
                           .get_matches();
     let port = value_t!(matches, "PORT", u16).unwrap_or_else(|e| e.exit());
     let root=value_t!(matches, "WEB_ROOT", String).unwrap_or_else(|e| e.exit());
-    //if command line argument upgrade config.json
-    
+    //read config.json, if it does not exist, it creates a new one
+    let mut cfg=config::read_config_file("config.json".to_owned());
+    if cfg.is_err() {
+        cfg=Ok(config::Config::default());
+        info!("config.json does not exist, creating a new one");
+        config::write_config_file("config.json".to_owned(), cfg.unwrap());
+    }
     HttpServer::new(move || {App::new()
         .service(web::resource("/ws/").route(web::get().to(ws_index)))
         .service(Files::new(&root, "static/").index_file("index.html"))})
