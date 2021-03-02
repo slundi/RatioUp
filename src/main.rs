@@ -4,7 +4,8 @@ extern crate rand;
 extern crate clap;
 
 use clap::{Arg, value_t};
-use std::time::{Duration, Instant};
+use serde_json::json;
+use std::{borrow::{Borrow, BorrowMut}, collections::BTreeMap, time::{Duration, Instant}};
 use actix::prelude::*;
 use actix_web::{middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
@@ -17,6 +18,10 @@ mod config;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
+
+thread_local! {
+    pub static clients : BTreeMap<&'static str, client::Client<'static>> = client::load_clients();
+}
 
 /// do websocket handshake and start `RatioUpWS` actor
 async fn ws_index(r: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
@@ -40,6 +45,15 @@ impl Actor for RatioUpWS {
         //TODO: send the client list and the configured client
         //serde_json::to_value(client::load_clients());
         ctx.text("Hello");
+        //load client list
+        let mut client_list : Vec<&'static str>=Vec::with_capacity(54);
+        clients.with(|l| {
+            l.borrow();
+            for c in l.into_iter() {client_list.push(c.0);}
+        });
+        println!("{}",json!(client_list));
+        //TODO:send client list
+        //ctx.text(serde_json::to_value(client_list));
     }
 }
 
@@ -87,9 +101,7 @@ impl RatioUpWS {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     println!("RatioUp");
-    /*for c in client::load_clients().into_iter() {
-        println!("{}", c.0);
-    }*/
+    //for c in clients.in {client_list.push(c.0);}
     //let path = std::env::current_dir()?; println!("The current directory is {}", path.display());
     //parse command line
     let matches = clap::App::new("RatioUp")
