@@ -4,6 +4,7 @@ use std::{error::Error, io::Write};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use log::{info, trace, warn, error};
 
 //load config file: client, min/max speed, keep_torrent_with_zero_leecher
 
@@ -36,10 +37,10 @@ pub fn write_config_file(path: String, cfg: Config) {
     let data=serde_json::to_string_pretty(&cfg);
     let mut file: File;
     let p=Path::new(&path);
-    if p.exists() {file = File::open(path).expect("Unable to opent file for writing");}
-    else {file=File::create(p).expect("Unable to create file");}
-    file.write_all(data.unwrap().as_bytes());
-    file.flush();
+    if p.exists() {file = File::open(path).expect("Unable to open file config.json for writing");}
+    else {file=File::create(p).expect("Unable to create file config.json");}
+    if file.write_all(data.unwrap().as_bytes()).is_err() {error!("Error while writing config.json");}
+    if file.flush().is_err() {error!("Cannot write config.json");}
 }
 
 #[cfg(test)]
