@@ -3,14 +3,13 @@
 extern crate rand;
 extern crate clap;
 
-use clap::{Arg, SubCommand, value_t};
+use clap::{Arg, value_t};
 use std::time::{Duration, Instant};
 use actix::prelude::*;
 use actix_web::{middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use actix_files::Files;
-use serde_json::{Map, Value};
-use log::{info, trace, warn};
+use log::{info};
 
 mod client;
 mod algorithm;
@@ -110,6 +109,10 @@ async fn main() -> std::io::Result<()> {
         info!("config.json does not exist, creating a new one");
         config::write_config_file("config.json".to_owned(), cfg.unwrap());
     }
+    //create torrent folder
+    let torrent_folder = std::path::Path::new("torrents");
+    std::fs::create_dir_all(torrent_folder).expect("Cannot create torrent folder");
+    //start web server
     HttpServer::new(move || {App::new()
         .service(web::resource("/ws/").route(web::get().to(ws_index)))
         .service(Files::new(&root, "static/").index_file("index.html"))})
