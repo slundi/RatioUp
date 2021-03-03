@@ -10,11 +10,11 @@ use log::{info, trace, warn, error};
 
 #[derive(Default, Serialize, Deserialize, Debug)]
 pub struct Config {
-    client: String,
-    min_upload_rate: u16,
-    max_upload_rate: u16,
-    keep_torrent_with_zero_leecher: bool,
-    simultaneous_seed: u16,
+    pub client: String,
+    pub min_upload_rate: u16,
+    pub max_upload_rate: u16,
+    pub keep_torrent_with_zero_leecher: bool,
+    pub simultaneous_seed: u16,
 }
 
 impl Config {

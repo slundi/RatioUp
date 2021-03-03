@@ -1,7 +1,9 @@
 #![allow(non_snake_case)]
+#[macro_use]
 
 extern crate rand;
 extern crate clap;
+extern crate lazy_static;
 
 use clap::{Arg, value_t};
 use serde_json::json;
@@ -11,6 +13,8 @@ use actix_web::{middleware, web, App, Error, HttpRequest, HttpResponse, HttpServ
 use actix_web_actors::ws;
 use actix_files::Files;
 use log::{info};
+use std::sync::RwLock;
+use lazy_static::lazy_static;
 
 mod client;
 mod algorithm;
@@ -19,8 +23,14 @@ mod config;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 
+
+lazy_static! {
+    static ref CLIENTS : RwLock<BTreeMap<&'static str, client::Client<'static>>> =  RwLock::new(client::load_clients());
+    static ref CONFIG  : RwLock<config::Config> = RwLock::new(config::Config::default());
+}
 thread_local! {
-    pub static clients : BTreeMap<&'static str, client::Client<'static>> = client::load_clients();
+    //pub static ref clients : BTreeMap<&'static str, client::Client<'static>> = client::load_clients();
+    //pub static config : config::Config = config::Config::default();
 }
 
 /// do websocket handshake and start `RatioUpWS` actor
@@ -46,14 +56,8 @@ impl Actor for RatioUpWS {
         //serde_json::to_value(client::load_clients());
         ctx.text("Hello");
         //load client list
-        let mut client_list : Vec<&'static str>=Vec::with_capacity(54);
-        clients.with(|l| {
-            l.borrow();
-            for c in l.into_iter() {client_list.push(c.0);}
-        });
-        println!("{}",json!(client_list));
-        //TODO:send client list
-        //ctx.text(serde_json::to_value(client_list));
+        let client_list : Vec<&'static str>=CLIENTS.read().unwrap().keys().cloned().collect();
+        ctx.text(format!("{}",json!(client_list)));
     }
 }
 
@@ -121,6 +125,12 @@ async fn main() -> std::io::Result<()> {
         info!("config.json does not exist, creating a new one");
         config::write_config_file("config.json".to_owned(), cfg.unwrap());
     }
+    let mut c=CONFIG.write().unwrap();
+    /*c.client=cfg.unwrap().client.clone();
+    c.min_upload_rate=cfg.unwrap().min_upload_rate;
+    c.max_upload_rate=cfg.unwrap().max_upload_rate;
+    c.simultaneous_seed=cfg.unwrap().simultaneous_seed;
+    c.keep_torrent_with_zero_leecher=cfg.unwrap().keep_torrent_with_zero_leecher;*/
     //create torrent folder
     let torrent_folder = std::path::Path::new("torrents");
     std::fs::create_dir_all(torrent_folder).expect("Cannot create torrent folder");
