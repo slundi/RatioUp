@@ -1,7 +1,11 @@
+use algorithm::hash;
+#[macro_use]
+
 use serde::{Serialize};
 use serde_json::Result;
 use std::collections::BTreeMap;
 use regex::Regex;
+use log::{error};
 
 use crate::algorithm;
 
@@ -18,9 +22,9 @@ const UPPER: u8 = 9;
 //algorithms for ket and peer generator
 const REGEX: u8 = 10;
 const HASH: u8 = 11;
-const HASH_NO_LEADING_ZERO: u8 = 11;
-const DIGIT_RANGE_TRANSFORMED_TO_HEX_WITHOUT_LEADING_ZEROES: u8 = 12; //inclusive bounds: from 1 to 2147483647
-const RANDOM_POOL_WITH_CHECKSUM: u8 = 13;
+const HASH_NO_LEADING_ZERO: u8 = 12;
+const DIGIT_RANGE_TRANSFORMED_TO_HEX_WITHOUT_LEADING_ZEROES: u8 = 13; //inclusive bounds: from 1 to 2147483647
+const RANDOM_POOL_WITH_CHECKSUM: u8 = 14;
 const PEER_ID_LENGTH: usize = 20;
 
 #[derive(Default,Serialize)]
@@ -57,6 +61,10 @@ pub struct Client<'a> {
     connection:Option<&'a str>,
     num_want: u16,
     num_want_on_stop: u16,
+
+    //generated values
+    infohash :&'a str,
+    peer_id: &'a str,
 }
 
 impl Client<'_> {
@@ -69,7 +77,7 @@ impl Client<'_> {
             key_refresh_on: TIMED_OR_AFTER_STARTED_ANNOUNCE,
             key_refresh_every: 0,
             //peer ID generator
-            peer_algorithm: REGEX,
+            peer_algorithm: HASH,
             peer_pattern: "",
             peer_prefix:"",
             peer_refresh_on: NEVER,
@@ -87,17 +95,22 @@ impl Client<'_> {
             accept_encoding: "gzip",
             accept_language: "",
             connection: Some("Close"),
+            infohash: "",
+            peer_id: "",
         }
     }
-    pub fn get_query(self: &Self) -> &str {
-        //TODO: replace tags
+    pub fn get_query(self: &Self, infohash: &str) -> &str {
+        //format!(String::new(self.query), infohash=infohash, peerid=self.peer_id, uploaded=0, downloaded=0, left=0, corrupt=0, key=self.key, numwant=self.numwant);
         return self.query;
     }
-    fn get_peer_ID(self: &Self) -> String {
-        let mut out=String::new();
-        if self.peer_algorithm == REGEX {out=algorithm::regex(self.peer_pattern);}
-
-        return out;
+    fn build(mut self: &Self) {
+        //generate PEER_ID
+        if self.peer_algorithm == REGEX {/*self.peer_id=*/algorithm::regex(self.peer_pattern);}
+        else {algorithm::random_pool_with_checksum(PEER_ID_LENGTH, self.peer_prefix, self.peer_pattern);}
+        //generate KEY
+        if self.key_algorithm == HASH {algorithm::hash(8, false, self.key_uppercase);}
+        else if self.key_algorithm == HASH_NO_LEADING_ZERO {algorithm::hash(8, true, self.key_uppercase);}
+        else if self.key_algorithm == DIGIT_RANGE_TRANSFORMED_TO_HEX_WITHOUT_LEADING_ZEROES {algorithm::digit_range_transformed_to_hex_without_leading_zero();}
     }
 }
 
