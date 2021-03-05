@@ -7,7 +7,7 @@ extern crate lazy_static;
 
 use clap::{Arg, value_t};
 use serde_json::json;
-use std::{borrow::{Borrow, BorrowMut}, collections::BTreeMap, time::{Duration, Instant}};
+use std::{borrow::{Borrow, BorrowMut}, time::{Duration, Instant}};
 use actix::prelude::*;
 use actix_web::{middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
@@ -25,8 +25,8 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 
 lazy_static! {
-    static ref CLIENTS : RwLock<BTreeMap<&'static str, client::Client<'static>>> =  RwLock::new(client::load_clients());
-    static ref CONFIG  : RwLock<config::Config> = RwLock::new(config::Config::default());
+    static ref CLIENT : RwLock<Option<client::Client<'static>>> =  RwLock::new(None);
+    static ref CONFIG  : RwLock<config::Config> = RwLock::new(config::get_config("config.json".to_owned()));
 }
 thread_local! {
     //pub static ref clients : BTreeMap<&'static str, client::Client<'static>> = client::load_clients();
@@ -45,19 +45,15 @@ async fn ws_index(r: HttpRequest, stream: web::Payload) -> Result<HttpResponse, 
 struct RatioUpWS {
     /// Client must send ping at least once per 30 seconds (CLIENT_TIMEOUT), otherwise we drop connection.
     hb: Instant,
-    client:Option<client::Client<'static> >,
 }
 impl Actor for RatioUpWS {
     type Context = ws::WebsocketContext<Self>;
     /// Method is called on actor start. We start the heartbeat process here.
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
-        //TODO: send the client list and the configured client
+        //TODO: send the configured client
         //serde_json::to_value(client::load_clients());
         ctx.text("Hello");
-        //load client list
-        let client_list : Vec<&'static str>=CLIENTS.read().unwrap().keys().cloned().collect();
-        ctx.text(format!("{}",json!(client_list)));
     }
 }
 
@@ -86,7 +82,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
 impl RatioUpWS {
     fn new() -> Self {Self {
         hb: Instant::now(),
-        client:None
     }}
 
     /// helper method that sends ping to client every second also this method checks heartbeats from client
@@ -118,19 +113,6 @@ async fn main() -> std::io::Result<()> {
                           .get_matches();
     let port = value_t!(matches, "PORT", u16).unwrap_or_else(|e| e.exit());
     let root=value_t!(matches, "WEB_ROOT", String).unwrap_or_else(|e| e.exit());
-    //read config.json, if it does not exist, it creates a new one
-    let mut cfg=config::read_config_file("config.json".to_owned());
-    if cfg.is_err() {
-        cfg=Ok(config::Config::default());
-        info!("config.json does not exist, creating a new one");
-        config::write_config_file("config.json".to_owned(), cfg.unwrap());
-    }
-    let mut c=CONFIG.write().unwrap();
-    /*c.client=cfg.unwrap().client.clone();
-    c.min_upload_rate=cfg.unwrap().min_upload_rate;
-    c.max_upload_rate=cfg.unwrap().max_upload_rate;
-    c.simultaneous_seed=cfg.unwrap().simultaneous_seed;
-    c.keep_torrent_with_zero_leecher=cfg.unwrap().keep_torrent_with_zero_leecher;*/
     //create torrent folder
     let torrent_folder = std::path::Path::new("torrents");
     std::fs::create_dir_all(torrent_folder).expect("Cannot create torrent folder");

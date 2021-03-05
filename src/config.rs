@@ -1,10 +1,9 @@
 use serde::{Serialize, Deserialize};
-use serde_json::to_string_pretty;
 use std::{error::Error, io::Write};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use log::{info, trace, warn, error};
+use log::{info, error};
 
 //load config file: client, min/max speed, keep_torrent_with_zero_leecher
 
@@ -17,13 +16,23 @@ pub struct Config {
     pub simultaneous_seed: u16,
 }
 
-impl Config {
+impl<'a> Config {
     fn default() -> Self { Config {
         min_upload_rate: 8, max_upload_rate: 2048,
         keep_torrent_with_zero_leecher: true,
         simultaneous_seed:5,
         client: "qbittorrent-4.3.3".to_owned(),
     }}
+}
+
+pub fn get_config(path: String) -> Config {
+    let cfg=read_config_file(path.to_owned());
+    if cfg.is_ok() {return cfg.unwrap();}
+    //cfg not OK, initializing with default configuration
+    let cfg=Config::default();
+    info!("config.json does not exist, creating a new one");
+    write_config_file(path.to_owned(), &cfg);
+    return cfg;
 }
 
 pub fn read_config_file(path: String) -> Result<Config, Box<Error>> {
@@ -33,7 +42,7 @@ pub fn read_config_file(path: String) -> Result<Config, Box<Error>> {
     Ok(c)
 }
 
-pub fn write_config_file(path: String, cfg: Config) {
+pub fn write_config_file(path: String, cfg: &Config) {
     let data=serde_json::to_string_pretty(&cfg);
     let mut file: File;
     let p=Path::new(&path);
