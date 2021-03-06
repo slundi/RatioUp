@@ -59,7 +59,7 @@
     <header class="modal-card-head"><p class="modal-card-title">Configuration</p><a href="javascript:configuration()" class="delete" aria-label="close"></a></header>
     <section class="modal-card-body">
       <!-- Content ... -->
-      Client <select name="client">
+      Client <div class="select"><select name="client" id="client">
         <option value="leap-2.6.0.1">leap-2.6.0.1</option>
         <option value="rtorrent-0.9.6_0.13.6">rtorrent-0.9.6_0.13.6</option>
         <option value="vuze-5.7.5.0">vuze-5.7.5.0</option>
@@ -67,7 +67,7 @@
           <option value="bittorrent-7.10.1_43917">bittorrent-7.10.1_43917</option>
           <option value="bittorrent-7.10.3_44359">bittorrent-7.10.3_44359</option>
           <option value="bittorrent-7.10.3_44429">bittorrent-7.10.3_44429</option>
-        </optgroup>
+        </optgroup><optgroup label="Deluge">
           <option value="deluge-1.3.13">deluge-1.3.13</option>
           <option value="deluge-1.3.14">deluge-1.3.14</option>
           <option value="deluge-1.3.15">deluge-1.3.15</option>
@@ -104,7 +104,7 @@
           <option value="qbittorrent-4.3.1">qbittorrent-4.3.1</option>
           <option value="qbittorrent-4.3.2">qbittorrent-4.3.2</option>
           <option value="qbittorrent-4.3.3">qbittorrent-4.3.3</option>
-        </optgroup>
+        </optgroup><optgroup label="Transmission">
           <option value="transmission-2.82_14160">transmission-2.82_14160</option>
           <option value="transmission-2.92_14714">transmission-2.92_14714</option>
           <option value="transmission-2.93">transmission-2.93</option>
@@ -120,9 +120,12 @@
           <option value="utorrent-3.5.3_44428">utorrent-3.5.3_44428</option>
           <option value="utorrent-3.5.4_44498">utorrent-3.5.4_44498</option>
         </optgroup>
-      </select>
+      </select></div>
+      <div class="control"><input type="number" min="0" step="1" id="min_upload" /> KB</div>
+      <div class="control"><input type="number" min="0" step="1" id="max_upload" /> KB</div>
       Max upload speed
-      Upload if no seeder
+      <input type="checkbox" id="keep_torrent_with_zero_leecher" />
+      Upload if no seeder <input type="checkbox" id="upload_no_seeder" />
     </section>
     <footer class="modal-card-foot"><button class="button is-success">Save changes</button><button class="button">Cancel</button></footer>
   </div>
@@ -132,14 +135,17 @@ var socket=new WebSocket((window.location.protocol.toLowerCase()=='http'?'ws://'
 socket.onerror=function(error) {console.log('WebSocket Error: '+error);};
 socket.onopen=function(event) {console.log('Connected to: '+event.currentTarget.url);};
 // Handle messages sent by the server.
-socket.onmessage = function(event) {
-  //var message = event.data;
-  //messagesList.innerHTML += '<li class="received"><span>Received:</span>' + message + '</li>';
-};
-socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};
 socket.onmessage = function(e) {
-  console.log(e.data);
+  let msg = JSON.parse(e.data);
+  if ('config' in msg) {
+    document.getElementById("client").value=msg['config']['client'].toLowerCase();
+    document.getElementById("min_upload").value=msg['config']['min_upload_rate'];
+    document.getElementById("max_upload").value=msg['config']['max_upload_rate'];
+    document.getElementById("keep_torrent_with_zero_leecher").checked=msg['config']['keep_torrent_with_zero_leecher'];
+    //document.getElementById("upload_no_seeder").checked=msg['config']['upload_no_seeder'];
+  }
 }
+socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};
 function start_stop() {socket.send("toggle-start");}
 function update() {socket.send("update");}
 function apply_configuration() {
