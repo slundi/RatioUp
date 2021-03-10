@@ -19,12 +19,14 @@
   overflow: hidden;
   border: 5px dashed darkorange;
 }
+#progress {visibility:hidden;}
 </style>
 </head><body class="has-navbar-fixed-top"><div id="dropoverlay"></div>
 <nav id="top" class="navbar is-fixed-top">
     <div class="navbar-brand">
         <div class="navbar-item" alt="Ratio Up">RatioUp</div>
         <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navtop"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span></a>
+        <div class="navbar-item is-primary" id="progress"><i class="mdi mdi-circle-outline"></i></div>
       </div>
       <div id="navtop" class="navbar-menu"><div class="navbar-start">
         <div class="navbar-item field"></div>
@@ -188,7 +190,13 @@ document.addEventListener(event_name, function(e) {
   document.getElementById("dropoverlay").style.display="none";
   let dt = e.dataTransfer;
   let files = dt.files;
-  console.log(files);}, false));
+  console.log(files);
+  let size=0;
+  for(let i=0;i<files.length; i++) {if(files[i]['name'].endsWith('.torrent')) size+=files[i]['size'];}
+  for(let i=0;i<files.length; i++) {if(files[i]['name'].endsWith('.torrent')) {
+    //socket.send(files[i]); //https://developer.mozilla.org/en-US/docs/Web/API/File
+  }}
+  }, false));
 </script>
 </body>
 </html>
