@@ -52,6 +52,7 @@
       <td>64</td><td>8</td>
       <td></td>
       <td><a href="javascript:toggle('HASH')" class="is-success"><i class="mdi mdi-toggle-switch"></i></a>
+          <!--<a href="javascript:retracker('HASH')" class="is-warning"><i class="mdi mdi-directions-fork"></i></a>-->
           <a href="javascript:remove('HASH')" class="is-danger"><i class="mdi mdi-delete-forever"></i></a></td>
     </tr>
 
@@ -148,7 +149,9 @@ socket.onerror=function(error) {console.log('WebSocket Error: '+error);};
 socket.onopen=function(event) {console.log('Connected to: '+event.currentTarget.url);};
 // Handle messages sent by the server.
 socket.onmessage = function(e) {
-  let msg = JSON.parse(e.data);
+  console.log(e);
+  console.log("Message: "+e.data);
+  let msg = (e.data!=null)?JSON.parse(e.data):'';
   if ('config' in msg) {
     document.getElementById("client").value=msg['config']['client'].toLowerCase();
     document.getElementById("min_upload").value=msg['config']['min_upload_rate'];
@@ -158,35 +161,32 @@ socket.onmessage = function(e) {
   }
 }
 socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};
-function start_stop() {socket.send("toggle-start");}
+function start_stop() {socket.send("toggle_start");}
 function update() {socket.send("update");}
+function toggle(h) {socket.send("{'switch':'"+h+"'}");}
+function remove(h) {socket.send("{'remove':'"+h+"'}");}
+function retracker(h, trackers) {socket.send("{'retracker':'"+h+"','trackers':'"+trackers+"'}");}
 function apply_configuration() {
   //TODO
 }
-function upload_torrent() {
-  //TODO
-}
 function configuration() {document.getElementById("configuration").classList.toggle("is-active");}
-document.onkeydown = function(evt) {
+document.onkeydown=function(evt){
   evt = evt || window.event;
-  if (evt.keyCode == 27) {document.getElementById("configuration").classList.remove("is-active");}
+  if(evt.keyCode==27) {document.getElementById("configuration").classList.remove("is-active");}
 };
-window.onbeforeunload = function() {
-  socket.onclose = function () {};
+window.onbeforeunload=function() {
+  socket.onclose=function(){};
   socket.close();
 };
-function bytes_to_Size(bytes) {
-  if (bytes==0) return '0 B';
+function bytes_to_Size(bytes){
+  if(bytes==0)return '0 B';
   var i=parseInt(Math.floor(Math.log(bytes)/Math.log(1024)));
   return Math.round(bytes/Math.pow(1024, i), 2)+' '+['B', 'KB', 'MB', 'GB', 'TB'][i];
 }
-['dragenter', 'dragover'].forEach(event_name =>
-document.addEventListener(event_name, function(e) {
-  e.preventDefault();
-  document.getElementById("dropoverlay").style.display="block";
-}, false));
-['dragleave', 'drop'].forEach(event_name =>
-document.addEventListener(event_name, function(e) {
+['dragenter', 'dragover'].forEach(event_name=>
+document.addEventListener(event_name, function(e){e.preventDefault();document.getElementById("dropoverlay").style.display="block";}, false));
+['dragleave', 'drop'].forEach(event_name=>
+document.addEventListener(event_name,function(e){
   e.preventDefault();
   document.getElementById("dropoverlay").style.display="none";
   let files = e.dataTransfer.files;
@@ -196,13 +196,15 @@ document.addEventListener(event_name, function(e) {
   var reader = new FileReader();
   for(let i=0;i<files.length; i++) {if(files[i]['name'].endsWith('.torrent')) {
     reader.onload = function(e) {
+      socket.send("{upload_size:"+e.target.result.byteLength+",hash:'"+"'}");
       for(let s=0; s<e.target.result.byteLength; s+=32768) socket.send(e.target.result.slice(s,s+Math.min(32768, e.target.result.byteLength-s)));
+      socket.send("upload_end");
       //socket.send(e.target.result);
     };
     reader.readAsArrayBuffer(files[i]);
   }}
   }, false));
 </script>
-<script src="js/torrent.js" async></script>
+<script src="js/sha1.js" async></script>
 </body>
 </html>

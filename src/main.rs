@@ -71,7 +71,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
             Ok(ws::Message::Pong(_)) => {self.hb = Instant::now();}
             Ok(ws::Message::Text(text)) => {
                 println!("Receiving text: {:?}", text);
-                ctx.text(text);
+                if text.starts_with("upload_start:") {}
+                else if text == "upload_end" {}
+                else if text == "toggle_start" {
+                    ctx.text("{'running':true}");
+                }
+                //ctx.text(text);
             }
             Ok(ws::Message::Binary(bin)) => {
                 println!("Receiving binary, size={}", bin.len());
@@ -83,10 +88,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                     pos += bytes_written
                 };
                 //ctx.binary(bin)},
-                ctx.text("true")},
-            Ok(ws::Message::Continuation(x)) => {
-                print!("Continuation");
-                ctx.text("Continuation")
+                ctx.text("true");
             },
             Ok(ws::Message::Close(reason)) => {
                 ctx.close(reason);
