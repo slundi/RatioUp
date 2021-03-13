@@ -35,9 +35,7 @@ thread_local! {
 
 /// do websocket handshake and start `RatioUpWS` actor
 async fn ws_index(r: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
-    //println!("{:?}", r);
     let res = ws::start(RatioUpWS::new(), &r, stream);
-    //println!("{:?}", res);
     res
 }
 
@@ -64,19 +62,36 @@ impl Actor for RatioUpWS {
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context,) {
         // process websocket messages
-        println!("WS: {:?}", msg);
+        //println!("Receiving... {:?}", msg);
         match msg {
             Ok(ws::Message::Ping(msg)) => {
                 self.hb = Instant::now();
                 ctx.pong(&msg);
             }
             Ok(ws::Message::Pong(_)) => {self.hb = Instant::now();}
-            Ok(ws::Message::Text(text)) => ctx.text(text),
-            Ok(ws::Message::Binary(bin)) => ctx.binary(bin),
+            Ok(ws::Message::Text(text)) => {
+                println!("Receiving text: {:?}", text);
+                ctx.text(text);
+            }
+            Ok(ws::Message::Binary(bin)) => {
+                println!("Receiving binary, size={}", bin.len());
+                let mut pos = 0;
+                //let mut buffer = std::fs::File::create("foo.torrent").unwrap();  // notice the name of the file that will be written
+                let mut buffer = std::fs::OpenOptions::new().append(true).create(true).open("foo.torrent").unwrap();
+                while pos < bin.len() {
+                    let bytes_written = std::io::Write::write(&mut buffer, &bin[pos..]).unwrap();
+                    pos += bytes_written
+                };
+                //ctx.binary(bin)},
+                ctx.text("true")},
+            Ok(ws::Message::Continuation(x)) => {
+                print!("Continuation");
+                ctx.text("Continuation")
+            },
             Ok(ws::Message::Close(reason)) => {
                 ctx.close(reason);
                 ctx.stop();
-            }
+            },
             _ => ctx.stop(),
         }
     }

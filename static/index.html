@@ -143,6 +143,7 @@
 </div>
 <script>
 var socket=new WebSocket((window.location.protocol.toLowerCase()=='http'?'ws://':'ws://')+window.location.host+'/ws/');
+socket.binaryType = 'arraybuffer';
 socket.onerror=function(error) {console.log('WebSocket Error: '+error);};
 socket.onopen=function(event) {console.log('Connected to: '+event.currentTarget.url);};
 // Handle messages sent by the server.
@@ -188,15 +189,20 @@ document.addEventListener(event_name, function(e) {
 document.addEventListener(event_name, function(e) {
   e.preventDefault();
   document.getElementById("dropoverlay").style.display="none";
-  let dt = e.dataTransfer;
-  let files = dt.files;
+  let files = e.dataTransfer.files;
   console.log(files);
   let size=0;
   for(let i=0;i<files.length; i++) {if(files[i]['name'].endsWith('.torrent')) size+=files[i]['size'];}
+  var reader = new FileReader();
   for(let i=0;i<files.length; i++) {if(files[i]['name'].endsWith('.torrent')) {
-    //socket.send(files[i]); //https://developer.mozilla.org/en-US/docs/Web/API/File
+    reader.onload = function(e) {
+      for(let s=0; s<e.target.result.byteLength; s+=32768) socket.send(e.target.result.slice(s,s+Math.min(32768, e.target.result.byteLength-s)));
+      //socket.send(e.target.result);
+    };
+    reader.readAsArrayBuffer(files[i]);
   }}
   }, false));
 </script>
+<script src="js/torrent.js" async></script>
 </body>
 </html>
