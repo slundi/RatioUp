@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="css/bulma.min.css"/>
 <link rel="stylesheet" href="css/bulma-dark.min.css"/>
-<link rel="stylesheet" href="css/materialdesignicons.min.css">
+<link rel="stylesheet" href="css/materialdesignicons.min.css"/>
 <style>
 .c1{width:5em;}
 .c2{width:7em;}
@@ -19,23 +19,57 @@
   overflow: hidden;
   border: 5px dashed darkorange;
 }
-#progress {visibility:hidden;}
 </style>
-</head><body class="has-navbar-fixed-top"><div id="dropoverlay"></div>
+</head><body class="has-navbar-fixed-top has-navbar-fixed-bottom"><div id="dropoverlay"></div>
 <nav id="top" class="navbar is-fixed-top">
     <div class="navbar-brand">
         <div class="navbar-item" alt="Ratio Up">RatioUp</div>
         <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navtop"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span></a>
-        <div class="navbar-item is-primary" id="progress"><i class="mdi mdi-circle-outline"></i></div>
+        <div class="navbar-item is-primary is-hidden" id="progress"><i class="mdi mdi-circle-outline"></i></div>
       </div>
       <div id="navtop" class="navbar-menu"><div class="navbar-start">
         <div class="navbar-item field"></div>
       </div><div class="navbar-end">
-        <span class="navbar-item" id="server-status">Running</span>
+        <span class="navbar-item has-text-success" id="server-status">Running</span>
         <a class="navbar-item" href="javascript:start_stop()" title="Start/stop the service"><i class="mdi mdi-play-circle mdi-24px"></i></a>
-        <a class="navbar-item" href="javascript:configuration()" title="Configuration"><i class="mdi mdi-wrench mdi-24px"></i></a>
       </div></div>
 </nav>
+<div id="configuration" class="is-hidden">
+  <div class="field is-horizontal">
+    <div class="field-label is-normal"><label class="label">Auto start</label></div>
+    <div class="field-body">
+      <div class="field"><div class="control">
+          <input class="input is-danger" type="text" placeholder="e.g. Partnership opportunity">
+        </div>
+        <p class="help is-info">Start fake seeding when server start</p>
+      </div>
+    </div>
+  </div>
+  <div class="field is-horizontal">
+    <div class="field-label is-normal"><label class="label">Bittorrent client</label></div>
+    <div class="field-body">
+      <div class="field">
+      </div>
+    </div>
+  </div>
+  <div class="field is-horizontal"><div class="field-label is-normal">
+    <div class="field-label"><label class="label">Upload speeds</label></div>
+    <div class="field-body">
+      <div class="field"><div class="field has-addons">
+        <p class="control"><a class="button is-static">min</a></p>
+        <p class="control"><input type="number" min="0" step="1" id="min_upload2" /></p>
+        <p class="control"><a class="button is-static">KB</a></p>
+        <p class="control"><a class="button is-static">min</a></p>
+        <p class="control"><input type="number" min="0" step="1" id="max_upload2" /></p>
+        <p class="control"><a class="button is-static">KB</a></p>
+      </div>
+    </div></div>
+  </div></div>
+  <input type="checkbox" id="keep_torrent_with_zero_leecher" />
+      Upload if no seeder <input type="checkbox" id="upload_no_seeder" />
+      <footer class="modal-card-foot"><button class="button is-success">Save changes</button><button class="button">Cancel</button></footer>
+</div>
+
 <div>
   <table class="table is-striped is-hoverable is-fullwidth"><thead><tr>
     <th><i class="mdi mdi-label"></i> Title</th>
@@ -51,9 +85,9 @@
       <td align="right">864.2 KB/s</td>
       <td>64</td><td>8</td>
       <td></td>
-      <td><a href="javascript:toggle('HASH')" class="is-success"><i class="mdi mdi-toggle-switch"></i></a>
-          <!--<a href="javascript:retracker('HASH')" class="is-warning"><i class="mdi mdi-directions-fork"></i></a>-->
-          <a href="javascript:remove('HASH')" class="is-danger"><i class="mdi mdi-delete-forever"></i></a></td>
+      <td><a href="javascript:toggle('HASH')" class="has-text-success"><i class="mdi mdi-toggle-switch"></i></a>
+          <!--<a href="javascript:retracker('HASH')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a>-->
+          <a href="javascript:remove('HASH')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>
     </tr>
 
   </tbody></table>
@@ -66,23 +100,19 @@
   mdi-information
   
 </div>
-<div class="modal" id="configuration">
-  <div class="modal-background"></div><div class="modal-card">
-    <header class="modal-card-head"><p class="modal-card-title">Configuration</p><a href="javascript:configuration()" class="delete" aria-label="close"></a></header>
-    <section class="modal-card-body">
-      <!-- Content ... -->
-      Client <div class="select"><select name="client" id="client">
+<nav id="top" class="navbar is-fixed-bottom is-black">
+  <div class="navbar-brand">
+      <div class="navbar-item"><i class="mdi mdi-wrench mdi-24px has-text-warning"></i></div>
+      <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navtop"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span></a>
+      <span class="navbar-item">Client</span>
+      <span class="navbar-item"><p class="control"><div class="select is-small"><select name="client" id="client" onchange="change_client(this.value)">
         <option value="leap-2.6.0.1">leap-2.6.0.1</option>
         <option value="rtorrent-0.9.6_0.13.6">rtorrent-0.9.6_0.13.6</option>
         <option value="vuze-5.7.5.0">vuze-5.7.5.0</option>
         <optgroup label="Bittorrent">
-          <option value="bittorrent-7.10.1_43917">bittorrent-7.10.1_43917</option>
-          <option value="bittorrent-7.10.3_44359">bittorrent-7.10.3_44359</option>
-          <option value="bittorrent-7.10.3_44429">bittorrent-7.10.3_44429</option>
+          <option value="bittorrent-7.10.1_43917">bittorrent-7.10.1_43917</option><option value="bittorrent-7.10.3_44359">bittorrent-7.10.3_44359</option><option value="bittorrent-7.10.3_44429">bittorrent-7.10.3_44429</option>
         </optgroup><optgroup label="Deluge">
-          <option value="deluge-1.3.13">deluge-1.3.13</option>
-          <option value="deluge-1.3.14">deluge-1.3.14</option>
-          <option value="deluge-1.3.15">deluge-1.3.15</option>
+          <option value="deluge-1.3.13">deluge-1.3.13</option><option value="deluge-1.3.14">deluge-1.3.14</option><option value="deluge-1.3.15">deluge-1.3.15</option>
         </optgroup><optgroup label="qBittorrent">
           <option value="qbittorrent-3.3.1">qbittorrent-3.3.1</option>
           <option value="qbittorrent-3.3.13">qbittorrent-3.3.13</option>
@@ -132,16 +162,18 @@
           <option value="utorrent-3.5.3_44428">utorrent-3.5.3_44428</option>
           <option value="utorrent-3.5.4_44498">utorrent-3.5.4_44498</option>
         </optgroup>
-      </select></div>
-      <div class="control"><input type="number" min="0" step="1" id="min_upload" /> KB</div>
-      <div class="control"><input type="number" min="0" step="1" id="max_upload" /> KB</div>
-      Max upload speed
-      <input type="checkbox" id="keep_torrent_with_zero_leecher" />
-      Upload if no seeder <input type="checkbox" id="upload_no_seeder" />
-    </section>
-    <footer class="modal-card-foot"><button class="button is-success">Save changes</button><button class="button">Cancel</button></footer>
-  </div>
-</div>
+      </select></div></p></span>
+      <a class="navbar-item" href="javascript:toggle_seed_0_leecher()"><i class="mdi mdi-toggle-switch has-text-success" id="toggle_seed_0_leecher"></i>&nbsp;Do not seed if zero leecher</a>
+    </div>
+    <div id="navtop" class="navbar-menu"><div class="navbar-start">
+      <div class="navbar-item field"></div>
+    </div><div class="navbar-end">
+      <span class="navbar-item"><i class="mdi mdi-upload-network"></i> Upload speeds</span>
+      <span class="navbar-item"><p class="control"><input type="number" min="0" size="10" step="1" id="min_upload" /></p></span>
+      <span class="navbar-item"><p class="control"><input type="number" min="0" size="10" step="1" id="max_upload" /></p></span>
+      <span class="navbar-item">KB</span>
+    </div></div>
+</nav>
 <script>
 var socket=new WebSocket((window.location.protocol.toLowerCase()=='http'?'ws://':'ws://')+window.location.host+'/ws/');
 socket.binaryType = 'arraybuffer';
@@ -152,27 +184,30 @@ socket.onmessage = function(e) {
   console.log(e);
   console.log("Message: "+e.data);
   let msg = (e.data!=null)?JSON.parse(e.data):'';
-  if ('config' in msg) {
+  if (e.data.startsWith('{"config":')) {
+    console.log("CONFIG");
+    console.log(msg['config']);
     document.getElementById("client").value=msg['config']['client'].toLowerCase();
     document.getElementById("min_upload").value=msg['config']['min_upload_rate'];
     document.getElementById("max_upload").value=msg['config']['max_upload_rate'];
-    document.getElementById("keep_torrent_with_zero_leecher").checked=msg['config']['keep_torrent_with_zero_leecher'];
-    //document.getElementById("upload_no_seeder").checked=msg['config']['upload_no_seeder'];
+    document.getElementById("toggle_seed_zero_leecher").checked=msg['config']['seed_if_zero_leecher'];
   }
 }
 socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};
 function start_stop() {socket.send("toggle_start");}
 function update() {socket.send("update");}
-function toggle(h) {socket.send("{'switch':'"+h+"'}");}
-function remove(h) {socket.send("{'remove':'"+h+"'}");}
-function retracker(h, trackers) {socket.send("{'retracker':'"+h+"','trackers':'"+trackers+"'}");}
+function change_client(c) {socket.send("{\"client\":\""+c+"\"}");}
+function toggle_seed_0_leecher() {socket.send("toggle_0_leecher");}
+function toggle(h) {socket.send("{\"switch\":\""+h+"\"}");}
+function remove(h) {socket.send("{\"remove\":\""+h+"\"}");}
+function retracker(h, trackers) {socket.send("{\"retracker\":\""+h+"\",\"trackers\":\""+trackers+"\"}");}
 function apply_configuration() {
   //TODO
 }
-function configuration() {document.getElementById("configuration").classList.toggle("is-active");}
+function configuration() {document.getElementById("configuration").classList.toggle("is-hidden");}
 document.onkeydown=function(evt){
   evt = evt || window.event;
-  if(evt.keyCode==27) {document.getElementById("configuration").classList.remove("is-active");}
+  if(evt.keyCode==27) {document.getElementById("configuration").classList.add("is-hidden");}
 };
 window.onbeforeunload=function() {
   socket.onclose=function(){};
@@ -196,7 +231,7 @@ document.addEventListener(event_name,function(e){
   var reader = new FileReader();
   for(let i=0;i<files.length; i++) {if(files[i]['name'].endsWith('.torrent')) {
     reader.onload = function(e) {
-      socket.send("{upload_size:"+e.target.result.byteLength+",hash:'"+"'}");
+      socket.send("{\"upload_size\":"+e.target.result.byteLength+",hash:\""+"\"}");
       for(let s=0; s<e.target.result.byteLength; s+=32768) socket.send(e.target.result.slice(s,s+Math.min(32768, e.target.result.byteLength-s)));
       socket.send("upload_end");
       //socket.send(e.target.result);

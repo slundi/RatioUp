@@ -6,19 +6,20 @@ extern crate clap;
 extern crate lazy_static;
 
 use clap::{Arg, value_t};
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{borrow::{Borrow, BorrowMut}, time::{Duration, Instant}};
 use actix::prelude::*;
 use actix_web::{middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use actix_files::Files;
-use log::{info};
+use log::{info,warn,error};
 use std::sync::RwLock;
 use lazy_static::lazy_static;
 
 mod client;
 mod algorithm;
 mod config;
+mod messages;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -75,6 +76,28 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                 else if text == "upload_end" {}
                 else if text == "toggle_start" {
                     ctx.text("{'running':true}");
+                } else if text.starts_with("{\"client\":\"") { //change client
+                    let cc: messages::Configuration_Client = serde_json::from_str(&text).expect("msg");
+                    if client::get_client(&cc.client).is_none() {
+                        ctx.text("error:Client not found");
+                        return;
+                    }
+                    //let c=CLIENT.write();
+                    let c=CONFIG.write();
+                    if c.is_ok() {
+                        let mut d=c.unwrap();
+                        d.client = cc.client;
+                        //FIXME:
+                        config::write_config_file("config.json".to_owned(), &*d);
+                        println!("Changing for client: \t\t{}", d.client);
+                        ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
+                    } else {error!("Cannot write configuration while changing client");return;}
+                } else if text.starts_with("{\"switch\":\"") { //enable disable torrent
+
+                } else if text.starts_with("{\"remove\":\"") { //remove a torrent
+
+                } else if text == "toggle_0_leecher" {
+
                 }
                 //ctx.text(text);
             }

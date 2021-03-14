@@ -4,6 +4,6 @@
     "client":"qBittorrent-4.3.3",
     "min_upload_rate":32,
     "max_upload_rate":4096,
-    "keep_torrent_with_zero_leecher":true,
+    "seed_if_zero_leecher":false,
     "simultaneous_seed":5
 }

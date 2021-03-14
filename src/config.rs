@@ -5,21 +5,21 @@ use std::io::BufReader;
 use std::path::Path;
 use log::{info, error};
 
-//load config file: client, min/max speed, keep_torrent_with_zero_leecher
+//load config file: client, min/max speed, seed_if_zero_leecher
 
 #[derive(Default, Serialize, Deserialize, Debug)]
 pub struct Config {
     pub client: String,
     pub min_upload_rate: u16,
     pub max_upload_rate: u16,
-    pub keep_torrent_with_zero_leecher: bool,
+    pub seed_if_zero_leecher: bool,
     //pub simultaneous_seed: u16, //useful ?
 }
 
 impl<'a> Config {
     fn default() -> Self { Config {
         min_upload_rate: 8, max_upload_rate: 2048,
-        keep_torrent_with_zero_leecher: true,
+        seed_if_zero_leecher: false,
         //simultaneous_seed:5,
         client: "qbittorrent-4.3.3".to_owned(),
     }}
@@ -65,7 +65,7 @@ mod tests {
         let mut cfg=Config::default();
         assert_eq!(cfg.min_upload_rate, 8);
         assert_eq!(cfg.max_upload_rate, 2048);
-        assert_eq!(cfg.keep_torrent_with_zero_leecher, true);
+        assert_eq!(cfg.seed_if_zero_leecher, false);
         //assert_eq!(cfg.simultaneous_seed, 5);
         assert_eq!(cfg.client, String::from("qbittorrent-4.3.3"));
         write_config_file(path.to_string(), cfg);
@@ -77,12 +77,12 @@ mod tests {
         if std::path::Path::new(&path).exists() {std::fs::remove_file(d);}
         //create the file for the test
         let mut f : File = std::fs::File::create(std::path::Path::new(&path)).expect("Unable to create file");
-        f.write_all("{\"client\":\"qbittorrent-4.3.3\", \"min_upload_rate\": 8, \"max_upload_rate\": 2048, \"keep_torrent_with_zero_leecher\": true, \"simultaneous_seed\": 5}".as_bytes());
+        f.write_all("{\"client\":\"qbittorrent-4.3.3\", \"min_upload_rate\": 8, \"max_upload_rate\": 2048, \"seed_if_zero_leecher\": true, \"simultaneous_seed\": 5}".as_bytes());
         f.flush();
         let cfg = read_config_file(path).unwrap();
         assert_eq!(cfg.min_upload_rate, 8);
         assert_eq!(cfg.max_upload_rate, 2048);
-        assert_eq!(cfg.keep_torrent_with_zero_leecher, true);
+        assert_eq!(cfg.seed_if_zero_leecher, true);
         //assert_eq!(cfg.simultaneous_seed, 5);
         assert_eq!(cfg.client, String::from("qbittorrent-4.3.3"));
     }
