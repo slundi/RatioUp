@@ -89,7 +89,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                         d.client = cc.client;
                         //FIXME:
                         config::write_config_file("config.json".to_owned(), &*d);
-                        println!("Changing for client: \t\t{}", d.client);
+                        println!("Changing for client: \t{}", d.client);
                         ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
                     } else {error!("Cannot write configuration while changing client");return;}
                 } else if text.starts_with("{\"switch\":\"") { //enable disable torrent
@@ -97,6 +97,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                 } else if text.starts_with("{\"remove\":\"") { //remove a torrent
 
                 } else if text == "toggle_0_leecher" {
+
+                } else if text.starts_with("{\"min_upload_speed\":") {
+
+                } else if text.starts_with("{\"max_upload_speed\":") {
 
                 }
                 //ctx.text(text);

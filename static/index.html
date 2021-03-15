@@ -169,8 +169,8 @@
       <div class="navbar-item field"></div>
     </div><div class="navbar-end">
       <span class="navbar-item"><i class="mdi mdi-upload-network"></i> Upload speeds</span>
-      <span class="navbar-item"><p class="control"><input type="number" min="0" size="10" step="1" id="min_upload" /></p></span>
-      <span class="navbar-item"><p class="control"><input type="number" min="0" size="10" step="1" id="max_upload" /></p></span>
+      <span class="navbar-item"><p class="control"><input type="number" min="0" size="10" step="1" id="min_upload" onchange="set_min_upload_speed(this.value)" /></p></span>
+      <span class="navbar-item"><p class="control"><input type="number" min="0" size="10" step="1" id="max_upload" onchange="set_max_upload_speed(this.value)" /></p></span>
       <span class="navbar-item">KB</span>
     </div></div>
 </nav>
@@ -190,7 +190,14 @@ socket.onmessage = function(e) {
     document.getElementById("client").value=msg['config']['client'].toLowerCase();
     document.getElementById("min_upload").value=msg['config']['min_upload_rate'];
     document.getElementById("max_upload").value=msg['config']['max_upload_rate'];
-    document.getElementById("toggle_seed_zero_leecher").checked=msg['config']['seed_if_zero_leecher'];
+    var s=document.getElementById("toggle_seed_0_leecher");
+    if(s.classList.contains("mdi-toggle-switch-off") && String(msg['config']['seed_if_zero_leecher'])=="true") {
+      s.classList.remove("mdi-toggle-switch-off");
+      s.classList.add("mdi-toggle-switch");
+    } else if(s.classList.contains("mdi-toggle-switch") && String(msg['config']['seed_if_zero_leecher'])=="false") {
+      s.classList.remove("mdi-toggle-switch");
+      s.classList.add("mdi-toggle-switch-off");
+    }
   }
 }
 socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};
@@ -198,6 +205,8 @@ function start_stop() {socket.send("toggle_start");}
 function update() {socket.send("update");}
 function change_client(c) {socket.send("{\"client\":\""+c+"\"}");}
 function toggle_seed_0_leecher() {socket.send("toggle_0_leecher");}
+function set_min_upload_speed(speed) {socket.send("{\"min_upload_speed\":"+speed+"}");}
+function set_max_upload_speed(speed) {socket.send("{\"max_upload_speed\":"+speed+"}");}
 function toggle(h) {socket.send("{\"switch\":\""+h+"\"}");}
 function remove(h) {socket.send("{\"remove\":\""+h+"\"}");}
 function retracker(h, trackers) {socket.send("{\"retracker\":\""+h+"\",\"trackers\":\""+trackers+"\"}");}

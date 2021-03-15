@@ -50,6 +50,7 @@ pub fn write_config_file(path: String, cfg: &Config) {
     else {file=File::create(p).expect("Unable to create file config.json");}
     if file.write_all(data.unwrap().as_bytes()).is_err() {error!("Error while writing config.json");}
     if file.flush().is_err() {error!("Cannot write config.json");}
+    //println!("{:?}", serde_json::json!(&*cfg))
 }
 
 #[cfg(test)]
