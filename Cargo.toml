@@ -19,3 +19,4 @@ actix-files = "*"
 actix-web-actors = "*"
 clap = "*"
 log = "*"
+tokio = {version = "*", features=["fs"]}

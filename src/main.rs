@@ -1,18 +1,17 @@
 #![allow(non_snake_case)]
-#[macro_use]
 
 extern crate rand;
 extern crate clap;
 extern crate lazy_static;
 
 use clap::{Arg, value_t};
-use serde_json::{json, Value};
-use std::{borrow::{Borrow, BorrowMut}, time::{Duration, Instant}};
+use serde_json::{json};
+use std::{time::{Duration, Instant}};
 use actix::prelude::*;
 use actix_web::{middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use actix_files::Files;
-use log::{info,warn,error};
+use log::{info,error};
 use std::sync::RwLock;
 use lazy_static::lazy_static;
 
@@ -27,7 +26,7 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 lazy_static! {
     static ref CLIENT : RwLock<Option<client::Client<'static>>> =  RwLock::new(None);
-    static ref CONFIG  : RwLock<config::Config> = RwLock::new(config::get_config("config.json".to_owned()));
+    static ref CONFIG  : RwLock<config::Config> = RwLock::new(config::get_config("config.json"));
 }
 thread_local! {
     //pub static ref clients : BTreeMap<&'static str, client::Client<'static>> = client::load_clients();
@@ -77,19 +76,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                 else if text == "toggle_start" {
                     ctx.text("{'running':true}");
                 } else if text.starts_with("{\"client\":\"") { //change client
-                    let cc: messages::Configuration_Client = serde_json::from_str(&text).expect("msg");
-                    if client::get_client(&cc.client).is_none() {
-                        ctx.text("error:Client not found");
-                        return;
-                    }
+                    let param: messages::ConfigurationClient = serde_json::from_str(&text).expect("msg");
+                    if client::get_client(&param.client).is_none() { ctx.text("error:Client not found"); return;}
                     //let c=CLIENT.write();
                     let c=CONFIG.write();
                     if c.is_ok() {
                         let mut d=c.unwrap();
-                        d.client = cc.client;
-                        //FIXME:
-                        config::write_config_file("config.json".to_owned(), &*d);
-                        println!("Changing for client: \t{}", d.client);
+                        d.client = param.client;
+                        config::write_config_file("config.json", &*d);
+                        println!("Changing for client: \t{}", &d.client);
                         ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
                     } else {error!("Cannot write configuration while changing client");return;}
                 } else if text.starts_with("{\"switch\":\"") { //enable disable torrent
@@ -97,13 +92,33 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                 } else if text.starts_with("{\"remove\":\"") { //remove a torrent
 
                 } else if text == "toggle_0_leecher" {
-
+                    //let c=CLIENT.write();
+                    let c=CONFIG.write();
+                    if c.is_ok() {
+                        let mut d=c.unwrap();
+                        d.seed_if_zero_leecher = !d.seed_if_zero_leecher;
+                        config::write_config_file("config.json", &*d);
+                        ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
+                    } else {error!("Cannot write configuration while changing seed if 0 leecher");return;}
                 } else if text.starts_with("{\"min_upload_speed\":") {
-
+                    let param: messages::ConfigurationMinUploadSpeed = serde_json::from_str(&text).unwrap();
+                    let c=CONFIG.write();
+                    if c.is_ok() {
+                        let mut d=c.unwrap();
+                        d.min_upload_rate = param.min_upload_speed;
+                        config::write_config_file("config.json", &*d);
+                        ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
+                    } else {error!("Cannot write configuration while changing the min upload speed");return;}
                 } else if text.starts_with("{\"max_upload_speed\":") {
-
+                    let param: messages::ConfigurationMaxUploadSpeed = serde_json::from_str(&text).unwrap();
+                    let c=CONFIG.write();
+                    if c.is_ok() {
+                        let mut d=c.unwrap();
+                        d.max_upload_rate = param.max_upload_speed;
+                        config::write_config_file("config.json", &*d);
+                        ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
+                    } else {error!("Cannot write configuration while changing the max upload speed");return;}
                 }
-                //ctx.text(text);
             }
             Ok(ws::Message::Binary(bin)) => {
                 println!("Receiving binary, size={}", bin.len());
@@ -133,6 +148,7 @@ impl RatioUpWS {
 
     /// helper method that sends ping to client every second also this method checks heartbeats from client
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {
+        info!("Web server started");
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT { // check client heartbeats
                 println!("Websocket Client heartbeat failed, disconnecting!"); // heartbeat timed out

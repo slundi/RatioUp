@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use rand::Rng;
 
 const HASH_SYMBOLS: &str = "abcdef0123456789ABCDEF";
