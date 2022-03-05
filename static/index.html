@@ -10,6 +10,7 @@
 .c1{width:5em;}
 .c2{width:7em;}
 .c3{width:8em;}
+.vb {margin-top: auto;}
 #dropoverlay {
   position: absolute;
   display: none;
@@ -19,161 +20,40 @@
   overflow: hidden;
   border: 5px dashed darkorange;
 }
-</style>
-</head><body class="has-navbar-fixed-top has-navbar-fixed-bottom"><div id="dropoverlay"></div>
-<nav id="top" class="navbar is-fixed-top">
-    <div class="navbar-brand">
-        <div class="navbar-item" alt="Ratio Up">RatioUp</div>
-        <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navtop"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span></a>
-        <div class="navbar-item is-primary is-hidden" id="progress"><i class="mdi mdi-circle-outline"></i></div>
-      </div>
-      <div id="navtop" class="navbar-menu"><div class="navbar-start">
-        <div class="navbar-item field"></div>
-      </div><div class="navbar-end">
-        <span class="navbar-item has-text-success" id="server-status">Running</span>
-        <a class="navbar-item" href="javascript:start_stop()" title="Start/stop the service"><i class="mdi mdi-play-circle mdi-24px"></i></a>
-      </div></div>
-</nav>
-<div id="configuration" class="is-hidden">
-  <div class="field is-horizontal">
-    <div class="field-label is-normal"><label class="label">Auto start</label></div>
-    <div class="field-body">
-      <div class="field"><div class="control">
-          <input class="input is-danger" type="text" placeholder="e.g. Partnership opportunity">
-        </div>
-        <p class="help is-info">Start fake seeding when server start</p>
-      </div>
-    </div>
-  </div>
-  <div class="field is-horizontal">
-    <div class="field-label is-normal"><label class="label">Bittorrent client</label></div>
-    <div class="field-body">
-      <div class="field">
-      </div>
-    </div>
-  </div>
-  <div class="field is-horizontal"><div class="field-label is-normal">
-    <div class="field-label"><label class="label">Upload speeds</label></div>
-    <div class="field-body">
-      <div class="field"><div class="field has-addons">
-        <p class="control"><a class="button is-static">min</a></p>
-        <p class="control"><input type="number" min="0" step="1" id="min_upload2" /></p>
-        <p class="control"><a class="button is-static">KB</a></p>
-        <p class="control"><a class="button is-static">min</a></p>
-        <p class="control"><input type="number" min="0" step="1" id="max_upload2" /></p>
-        <p class="control"><a class="button is-static">KB</a></p>
-      </div>
-    </div></div>
-  </div></div>
-  <input type="checkbox" id="keep_torrent_with_zero_leecher" />
-      Upload if no seeder <input type="checkbox" id="upload_no_seeder" />
-      <footer class="modal-card-foot"><button class="button is-success">Save changes</button><button class="button">Cancel</button></footer>
-</div>
 
+</style>
+</head><body><div id="dropoverlay"></div>
 <div>
   <table class="table is-striped is-hoverable is-fullwidth"><thead><tr>
-    <th><i class="mdi mdi-label"></i> Title</th>
-    <th class="c2"><i class="mdi mdi-harddisk"></i> Size</th>
-    <th class="c3" title="Current upload speed"><i class="mdi mdi-upload-network" title="Overall upload speed"></i> <strong id="Overall upload speed">123 kB/s</strong></th>
-    <th class="c1" title="Seeders"><i class="mdi mdi-cloud-upload"></i></th>
-    <th class="c1" title="Leechers"><i class="mdi mdi-cloud-download"></i></th>
-    <th class="c3"><i class="mdi mdi-update"></i> Refresh in</th>
-    <th class="c1"><!--Actions buttons--></th>
+    <th class="vb"><i class="mdi mdi-label"></i> Title</th>
+    <th class="c2 vb"><i class="mdi mdi-harddisk"></i> Size</th>
+    <th class="c3" title="Current upload speed">
+      <i class="mdi mdi-upload-network" title="Overall upload speed"></i> <strong id="Overall upload speed">123 kB/s</strong>
+      <div style="font-size: small; text-align: center; font-weight: normal;"><i id="min_upload">0 KB</i> - <i id="max_upload">1 KB</i></div>
+    </th>
+    <th class="vb c1" title="Seeders">
+      <i class="mdi mdi-cloud-upload"></i>
+    </th>
+    <th class="vb c1" title="Leechers"><i class="mdi mdi-cloud-download"></i></th>
+    <th class="c3"><div style="font-size: small; text-align: center; font-weight: normal;"><i id="client" title="Client software"></i></div><i class="mdi mdi-update"></i> Refresh in</th>
+    <th class="c1 has-text-centered"><a class="has-text-success" href="javascript:start_stop()" title="Start/stop the service"  id="server-status"><i class="mdi mdi-play-circle mdi-24px"></i></a></th>
   </tr></thead><tbody id="content">
     <tr>
       <td><a href="javascript:torrent('HASH')"><i class="mdi mdi-file"></i> Ubuntu</a></td><td align="right">1.6 GB</td><!--or mdi-folder if torrent with multiple files-->
       <td align="right">864.2 KB/s</td>
-      <td>64</td><td>8</td>
+      <td>64</td><td>8 <i class="is-pulled-right mdi mdi-alert has-text-warning" title="Seed is disabled when there are no leecher"></i></td>
       <td></td>
       <td><a href="javascript:toggle('HASH')" class="has-text-success"><i class="mdi mdi-toggle-switch"></i></a>
           <!--<a href="javascript:retracker('HASH')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a>-->
           <a href="javascript:remove('HASH')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>
     </tr>
-
   </tbody></table>
-  
-  
-  
 
   <i class="mdi mdi-file-multiple" title="File count"></i>mdi-folder-multiple mdi-folder mdi-folder-open
   mdi-grid (chunks)
   mdi-information
-  
+  <div style="font-size: small; text-align: center;"><a href="https://github.com/slundi/RatioUp" target="_blank"><i class="mdi mdi-github"></i> RatioUp on GitHub</a></div>
 </div>
-<nav id="top" class="navbar is-fixed-bottom is-black">
-  <div class="navbar-brand">
-      <div class="navbar-item"><i class="mdi mdi-wrench mdi-24px has-text-warning"></i></div>
-      <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navtop"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span></a>
-      <span class="navbar-item">Client</span>
-      <span class="navbar-item"><p class="control"><div class="select is-small"><select name="client" id="client" onchange="change_client(this.value)">
-        <option value="leap-2.6.0.1">leap-2.6.0.1</option>
-        <option value="rtorrent-0.9.6_0.13.6">rtorrent-0.9.6_0.13.6</option>
-        <option value="vuze-5.7.5.0">vuze-5.7.5.0</option>
-        <optgroup label="Bittorrent">
-          <option value="bittorrent-7.10.1_43917">bittorrent-7.10.1_43917</option><option value="bittorrent-7.10.3_44359">bittorrent-7.10.3_44359</option><option value="bittorrent-7.10.3_44429">bittorrent-7.10.3_44429</option>
-        </optgroup><optgroup label="Deluge">
-          <option value="deluge-1.3.13">deluge-1.3.13</option><option value="deluge-1.3.14">deluge-1.3.14</option><option value="deluge-1.3.15">deluge-1.3.15</option>
-        </optgroup><optgroup label="qBittorrent">
-          <option value="qbittorrent-3.3.1">qbittorrent-3.3.1</option>
-          <option value="qbittorrent-3.3.13">qbittorrent-3.3.13</option>
-          <option value="qbittorrent-3.3.14">qbittorrent-3.3.14</option>
-          <option value="qbittorrent-3.3.15">qbittorrent-3.3.15</option>
-          <option value="qbittorrent-3.3.16">qbittorrent-3.3.16</option>
-          <option value="qbittorrent-3.3.7">qbittorrent-3.3.7</option>
-          <option value="qbittorrent-4.0.0">qbittorrent-4.0.0</option>
-          <option value="qbittorrent-4.0.1">qbittorrent-4.0.1</option>
-          <option value="qbittorrent-4.0.2">qbittorrent-4.0.2</option>
-          <option value="qbittorrent-4.0.3">qbittorrent-4.0.3</option>
-          <option value="qbittorrent-4.0.4">qbittorrent-4.0.4</option>
-          <option value="qbittorrent-4.1.0">qbittorrent-4.1.0</option>
-          <option value="qbittorrent-4.1.1">qbittorrent-4.1.1</option>
-          <option value="qbittorrent-4.1.2">qbittorrent-4.1.2</option>
-          <option value="qbittorrent-4.1.3">qbittorrent-4.1.3</option>
-          <option value="qbittorrent-4.1.4">qbittorrent-4.1.4</option>
-          <option value="qbittorrent-4.1.5">qbittorrent-4.1.5</option>
-          <option value="qbittorrent-4.1.6">qbittorrent-4.1.6</option>
-          <option value="qbittorrent-4.1.7">qbittorrent-4.1.7</option>
-          <option value="qbittorrent-4.1.8">qbittorrent-4.1.8</option>
-          <option value="qbittorrent-4.1.9">qbittorrent-4.1.9</option>
-          <option value="qbittorrent-4.2.0">qbittorrent-4.2.0</option>
-          <option value="qbittorrent-4.2.1">qbittorrent-4.2.1</option>
-          <option value="qbittorrent-4.2.2">qbittorrent-4.2.2</option>
-          <option value="qbittorrent-4.2.3">qbittorrent-4.2.3</option>
-          <option value="qbittorrent-4.2.4">qbittorrent-4.2.4</option>
-          <option value="qbittorrent-4.2.5">qbittorrent-4.2.5</option>
-          <option value="qbittorrent-4.3.0.1">qbittorrent-4.3.0.1</option>
-          <option value="qbittorrent-4.3.0">qbittorrent-4.3.0</option>
-          <option value="qbittorrent-4.3.1">qbittorrent-4.3.1</option>
-          <option value="qbittorrent-4.3.2">qbittorrent-4.3.2</option>
-          <option value="qbittorrent-4.3.3">qbittorrent-4.3.3</option>
-        </optgroup><optgroup label="Transmission">
-          <option value="transmission-2.82_14160">transmission-2.82_14160</option>
-          <option value="transmission-2.92_14714">transmission-2.92_14714</option>
-          <option value="transmission-2.93">transmission-2.93</option>
-          <option value="transmission-2.94">transmission-2.94</option>
-          <option value="transmission-3.00">transmission-3.00</option>
-        </optgroup><optgroup label="µTorrent">
-          <option value="utorrent-3.2.2_28500">utorrent-3.2.2_28500</option>
-          <option value="utorrent-3.5.0_43916">utorrent-3.5.0_43916</option>
-          <option value="utorrent-3.5.0_44090">utorrent-3.5.0_44090</option>
-          <option value="utorrent-3.5.0_44294">utorrent-3.5.0_44294</option>
-          <option value="utorrent-3.5.1_44332">utorrent-3.5.1_44332</option>
-          <option value="utorrent-3.5.3_44358">utorrent-3.5.3_44358</option>
-          <option value="utorrent-3.5.3_44428">utorrent-3.5.3_44428</option>
-          <option value="utorrent-3.5.4_44498">utorrent-3.5.4_44498</option>
-        </optgroup>
-      </select></div></p></span>
-      <a class="navbar-item" href="javascript:toggle_seed_0_leecher()"><i class="mdi mdi-toggle-switch has-text-success" id="toggle_seed_0_leecher"></i>&nbsp;Do not seed if zero leecher</a>
-    </div>
-    <div id="navtop" class="navbar-menu"><div class="navbar-start">
-      <div class="navbar-item field"></div>
-    </div><div class="navbar-end">
-      <span class="navbar-item"><i class="mdi mdi-upload-network"></i> Upload speeds</span>
-      <span class="navbar-item"><p class="control"><input type="number" min="0" size="10" step="1" id="min_upload" onchange="set_min_upload_speed(this.value)" /></p></span>
-      <span class="navbar-item"><p class="control"><input type="number" min="0" size="10" step="1" id="max_upload" onchange="set_max_upload_speed(this.value)" /></p></span>
-      <span class="navbar-item">KB</span>
-    </div></div>
-</nav>
 <script>
 var socket=new WebSocket((window.location.protocol.toLowerCase()=='http'?'ws://':'ws://')+window.location.host+'/ws/');
 socket.binaryType = 'arraybuffer';
@@ -187,9 +67,9 @@ socket.onmessage = function(e) {
   if (e.data.startsWith('{"config":')) {
     console.log("CONFIG");
     console.log(msg['config']);
-    document.getElementById("client").value=msg['config']['client'].toLowerCase();
-    document.getElementById("min_upload").value=msg['config']['min_upload_rate'];
-    document.getElementById("max_upload").value=msg['config']['max_upload_rate'];
+    document.getElementById("client").innerText=msg['config']['client'];
+    document.getElementById("min_upload").innerText=bytes_to_Size(msg['config']['min_upload_rate']);
+    document.getElementById("max_upload").innerText=bytes_to_Size(msg['config']['max_upload_rate']);
     var s=document.getElementById("toggle_seed_0_leecher");
     if(s.classList.contains("mdi-toggle-switch-off") && String(msg['config']['seed_if_zero_leecher'])=="true") {
       s.classList.remove("mdi-toggle-switch-off");
@@ -210,14 +90,6 @@ function set_max_upload_speed(speed) {socket.send("{\"max_upload_speed\":"+speed
 function toggle(h) {socket.send("{\"switch\":\""+h+"\"}");}
 function remove(h) {socket.send("{\"remove\":\""+h+"\"}");}
 function retracker(h, trackers) {socket.send("{\"retracker\":\""+h+"\",\"trackers\":\""+trackers+"\"}");}
-function apply_configuration() {
-  //TODO
-}
-function configuration() {document.getElementById("configuration").classList.toggle("is-hidden");}
-document.onkeydown=function(evt){
-  evt = evt || window.event;
-  if(evt.keyCode==27) {document.getElementById("configuration").classList.add("is-hidden");}
-};
 window.onbeforeunload=function() {
   socket.onclose=function(){};
   socket.close();

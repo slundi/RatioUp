@@ -74,50 +74,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                 if text.starts_with("upload_start:") {}
                 else if text == "upload_end" {}
                 else if text == "toggle_start" {
-                    ctx.text("{'running':true}");
-                } else if text.starts_with("{\"client\":\"") { //change client
-                    let param: messages::ConfigurationClient = serde_json::from_str(&text).expect("msg");
-                    if client::get_client(&param.client).is_none() { ctx.text("error:Client not found"); return;}
-                    //let c=CLIENT.write();
-                    let c=CONFIG.write();
-                    if c.is_ok() {
-                        let mut d=c.unwrap();
-                        d.client = param.client;
-                        config::write_config_file("config.json", &*d);
-                        println!("Changing for client: \t{}", &d.client);
-                        ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
-                    } else {error!("Cannot write configuration while changing client");return;}
+                    ctx.text("{\"running\":true}");
                 } else if text.starts_with("{\"switch\":\"") { //enable disable torrent
 
                 } else if text.starts_with("{\"remove\":\"") { //remove a torrent
 
-                } else if text == "toggle_0_leecher" {
-                    //let c=CLIENT.write();
-                    let c=CONFIG.write();
-                    if c.is_ok() {
-                        let mut d=c.unwrap();
-                        d.seed_if_zero_leecher = !d.seed_if_zero_leecher;
-                        config::write_config_file("config.json", &*d);
-                        ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
-                    } else {error!("Cannot write configuration while changing seed if 0 leecher");return;}
-                } else if text.starts_with("{\"min_upload_speed\":") {
-                    let param: messages::ConfigurationMinUploadSpeed = serde_json::from_str(&text).unwrap();
-                    let c=CONFIG.write();
-                    if c.is_ok() {
-                        let mut d=c.unwrap();
-                        d.min_upload_rate = param.min_upload_speed;
-                        config::write_config_file("config.json", &*d);
-                        ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
-                    } else {error!("Cannot write configuration while changing the min upload speed");return;}
-                } else if text.starts_with("{\"max_upload_speed\":") {
-                    let param: messages::ConfigurationMaxUploadSpeed = serde_json::from_str(&text).unwrap();
-                    let c=CONFIG.write();
-                    if c.is_ok() {
-                        let mut d=c.unwrap();
-                        d.max_upload_rate = param.max_upload_speed;
-                        config::write_config_file("config.json", &*d);
-                        ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
-                    } else {error!("Cannot write configuration while changing the max upload speed");return;}
                 }
             }
             Ok(ws::Message::Binary(bin)) => {

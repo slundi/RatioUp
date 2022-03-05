@@ -1,7 +1,6 @@
 {
-  "min_upload_rate": 30,
-  "max_upload_rate": 170,
-  "simultaneous_seed": 5,
-  "client": "utorrent-3.5.0_43916.client",
+  "min_upload_rate": 30720,
+  "max_upload_rate": 174080,
+  "client": "utorrent-3.5.4_44498.client",
   "keep_torrent_with_zero_leecher": true
 }
