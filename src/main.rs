@@ -27,6 +27,7 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 lazy_static! {
     static ref CLIENT : RwLock<Option<client::Client<'static>>> =  RwLock::new(None);
     static ref CONFIG  : RwLock<config::Config> = RwLock::new(config::get_config("config.json"));
+    static ref ACTIVE: RwLock<bool> = RwLock::new(true);
 }
 thread_local! {
     //pub static ref clients : BTreeMap<&'static str, client::Client<'static>> = client::load_clients();
@@ -73,8 +74,16 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                 println!("Receiving text: {:?}", text);
                 if text.starts_with("upload_start:") {}
                 else if text == "upload_end" {}
-                else if text == "toggle_start" {
-                    ctx.text("{\"running\":true}");
+                else if text == "toggle_start" { //enable or disable seeding, you should stop the app instead
+                    let mut w = ACTIVE.write().expect("Cannot change application state");
+                    *w = !*w;
+                    if *w {
+                        ctx.text("{\"running\": true}");
+                        info!("Seedding stopped");
+                    } else {
+                        ctx.text("{\"running\": false}");
+                        info!("Seedding rusumed");
+                    }
                 } else if text.starts_with("{\"switch\":\"") { //enable disable torrent
 
                 } else if text.starts_with("{\"remove\":\"") { //remove a torrent

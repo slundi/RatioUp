@@ -1,9 +1,7 @@
 use serde::{Serialize, Deserialize};
-use std::{error::Error, io::Write};
+use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
-use std::path::Path;
-use log::{info, error};
 
 //load config file: client, min/max speed, seed_if_zero_leecher
 
