@@ -50,12 +50,8 @@ impl Actor for RatioUpWS {
     /// Method is called on actor start. We start the heartbeat process here.
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
-        //TODO: send the configured client and the configuration
-        let c=CONFIG.read();
-        if c.is_ok() {
-            let d=c.unwrap();
-            ctx.text(format!("{{\"config\":{}}}", json!(&*d)));
-        }
+        let c=CONFIG.read().expect("Cannot read configuration");
+        ctx.text(format!("{{\"config\":{}}}", json!(*c)));
     }
 }
 
