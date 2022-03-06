@@ -84,8 +84,14 @@ socket.onmessage = function(e) {
   } else if (e.data.startsWith('{"running":')) {
     s=document.getElementById("server-status");
     s.classList.remove("mdi-play-circle", "mdi-pause-circle", "has-text-success", "has-text-danger");
-    if(msg['running']) {s.classList.add("mdi-play-circle", "has-text-success");}
-    else {s.classList.add("mdi-pause-circle", "has-text-danger");}
+    if(msg['running']) {
+      s.classList.add("mdi-play-circle", "has-text-success");
+      bulmaToast.toast({ message: '<i class="mdi mdi-check"></i> Server started', type: 'is-success', duration: 3000, position: 'bottom-right' })
+    }
+    else {
+      s.classList.add("mdi-pause-circle", "has-text-danger");
+      bulmaToast.toast({ message: '<i class="mdi mdi-alert"></i> Server stopped', type: 'is-warning', duration: 3000, position: 'bottom-right' })
+    }
   }
 }
 socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};
@@ -138,7 +144,7 @@ fi.onchange = () => {
   }*/
   for(let i=0; i < fi.files.length; i++) {
     console.log(fi.files[i].name);
-    upload_file(fi.files[i], "add_torrents");
+    upload_file(fi.files[i], "add_torrents", bulmaToast.toast({ message: '<i class="mdi mdi-check"></i> Torrent file uploaded', type: 'is-success', duration: 3000, position: 'bottom-right' }));
   }
 }
 function upload_file(file, url, success, progress){
@@ -161,5 +167,6 @@ function upload_file(file, url, success, progress){
 }
 </script>
 <script src="js/sha1.js" async></script>
+<script src="js/bulma-toast.min.js" async></script>
 </body>
 </html>
