@@ -5,7 +5,7 @@ use std::io::BufReader;
 
 //load config file: client, min/max speed, seed_if_zero_leecher
 
-#[derive(Default, Serialize, Deserialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     pub client: String,
     pub min_upload_rate: u32, //in byte

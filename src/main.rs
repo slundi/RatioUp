@@ -7,13 +7,17 @@ extern crate lazy_static;
 use clap::{Arg, value_t};
 use serde_json::{json};
 use std::{time::{Duration, Instant}};
+use std::io::Write;
 use actix::prelude::*;
+use actix_multipart::Multipart;
 use actix_web::{middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use futures_util::TryStreamExt as _;
 use actix_web_actors::ws;
 use actix_files::Files;
 use log::{info,error};
 use std::sync::RwLock;
 use lazy_static::lazy_static;
+use uuid::Uuid;
 
 mod client;
 mod algorithm;
@@ -23,21 +27,32 @@ mod messages;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 
-
 lazy_static! {
     static ref CLIENT : RwLock<Option<client::Client<'static>>> =  RwLock::new(None);
     static ref CONFIG  : RwLock<config::Config> = RwLock::new(config::get_config("config.json"));
     static ref ACTIVE: RwLock<bool> = RwLock::new(true);
-}
-thread_local! {
-    //pub static ref clients : BTreeMap<&'static str, client::Client<'static>> = client::load_clients();
-    //pub static config : config::Config = config::Config::default();
 }
 
 /// do websocket handshake and start `RatioUpWS` actor
 async fn ws_index(r: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
     let res = ws::start(RatioUpWS::new(), &r, stream);
     res
+}
+
+async fn receive_files(mut payload: Multipart) -> Result<HttpResponse, Error> {
+    while let Some(mut field) = payload.try_next().await? { // iterate over multipart stream
+        let content_disposition = field.content_disposition(); // A multipart/form-data stream has to contain `content_disposition`
+        let filename = content_disposition
+            .get_filename()
+            .map_or_else(|| Uuid::new_v4().to_string(), sanitize_filename::sanitize);
+        let filepath = format!("./torrents/{}", filename);
+        let mut f = web::block(|| std::fs::File::create(filepath)).await??; // File::create is blocking operation, use threadpool
+        while let Some(chunk) = field.try_next().await? { // Field in turn is stream of *Bytes* object
+            // filesystem operations are blocking, we have to use threadpool
+            f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
+        }
+    }
+    Ok(HttpResponse::Ok().into())
 }
 
 /// websocket connection is long running connection, it easier to handle with an actor
@@ -50,8 +65,8 @@ impl Actor for RatioUpWS {
     /// Method is called on actor start. We start the heartbeat process here.
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
-        let c=CONFIG.read().expect("Cannot read configuration");
-        ctx.text(format!("{{\"config\":{}}}", json!(*c)));
+        let c=&*CONFIG.read().expect("Cannot read configuration");
+        ctx.text(format!("{{\"config\":{}}}", json!(c)));
     }
 }
 
@@ -148,6 +163,7 @@ async fn main() -> std::io::Result<()> {
     //start web server
     HttpServer::new(move || {App::new()
         .service(web::resource("/ws/").route(web::get().to(ws_index)))
+        .service(web::resource("/add_torrents").route(web::post().to(receive_files)))
         .service(Files::new(&root, "static/").index_file("index.html"))})
         .bind(format!("127.0.0.1:{}",port))?.system_exit().run().await
 }

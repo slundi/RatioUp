@@ -20,21 +20,29 @@
   overflow: hidden;
   border: 5px dashed darkorange;
 }
-
 </style>
 </head><body><div id="dropoverlay"></div>
 <div>
   <table class="table is-striped is-hoverable is-fullwidth"><thead><tr>
-    <th class="vb"><i class="mdi mdi-label"></i> Title</th>
-    <th class="c2 vb"><i class="mdi mdi-harddisk"></i> Size</th>
+    <th class="vb">
+      <div class="file is-right is-small is-dark" id="upload_torrent">
+        <label class="file-label">
+          <input class="file-input" type="file" name="resume" accept=".torrent" multiple />
+          <span class="file-cta">
+            <span class="file-icon"><i class="mdi mdi-file"></i></span>
+            <span class="file-label">Choose a torrent file…</span>
+          </span>
+        </label>
+      </div>
+      <i class="mdi mdi-label"></i> Title
+    </th>
+    <th class="c2 vb"><br/><i class="mdi mdi-harddisk"></i> Size</th>
     <th class="c3" title="Current upload speed">
       <i class="mdi mdi-upload-network" title="Overall upload speed"></i> <strong id="Overall upload speed">123 kB/s</strong>
       <div style="font-size: small; text-align: center; font-weight: normal;"><i id="min_upload">0 KB</i> - <i id="max_upload">1 KB</i></div>
     </th>
-    <th class="vb c1" title="Seeders">
-      <i class="mdi mdi-cloud-upload"></i>
-    </th>
-    <th class="vb c1" title="Leechers"><i class="mdi mdi-cloud-download"></i></th>
+    <th class="vb c1" title="Seeders"><br/><i class="mdi mdi-cloud-upload"></i></th>
+    <th class="vb c1" title="Leechers"><br/><i class="mdi mdi-cloud-download"></i></th>
     <th class="c3"><div style="font-size: small; text-align: center; font-weight: normal;"><i id="client" title="Client software"></i></div><i class="mdi mdi-update"></i> Refresh in</th>
     <th class="c1 has-text-centered"><a href="javascript:start_stop()" title="Start/stop the service"><i class="mdi mdi-play-circle mdi-24px has-text-success" id="server-status"></i></a></th>
   </tr></thead><tbody id="content">
@@ -59,6 +67,7 @@ var socket=new WebSocket((window.location.protocol.toLowerCase()=='http'?'ws://'
 socket.binaryType = 'arraybuffer';
 socket.onerror=function(error) {console.log('WebSocket Error: '+error);};
 socket.onopen=function(event) {console.log('Connected to: '+event.currentTarget.url);};
+var seed_if_zero_leecher=false;
 // Handle messages sent by the server.
 socket.onmessage = function(e) {
   console.log(e);
@@ -71,13 +80,7 @@ socket.onmessage = function(e) {
     document.getElementById("min_upload").innerText=bytes_to_Size(msg['config']['min_upload_rate']);
     document.getElementById("max_upload").innerText=bytes_to_Size(msg['config']['max_upload_rate']);
     var s=document.getElementById("toggle_seed_0_leecher");
-    if(s.classList.contains("mdi-toggle-switch-off") && String(msg['config']['seed_if_zero_leecher'])=="true") {
-      s.classList.remove("mdi-toggle-switch-off");
-      s.classList.add("mdi-toggle-switch");
-    } else if(s.classList.contains("mdi-toggle-switch") && String(msg['config']['seed_if_zero_leecher'])=="false") {
-      s.classList.remove("mdi-toggle-switch");
-      s.classList.add("mdi-toggle-switch-off");
-    }
+    seed_if_zero_leecher=String(msg['config']['seed_if_zero_leecher'])=="true";
   } else if (e.data.startsWith('{"running":')) {
     s=document.getElementById("server-status");
     s.classList.remove("mdi-play-circle", "mdi-pause-circle", "has-text-success", "has-text-danger");
@@ -125,6 +128,37 @@ document.addEventListener(event_name,function(e){
     reader.readAsArrayBuffer(files[i]);
   }}
   }, false));
+//upload torrent files
+const fi = document.querySelector('#upload_torrent input[type=file]');
+fi.onchange = () => {
+  /*if (fi.files.length > 0) {
+    const fileName = document.querySelector('#upload_torrent .file-name');
+    //fileName.textContent = fi.files[0].name;
+    console.log("TODO: upload torrent");
+  }*/
+  for(let i=0; i < fi.files.length; i++) {
+    console.log(fi.files[i].name);
+    upload_file(fi.files[i], "add_torrents");
+  }
+}
+function upload_file(file, url, success, progress){
+	const ajax = new XMLHttpRequest();
+	const data = new FormData();
+	data.append('file', file);
+
+	if (typeof progress=='function') {
+		ajax.upload.addEventListener(
+			'progress',
+			function ProgressHandler(event){
+				const p = Math.floor((event.loaded / event.total) * 100);
+				progress(`${p}%`);
+			}
+		);
+	}
+	if (success) ajax.addEventListener('load', success, false);
+	ajax.open('POST', url, true);
+	ajax.send(data);
+}
 </script>
 <script src="js/sha1.js" async></script>
 </body>

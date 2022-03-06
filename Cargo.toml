@@ -4,19 +4,23 @@ version = "0.1.0"
 edition = '2018'
 
 [dependencies]
-rand = "*"
-rand_regex = "*"
-lazy_static = "*"
-serde = "*"
-serde_json = "*"
-lava_torrent = "*"
-regex = "*"
-reqwest = { version = "*", features = ["json"] }
-globset = "*"
-actix = "*"
-actix-web = "*"
-actix-files = "*"
-actix-web-actors = "*"
+rand = "0.8"
+rand_regex = "0.15"
+lazy_static = "1.4"
+serde = {version = "1", features = ["derive"]}
+serde_json = "1"
+lava_torrent = "0.5"
+regex = "1.5"
+reqwest = {version = "0.11", features = ["json"]}
+globset = "0.4"
+actix = "0.13"
+actix-web = "4"
+actix-files = "0.6"
+actix-multipart = "0.4"
+actix-web-actors = "4.1"
 clap = "*"
 log = "*"
-tokio = {version = "*", features=["fs"]}
+tokio = {version = "1.17", features=["fs"]}
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+sanitize-filename = "0.3"
+uuid = { version = "0.8", features = ["v4"] }
