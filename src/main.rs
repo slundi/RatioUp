@@ -19,7 +19,7 @@ use std::sync::RwLock;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-mod client;
+//mod client;
 mod algorithm;
 mod config;
 mod messages;
@@ -28,8 +28,7 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 
 lazy_static! {
-    static ref CLIENT : RwLock<Option<client::Client<'static>>> =  RwLock::new(None);
-    static ref CONFIG  : RwLock<config::Config> = RwLock::new(config::get_config("config.json"));
+    static ref CONFIG: RwLock<config::Config> = RwLock::new(config::get_config("config.json"));
     static ref ACTIVE: RwLock<bool> = RwLock::new(true);
 }
 

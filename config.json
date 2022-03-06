@@ -1,7 +1,7 @@
 {
     "port":7070,
     "web_root":"/",
-    "client":"qBittorrent-4.3.3",
+    "client":"qbittorrent-4.3.3",
     "min_upload_rate":4096,
     "max_upload_rate":16777216,
     "seed_if_zero_leecher": false

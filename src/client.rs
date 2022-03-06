@@ -22,62 +22,62 @@ const DIGIT_RANGE_TRANSFORMED_TO_HEX_WITHOUT_LEADING_ZEROES: u8 = 13; //inclusiv
 const RANDOM_POOL_WITH_CHECKSUM: u8 = 14;
 const PEER_ID_LENGTH: usize = 20;
 
-#[derive(Default)]
-pub struct Client<'a> {
+#[derive(Default, Clone)]
+pub struct Client {
     //----------- algorithms
     ///key algorithm
     key_algorithm: u8, //length=8
     ///for REGEX method, for RANDOM_POOL_WITH_CHECKSUM: list pf available chars, the base is the length of the string
-    key_pattern: &'a str,
+    key_pattern: String,
     /// for RANDOM_POOL_WITH_CHECKSUM
-    prefix: &'a str,
+    prefix: String,
     key_refresh_on: u8,
     key_refresh_every: u16,
     key_uppercase: Option<bool>,
 
     //----------- peer ID
     peer_algorithm: u8,
-    peer_pattern: &'a str,
+    peer_pattern: String,
     peer_refresh_on: u8,
-    peer_prefix:&'a str,
+    peer_prefix:String,
 
     //----------- URL encoder 
-    encoding_exclusion_pattern: &'a str,
+    encoding_exclusion_pattern: String,
     /// if the encoded hex string should be in upper case or no
     uppercase_encoded_hex: bool,
     should_url_encode: bool,
 
     query: String,
     //request_headers: HashMap<String, String>, //HashMap<&str, i32> = [("Norway", 100), ("Denmark", 50), ("Iceland", 10)]
-    user_agent: &'a str,
-    accept:&'a str,
-    accept_encoding: &'a str,
-    accept_language: &'a str,
-    connection:Option<&'a str>,
+    user_agent: String,
+    accept:String,
+    accept_encoding: String,
+    accept_language: String,
+    connection:Option<String>,
     num_want: u16,
     num_want_on_stop: u16,
 
     //generated values
-    infohash :&'a str,
-    peer_id: &'a str,
+    infohash :String,
+    peer_id: String,
 }
 
-impl Client<'_> {
+impl Client {
     fn default() -> Self {
         Client {
             //key generator default values
             key_algorithm: HASH,
-            key_pattern:"", prefix:"",
+            key_pattern:String::new(), prefix:String::new(),
             key_uppercase: None,
             key_refresh_on: TIMED_OR_AFTER_STARTED_ANNOUNCE,
             key_refresh_every: 0,
             //peer ID generator
             peer_algorithm: HASH,
-            peer_pattern: "",
-            peer_prefix:"",
+            peer_pattern: String::new(),
+            peer_prefix:String::new(),
             peer_refresh_on: NEVER,
             //URL encoder
-            encoding_exclusion_pattern: r"[A-Za-z0-9-]",
+            encoding_exclusion_pattern: r"[A-Za-z0-9-]".to_owned(),
             uppercase_encoded_hex: false,
             should_url_encode: false,
             //misc
@@ -85,13 +85,13 @@ impl Client<'_> {
             num_want_on_stop: 0,
             //query headers
             query: "info_hash={infohash}&peer_id={peerid}&port={port}&uploaded={uploaded}&downloaded={downloaded}&left={left}&corrupt=0&key={key}&event={event}&numwant={numwant}&compact=1&no_peer_id=1".to_owned(),
-            user_agent: "", //must be defined
-            accept: "",
-            accept_encoding: "gzip",
-            accept_language: "",
-            connection: Some("Close"),
-            infohash: "",
-            peer_id: "",
+            user_agent: String::new(), //must be defined
+            accept: String::new(),
+            accept_encoding: String::from("gzip"),
+            accept_language: String::new(),
+            connection: Some(String::from("Close")),
+            infohash: String::new(),
+            peer_id: String::new(),
         }
     }
     /*pub fn get_query(self: &Self, infohash: &str) -> &str {
@@ -119,7 +119,7 @@ impl Client<'_> {
 /// * `data` - data to process
 /// * `uppercase` - if the output should be in upper case
 fn get_URL_encoded_char<'a>(pattern: &str, c: char, uppercase: bool) -> String {
-    let mut hex=String::from("");
+    let mut hex=String::new();
     if !pattern.is_empty() && Regex::new(pattern).unwrap().is_match(&String::from(c)) {return String::from(c);}
     if c==0 as char {hex.push_str("%00")}
     else {hex.push_str(&format!("%{:02x}", c as u8));}
