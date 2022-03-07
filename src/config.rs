@@ -4,7 +4,8 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
-use regex::Regex;
+use log::{info,error};
+use byte_unit::Byte;
 use crate::algorithm;
 
 //refresh interval
@@ -126,6 +127,8 @@ pub fn get_config(path: &str) -> Config {
     cfg.max_upload_rate      = v["max_upload_rate"].as_u64().expect("Cannot get the min_upload_rate in config.json") as u32;
     cfg.seed_if_zero_leecher = v["seed_if_zero_leecher"].as_bool().expect("Cannot get the seed_if_zero_leecher in config.json");
     cfg.client               = v["client"].as_str().expect("Cannot get the client in config.json").to_owned();
+    info!("Client: {}", cfg.client);
+    info!("Bandwidth: {} - {}", Byte::from_bytes(cfg.min_upload_rate as u128).get_appropriate_unit(true).to_string(), Byte::from_bytes(cfg.max_upload_rate as u128).get_appropriate_unit(true).to_string());
     //get client from xxxxxxxxxxx.client
     let file = File::open(format!("{}{}{}", "./res/clients/", cfg.client.as_str(), ".client")).expect("Cannot open client file");
     let mut buffer = String::with_capacity(4096);
@@ -181,7 +184,7 @@ pub fn get_config(path: &str) -> Config {
             //"PEER_ID_LENGTH" => cfg.key_algorithm = PEER_ID_LENGTH,
             _ => panic!("Cannot get a valid peer ID type"),
         }
-        if v["peerIdGenerator"]["algorithm"].get("pattern").is_some() {cfg.peer_pattern = v["peerIdGenerator"]["algorithm"]["pattern"].as_str().unwrap().to_owned().replace("\\\\", "\\");}
+        if v["peerIdGenerator"]["algorithm"].get("pattern").is_some() {cfg.peer_pattern = v["peerIdGenerator"]["algorithm"]["pattern"].as_str().unwrap().to_owned();}
         if v["peerIdGenerator"]["refreshOn"].is_string() {
             if v["peerIdGenerator"]["refreshOn"].as_str().unwrap() == "NEVER" {cfg.peer_refresh_on = NEVER;}
         }
@@ -189,14 +192,16 @@ pub fn get_config(path: &str) -> Config {
     }
     //URL encoder
     if v["urlEncoder"].is_object() {
-        if v["urlEncoder"]["encodingExclusionPattern"].is_string() {cfg.encoding_exclusion_pattern = v["urlEncoder"]["encodingExclusionPattern"].as_str().unwrap().to_owned().replace("\\\\", "\\");}
+        if v["urlEncoder"]["encodingExclusionPattern"].is_string() {cfg.encoding_exclusion_pattern = v["urlEncoder"]["encodingExclusionPattern"].as_str().unwrap().to_owned();}
         if v["urlEncoder"]["encodedHexCase"].is_string() {cfg.uppercase_encoded_hex = v["urlEncoder"]["encodedHexCase"].as_str().unwrap() == "upper";}
     }
-    println!("Patterns: {}\t{}", cfg.key_pattern, cfg.peer_pattern);
     //build keys
     //generate PEER_ID
-    if cfg.peer_algorithm == REGEX {cfg.peer_id = algorithm::regex(&cfg.peer_pattern);}
+    if cfg.peer_algorithm == REGEX {
+        cfg.peer_id = algorithm::regex(cfg.peer_pattern.replace("\\", "")); //replace \ otherwise the generator crashes
+    }
     else {algorithm::random_pool_with_checksum(PEER_ID_LENGTH, &cfg.peer_prefix, &cfg.peer_pattern);}
+    info!("Peer ID: {}", cfg.peer_id);
     //generate KEY
     if cfg.key_algorithm == HASH {algorithm::hash(8, false, cfg.key_uppercase);}
     else if cfg.key_algorithm == HASH_NO_LEADING_ZERO {algorithm::hash(8, true, cfg.key_uppercase);}
@@ -217,7 +222,7 @@ mod tests {
         let mut f : File = std::fs::File::create(std::path::Path::new(&path)).expect("Unable to create file");
         f.write_all("{\"client\":\"qbittorrent-4.3.3\", \"min_upload_rate\": 8, \"max_upload_rate\": 2048, \"seed_if_zero_leecher\": true, \"simultaneous_seed\": 5}".as_bytes());
         f.flush();
-        let cfg = read_config_file(path).unwrap();
+        let cfg = get_config(&path);
         assert_eq!(cfg.min_upload_rate, 8*1024);
         assert_eq!(cfg.max_upload_rate, 2048*2048);
         assert_eq!(cfg.seed_if_zero_leecher, true);

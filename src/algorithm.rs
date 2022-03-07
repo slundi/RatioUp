@@ -13,14 +13,13 @@ pub fn hash(length: usize, no_leading_zero: bool, uppercase: Option<bool>) -> St
         if uppercase==None || uppercase.unwrap() {h.push(HASH_SYMBOLS.chars().nth(i+6).unwrap());}
         else {h.push(HASH_SYMBOLS.chars().nth(i).unwrap());}
     }
-    println!("{}", h);
     return h;
 }
 
 /// Generate a string from a regex pattern
-pub fn regex(pattern: &str) -> String {
+pub fn regex(pattern: String) -> String {
     let mut rng=rand::thread_rng();
-    let gen = rand_regex::Regex::compile(pattern, 100).unwrap();
+    let gen = rand_regex::Regex::compile(&pattern, 100).unwrap();
     let out = (&mut rng).sample_iter(&gen).nth(64).unwrap();
     return out;
 }
@@ -71,9 +70,9 @@ mod tests {
     #[test]
     fn is_regex_ok() {
         let mut re=Regex::new("-lt0D60-[\u{0001}-\u{00ff}]{12}").unwrap();
-        assert_eq!(re.is_match(&regex("-lt0D60-[\u{0001}-\u{00ff}]{12}")), true);
+        assert_eq!(re.is_match(&regex("-lt0D60-[\u{0001}-\u{00ff}]{12}".to_owned())), true);
         re=Regex::new("-AZ5750-[a-zA-Z0-9]{12}").unwrap();
-        assert_eq!(re.is_match(&regex("-AZ5750-[a-zA-Z0-9]{12}")), true)
+        assert_eq!(re.is_match(&regex("-AZ5750-[a-zA-Z0-9]{12}".to_owned())), true)
     }
     #[test]
     fn is_digit_range_to_hex_ok() {
