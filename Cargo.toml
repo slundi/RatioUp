@@ -19,7 +19,8 @@ actix-files = "0.6"
 actix-multipart = "0.4"
 actix-web-actors = "4.1"
 clap = "*"
-log = "*"
+log = "0.4"
+env_logger = "0.9"
 tokio = {version = "1.17", features=["fs"]}
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 sanitize-filename = "0.3"

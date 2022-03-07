@@ -10,11 +10,11 @@ use std::{time::{Duration, Instant}};
 use std::io::Write;
 use actix::prelude::*;
 use actix_multipart::Multipart;
-use actix_web::{middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{middleware::Logger, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use futures_util::TryStreamExt as _;
 use actix_web_actors::ws;
 use actix_files::Files;
-use log::{info,error};
+use env_logger;
 use std::sync::RwLock;
 use lazy_static::lazy_static;
 use uuid::Uuid;
@@ -89,10 +89,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                     *w = !*w;
                     if *w {
                         ctx.text("{\"running\": true}");
-                        info!("Seedding stopped");
+                        log::info!("Seedding stopped");
                     } else {
                         ctx.text("{\"running\": false}");
-                        info!("Seedding rusumed");
+                        log::info!("Seedding rusumed");
                     }
                 } else if text.starts_with("{\"switch\":\"") { //enable disable torrent
 
@@ -128,7 +128,7 @@ impl RatioUpWS {
 
     /// helper method that sends ping to client every second also this method checks heartbeats from client
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {
-        info!("Web server started");
+        log::info!("Web server started");
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT { // check client heartbeats
                 println!("Websocket Client heartbeat failed, disconnecting!"); // heartbeat timed out
@@ -142,7 +142,8 @@ impl RatioUpWS {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("RatioUp");
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    log::info!("Starting");
     //for c in clients.in {client_list.push(c.0);}
     //let path = std::env::current_dir()?; println!("The current directory is {}", path.display());
     //parse command line
@@ -161,6 +162,7 @@ async fn main() -> std::io::Result<()> {
     std::fs::create_dir_all(torrent_folder).expect("Cannot create torrent folder");
     //start web server
     HttpServer::new(move || {App::new()
+        .wrap(Logger::default())
         .service(web::resource("/ws/").route(web::get().to(ws_index)))
         .service(web::resource("/add_torrents").route(web::post().to(receive_files)))
         .service(Files::new(&root, "static/").index_file("index.html"))})
