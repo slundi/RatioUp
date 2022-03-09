@@ -4,9 +4,12 @@ extern crate rand;
 extern crate clap;
 extern crate lazy_static;
 
+#[macro_use] extern crate serde_derive;
+extern crate serde_bytes;
+
 use clap::{Arg, value_t};
 use serde_json::{json};
-use std::{time::{Duration, Instant}};
+use std::{time::{Duration, Instant}, collections::BTreeMap, io::Read};
 use std::io::Write;
 use actix::prelude::*;
 use actix_multipart::Multipart;
@@ -23,6 +26,7 @@ use uuid::Uuid;
 mod algorithm;
 mod config;
 mod messages;
+mod torrent;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -30,6 +34,7 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 lazy_static! {
     static ref CONFIG: RwLock<config::Config> = RwLock::new(config::get_config("config.json"));
     static ref ACTIVE: RwLock<bool> = RwLock::new(true);
+    static ref TORRENTS:RwLock<BTreeMap<String, torrent::Torrent>> = RwLock::new(BTreeMap::new());
 }
 
 /// do websocket handshake and start `RatioUpWS` actor
@@ -64,8 +69,26 @@ impl Actor for RatioUpWS {
     /// Method is called on actor start. We start the heartbeat process here.
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
+        //read the configuration
         let c=&*CONFIG.read().expect("Cannot read configuration");
         ctx.text(format!("{{\"config\":{}}}", json!(c)));
+        //load torrents
+        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+        let paths = std::fs::read_dir("./torrents/").expect("Cannot read torrent directory");
+        for p in paths {
+            let f = p.expect("Cannot get torrent path").path().into_os_string().into_string().expect("Cannot get file name");
+            if f.to_lowercase().ends_with(".torrent") {
+                log::info!("Loading torrent: \t{}", f);
+                let mut file = std::fs::File::open(&f).expect("Cannot open torrent file");
+                let s = file.metadata().expect("Cannot get file metadata").len() as usize;
+                let mut buffer = Vec::with_capacity(s);
+                file.read_to_end(&mut buffer).expect("Cannot read torrent file");
+                let t = serde_bencode::de::from_bytes::<torrent::Torrent>(&buffer);
+                if t.is_ok() {
+                    list.insert(f, t.unwrap());
+                } else {log::error!("Cannot parse torrent: \t{}", f);}
+            }
+        }
     }
 }
 
