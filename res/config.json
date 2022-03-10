@@ -2,5 +2,6 @@
   "min_upload_rate": 30720,
   "max_upload_rate": 174080,
   "client": "utorrent-3.5.4_44498.client",
-  "keep_torrent_with_zero_leecher": true
+  "keep_torrent_with_zero_leecher": true,
+  "seed_public_torrent": false
 }
