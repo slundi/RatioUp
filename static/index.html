@@ -69,7 +69,7 @@ var seed_if_zero_leecher=false;
 // Handle messages sent by the server.
 socket.onmessage = function(e) {
   console.log(e);
-  console.log("Message: "+e.data);
+  //console.log("Message: "+e.data);
   let msg = (e.data!=null)?JSON.parse(e.data):'';
   if (e.data.startsWith('{"config":')) {
     console.log("CONFIG");
@@ -89,6 +89,20 @@ socket.onmessage = function(e) {
     else {
       s.classList.add("mdi-pause-circle", "has-text-danger");
       bulmaToast.toast({ message: '<i class="mdi mdi-alert"></i> Server stopped', type: 'is-warning', duration: 3000, position: 'bottom-right' })
+    }
+  } else if (e.data.startsWith('{"torrents":')) {
+    tbody = document.getElementById("content");
+    tbody.innerHTML = "";
+    torrents = msg['torrents'].sort(function(t1, t2) { //sort torrents by name
+      if(t1['info']['name'].toLowerCase() < t2['info']['name'].toLowerCase()) return -1;
+      if(t1['info']['name'].toLowerCase() > t2['info']['name'].toLowerCase()) return 1;
+    });
+    for(let i=0; i<torrents.length; i++) {
+      console.log(torrents[i]);
+      tr=document.createElement('tr');
+      tr.innerHTML = '<td>' + torrents[i]['info']['name'] + '</td><td class="has-text-right">' + bytes_to_Size(torrents[i]['info']['length']) +
+                     '<td class="has-text-right">0</td></td class="has-text-right"><td class="has-text-right">0</td><td class="has-text-right">0</td><td class="has-text-centered"></td><td></td>';
+      tbody.append(tr);
     }
   }
 }

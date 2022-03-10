@@ -9,7 +9,7 @@ extern crate serde_bytes;
 
 use clap::{Arg, value_t};
 use serde_json::{json};
-use std::{time::{Duration, Instant}, collections::BTreeMap, io::Read};
+use std::{time::{Duration, Instant}, collections::BTreeMap, io::Read, os::unix::prelude::OsStringExt};
 use std::io::Write;
 use actix::prelude::*;
 use actix_multipart::Multipart;
@@ -34,7 +34,7 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 lazy_static! {
     static ref CONFIG: RwLock<config::Config> = RwLock::new(config::get_config("config.json"));
     static ref ACTIVE: RwLock<bool> = RwLock::new(true);
-    static ref TORRENTS:RwLock<BTreeMap<String, torrent::Torrent>> = RwLock::new(BTreeMap::new());
+    static ref TORRENTS:RwLock<Vec<torrent::Torrent>> = RwLock::new(Vec::new());
 }
 
 /// do websocket handshake and start `RatioUpWS` actor
@@ -55,6 +55,7 @@ async fn receive_files(mut payload: Multipart) -> Result<HttpResponse, Error> {
             // filesystem operations are blocking, we have to use threadpool
             f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
         }
+        //TODO: add new torrent
     }
     Ok(HttpResponse::Ok().into())
 }
@@ -66,29 +67,15 @@ struct RatioUpWS {
 }
 impl Actor for RatioUpWS {
     type Context = ws::WebsocketContext<Self>;
-    /// Method is called on actor start. We start the heartbeat process here.
+    /// Method is called on actor start, it means a web browser just loaded the page. We start the heartbeat process here.
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
         //read the configuration
         let c=&*CONFIG.read().expect("Cannot read configuration");
         ctx.text(format!("{{\"config\":{}}}", json!(c)));
         //load torrents
-        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-        let paths = std::fs::read_dir("./torrents/").expect("Cannot read torrent directory");
-        for p in paths {
-            let f = p.expect("Cannot get torrent path").path().into_os_string().into_string().expect("Cannot get file name");
-            if f.to_lowercase().ends_with(".torrent") {
-                log::info!("Loading torrent: \t{}", f);
-                let mut file = std::fs::File::open(&f).expect("Cannot open torrent file");
-                let s = file.metadata().expect("Cannot get file metadata").len() as usize;
-                let mut buffer = Vec::with_capacity(s);
-                file.read_to_end(&mut buffer).expect("Cannot read torrent file");
-                let t = serde_bencode::de::from_bytes::<torrent::Torrent>(&buffer);
-                if t.is_ok() {
-                    list.insert(f, t.unwrap());
-                } else {log::error!("Cannot parse torrent: \t{}", f);}
-            }
-        }
+        let list = &*TORRENTS.read().expect("Cannot get torrent list");
+        ctx.text(format!("{{\"torrents\":{}}}", json!(list)));
     }
 }
 
@@ -183,6 +170,31 @@ async fn main() -> std::io::Result<()> {
     //create torrent folder
     let torrent_folder = std::path::Path::new("torrents");
     std::fs::create_dir_all(torrent_folder).expect("Cannot create torrent folder");
+    //load torrents
+    { //block to release the thread lock
+        let c=&*CONFIG.read().expect("Cannot read configuration");
+        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+        let paths = std::fs::read_dir("./torrents/").expect("Cannot read torrent directory");
+        for p in paths {
+            let f = p.expect("Cannot get torrent path").path().into_os_string().into_string().expect("Cannot get file name");
+            if f.to_lowercase().ends_with(".torrent") {
+                log::info!("Loading torrent: \t{}", f);
+                let mut file = std::fs::File::open(&f).expect("Cannot open torrent file");
+                let s = file.metadata().expect("Cannot get file metadata").len() as usize;
+                let mut buffer = Vec::with_capacity(s);
+                file.read_to_end(&mut buffer).expect("Cannot read torrent file");
+                let t = serde_bencode::de::from_bytes::<torrent::Torrent>(&buffer);
+                if t.is_ok() {
+                    let mut t = t.unwrap();
+                    //enable seeding on public torrents depending on the config value of seed_public_torrent
+                    if c.seed_public_torrent && !t.is_private() {t.active = true;}
+                    if list.contains(&t) {continue;}
+                    else {t.active = false;}
+                    list.push(t);
+                } else {log::error!("Cannot parse torrent: \t{}", f);}
+            }
+        }
+    }
     //start web server
     HttpServer::new(move || {App::new()
         .wrap(Logger::default())

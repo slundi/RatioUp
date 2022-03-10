@@ -5,58 +5,48 @@ extern crate serde_bencode;
 
 use serde_bytes::ByteBuf;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 struct Node(String, i64);
 
-#[derive(Debug, Deserialize)]
-struct File {
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct File {
     path: Vec<String>,
     length: i64,
-    #[serde(default)]
-    md5sum: Option<String>,
+    //#[serde(default)] md5sum: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct Info {
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct Info {
     name: String,
-    pieces: ByteBuf,
-    #[serde(rename = "piece length")]
-    piece_length: i64,
-    #[serde(default)]
-    md5sum: Option<String>,
-    #[serde(default)]
-    length: Option<i64>,
-    #[serde(default)]
-    files: Option<Vec<File>>,
-    #[serde(default)]
-    private: Option<u8>,
-    #[serde(default)]
-    path: Option<Vec<String>>,
-    #[serde(default)]
-    #[serde(rename = "root hash")]
-    root_hash: Option<String>,
+    //#[serde(skip_serializing)] pieces: ByteBuf,
+    #[serde(rename = "piece length")] piece_length: i64,
+    //#[serde(default)] md5sum: Option<String>,
+    /// Total torrent size?
+    #[serde(default)] length: Option<i64>,
+    /// Files in the torrent
+    #[serde(default)] files: Option<Vec<File>>,
+    #[serde(default)] pub private: Option<u8>,
+    #[serde(default)] path: Option<Vec<String>>,
+    #[serde(default, rename = "root hash")] root_hash: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Torrent {
-    info: Info,
-    #[serde(default)]
-    announce: Option<String>,
-    #[serde(default)]
-    nodes: Option<Vec<Node>>,
-    #[serde(default)]
-    encoding: Option<String>,
-    #[serde(default)]
-    httpseeds: Option<Vec<String>>,
-    #[serde(default)]
-    #[serde(rename = "announce-list")]
-    announce_list: Option<Vec<Vec<String>>>,
-    #[serde(default)]
-    #[serde(rename = "creation date")]
-    creation_date: Option<i64>,
-    #[serde(rename = "comment")]
-    comment: Option<String>,
-    #[serde(default)]
-    #[serde(rename = "created by")]
-    created_by: Option<String>,
+    pub info: Info,
+    #[serde(default)] announce: Option<String>,
+    #[serde(default, skip_serializing)] nodes: Option<Vec<Node>>,
+    #[serde(default)] encoding: Option<String>,
+    #[serde(default, skip_serializing)] httpseeds: Option<Vec<String>>,
+    #[serde(default, rename = "announce-list")] announce_list: Option<Vec<Vec<String>>>,
+    #[serde(default, rename = "creation date")] creation_date: Option<i64>,
+    #[serde(rename = "comment")] comment: Option<String>,
+    #[serde(default, rename = "created by")] created_by: Option<String>,
+    #[serde(skip)] pub active: bool,
+}
+
+impl  Torrent {
+    pub fn is_private(&self) -> bool {
+        if self.info.private.is_some() && self.info.private != Some(0) {return true;}
+        false
+    }
 }
