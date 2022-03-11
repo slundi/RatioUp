@@ -49,6 +49,7 @@ pub struct Torrent {
 /// Store only essential information
 #[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct BasicTorrent {
+    pub path: String,
     name: String, comment: String, created_by: String,
     announce: Option<String>,  announce_list: Option<Vec<Vec<String>>>,
     //creation_date?
@@ -62,10 +63,10 @@ pub struct BasicTorrent {
 impl BasicTorrent {
     //pub fn is_private(&self) -> bool {return self.info.private.is_some() && self.info.private == Some(1);}
     /// Load essential data from a parsed torrent using the lava_torrent lib
-    pub fn from_torrent(torrent: Torrent) -> BasicTorrent {
+    pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         let hash = torrent.info_hash();
         let private = torrent.is_private();
-        let mut t= BasicTorrent {name: torrent.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(),
+        let mut t= BasicTorrent {path: path, name: torrent.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(),
             comment: String::new(), active: true, length: torrent.length as usize, created_by: String::new(),
             info_hash: hash, piece_length: torrent.piece_length as usize, private: private, files: None};
         if torrent.files.is_some() {

@@ -44,17 +44,8 @@
     <th class="vb c1" title="Seeders"><br/><i class="mdi mdi-cloud-upload"></i></th>
     <th class="vb c1" title="Leechers"><br/><i class="mdi mdi-cloud-download"></i></th>
     <th class="c3"><div style="font-size: small; text-align: center; font-weight: normal;"><i id="client" title="Client software"></i></div><i class="mdi mdi-update"></i> Refresh in</th>
-    <th class="c1 has-text-centered"><a href="javascript:start_stop()" title="Start/stop the service"><i class="mdi mdi-play-circle mdi-24px has-text-success" id="server-status"></i></a></th>
+    <th class="c2 has-text-centered"><a href="javascript:start_stop()" title="Start/stop the service"><i class="mdi mdi-play-circle mdi-24px has-text-success" id="server-status"></i></a></th>
   </tr></thead><tbody id="content">
-    <tr>
-      <td><a href="javascript:torrent('HASH')"><i class="mdi mdi-file"></i> Ubuntu</a></td><td align="right">1.6 GB</td><!--or mdi-folder if torrent with multiple files-->
-      <td align="right">864.2 KB/s</td>
-      <td>64</td><td>8 <i class="is-pulled-right mdi mdi-alert has-text-warning" title="Seed is disabled when there is no leecher"></i></td>
-      <td></td>
-      <td><a href="javascript:toggle('HASH')" class="has-text-success"><i class="mdi mdi-toggle-switch"></i></a>
-          <!--<a href="javascript:retracker('HASH')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a>-->
-          <a href="javascript:remove('HASH')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>
-    </tr>
   </tbody></table>
 
 <!--Icons to display on the torrent file browser (future feature): mdi-folder-multiple mdi-folder mdi-folder-open mdi-grid (chunks) mdi-information-->
@@ -94,17 +85,24 @@ socket.onmessage = function(e) {
     tbody = document.getElementById("content");
     tbody.innerHTML = "";
     torrents = msg['torrents'].sort(function(t1, t2) { //sort torrents by name
-      if(t1['info']['name'].toLowerCase() < t2['info']['name'].toLowerCase()) return -1;
-      if(t1['info']['name'].toLowerCase() > t2['info']['name'].toLowerCase()) return 1;
+      if(t1['name'].toLowerCase() < t2['name'].toLowerCase()) return -1;
+      if(t1['name'].toLowerCase() > t2['name'].toLowerCase()) return 1;
     });
     for(let i=0; i<torrents.length; i++) {
       console.log(torrents[i]);
       tr=document.createElement('tr');
-      tr.innerHTML = '<td>' + torrents[i]['info']['name'] + '</td><td class="has-text-right">' + bytes_to_Size(torrents[i]['info']['length']) +
-                     '<td class="has-text-right">0</td></td class="has-text-right"><td class="has-text-right">0</td><td class="has-text-right">0</td><td class="has-text-centered"></td><td></td>';
+      tr.setAttribute('id', torrents[i]['info_hash']);
+      tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-file-multiple"></i></a> ') +torrents[i]['name']+ '</td><td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
+                   + '<td class="has-text-right">0</td></td class="has-text-right"><td class="has-text-right">0</td><td class="has-text-right">0</td>'
+                   + '<td class="has-text-centered"></td>'
+                   + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="has-text-success"><i class="mdi mdi-toggle-switch"></i></a> <a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> <a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
       tbody.append(tr);
-    }
-  }
+    } 
+  } else if (e.data.startsWith('{"active":')) {
+    msg['active'];
+  } else if (e.data.startsWith('{"disabled":')) {
+    msg['disabled'];
+  } else if (e.data.startsWith('{"removed":')) { document.getElementById(msg['removed']).remove(e); }
 }
 socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};
 function start_stop() {socket.send("toggle_start");}
@@ -114,7 +112,7 @@ function toggle_seed_0_leecher() {socket.send("toggle_0_leecher");}
 function set_min_upload_speed(speed) {socket.send("{\"min_upload_speed\":"+speed+"}");}
 function set_max_upload_speed(speed) {socket.send("{\"max_upload_speed\":"+speed+"}");}
 function toggle(h) {socket.send("{\"switch\":\""+h+"\"}");}
-function remove(h) {socket.send("{\"remove\":\""+h+"\"}");}
+function remove(h) {if(confirm("Do you really want to delete this torrent?\nIt will be removed from the server")) socket.send("{\"remove\":\""+h+"\"}");}
 function retracker(h, trackers) {socket.send("{\"retracker\":\""+h+"\",\"trackers\":\""+trackers+"\"}");}
 window.onbeforeunload=function() {
   socket.onclose=function(){};

@@ -120,7 +120,19 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                         }
                     }
                 } else if text.starts_with("{\"remove\":\"") { //remove a torrent
-
+                    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+                    let v: serde_json::Value = serde_json::from_str(&text).expect("Cannot parse remove message");
+                    let h = v["remove"].as_str().expect("Remove message does not contain a hash");
+                    for i in 0..list.len() {
+                        if list[i].info_hash == h {
+                            let r = std::fs::remove_file(&list[i].path);
+                            if r.is_ok() {
+                                list.remove(i);
+                                ctx.text(format!("{{\"removed\":\"{}\"}}", h));
+                            } else {ctx.text(format!("{{\"error\":\"Cannot remove torrent file\"}}"))}
+                            break;
+                        }
+                    }
                 }
             }
             Ok(ws::Message::Binary(bin)) => {
@@ -209,11 +221,14 @@ fn add_torrent(path: String) {
         log::info!("Loading torrent: \t{}", path);
         let t = Torrent::read_from_file(&path);
         if t.is_ok() {
-            let mut t = torrent::BasicTorrent::from_torrent(t.unwrap());
+            let mut t = torrent::BasicTorrent::from_torrent(t.unwrap(), path);
             //enable seeding on public torrents depending on the config value of seed_public_torrent
             if c.seed_public_torrent && !t.private {t.active = true;}
-            if list.contains(&t) {log::info!("Torrent is already in list"); return;}
             else {t.active = false;}
+            for bt in list.clone() { if bt.info_hash == t.info_hash {
+                log::info!("Torrent is already in list");
+                return;
+            }}
             list.push(t);
         } else {log::error!("Cannot parse torrent: \t{}", path);}
     }
