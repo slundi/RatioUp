@@ -5,7 +5,7 @@
     "min_upload_rate":4096,
     "max_upload_rate":16777216,
     "numwant": 200,
-    "numwant_on_Stop": 0,
+    "numwant_on_stop": 0,
     "seed_if_zero_leecher": false,
     "seed_public_torrent": false
 }
