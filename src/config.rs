@@ -12,10 +12,6 @@ const TIMED_OR_AFTER_STARTED_ANNOUNCE: u8 = 1;
 const TORRENT_VOLATILE: u8 = 2;
 const TORRENT_PERSISTENT: u8 = 3;
 
-//case
-const LOWER: u8 = 8;
-const UPPER: u8 = 9;
-
 //algorithms for ket and peer generator
 const REGEX: u8 = 10;
 const HASH: u8 = 11;
@@ -216,11 +212,11 @@ mod tests {
     fn test_read_config() {
         let mut d = std::env::temp_dir(); d.push("ratioup.json");
         let path:String = String::from(d.to_str().unwrap());
-        if std::path::Path::new(&path).exists() {std::fs::remove_file(d);}
+        if std::path::Path::new(&path).exists() {assert_eq!(true, std::fs::remove_file(d).is_ok());}
         //create the file for the test
         let mut f : File = std::fs::File::create(std::path::Path::new(&path)).expect("Unable to create file");
-        f.write_all("{\"client\":\"qbittorrent-4.3.3\", \"min_upload_rate\": 8, \"max_upload_rate\": 2048, \"seed_if_zero_leecher\": true, \"simultaneous_seed\": 5}".as_bytes());
-        f.flush();
+        assert_eq!(true, f.write_all("{\"client\":\"qbittorrent-4.3.3\", \"min_upload_rate\": 8, \"max_upload_rate\": 2048, \"seed_if_zero_leecher\": true, \"simultaneous_seed\": 5}".as_bytes()).is_ok());
+        assert_eq!(true, f.flush().is_ok());
         let cfg = get_config(&path);
         assert_eq!(cfg.min_upload_rate, 8*1024);
         assert_eq!(cfg.max_upload_rate, 2048*2048);

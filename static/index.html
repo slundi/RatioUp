@@ -47,12 +47,30 @@
     <th class="c2 has-text-centered"><a href="javascript:start_stop()" title="Start/stop the service"><i class="mdi mdi-play-circle mdi-24px has-text-success" id="server-status"></i></a></th>
   </tr></thead><tbody id="content">
   </tbody></table>
+  <div class="modal" id="retracker"><div class="modal-background"></div>
+    <div class="modal-content">
+      <h5>Retracker</h5>
+      <input type="hidden" id="old-trackers" value="" />
+      <div class="field is-horizontal">
+        <div class="field-label is-normal"><label class="label">Tracker</label></div>
+        <div class="field-body"><div class="field"><div class="control"><input class="input is-warning" type="text" placeholder="Tracker URL" /></div></div></div>
+      </div>
+      <div class="field is-horizontal">
+        <div class="field-label is-normal"></div>
+        <div class="field-body"><div class="field">
+            <div class="control"><label class="checkbox"><input type="checkbox" id="apply-all-trackers" /> Apply to all torrents with the same tracker(s)</label></div>
+          </div></div>
+      </div>
+    </div>
+    <button class="modal-close is-large" aria-label="close"></button>
+  </div>
 
 <!--Icons to display on the torrent file browser (future feature): mdi-folder-multiple mdi-folder mdi-folder-open mdi-grid (chunks) mdi-information-->
   <div style="font-size: small; text-align: center;"><a href="https://github.com/slundi/RatioUp" target="_blank"><i class="mdi mdi-github"></i> RatioUp on GitHub</a></div>
 </div>
 <script>
 var socket=new WebSocket((window.location.protocol.toLowerCase()=='http'?'ws://':'ws://')+window.location.host+'/ws/');
+var torrents = [];
 socket.binaryType = 'arraybuffer';
 socket.onerror=function(error) {console.log('WebSocket Error: '+error);};
 socket.onopen=function(event) {console.log('Connected to: '+event.currentTarget.url);};
@@ -95,7 +113,9 @@ socket.onmessage = function(e) {
       tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-file-multiple"></i></a> ') +torrents[i]['name']+ '</td><td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
                    + '<td class="has-text-right">0</td></td class="has-text-right"><td class="has-text-right">0</td><td class="has-text-right">0</td>'
                    + '<td class="has-text-centered"></td>'
-                   + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="state-link has-text-'+(torrents[i]['active']?'success':'light')+'"><i class="mdi mdi-toggle-switch'+(torrents[i]['active']?'':'-off')+' state"></i></a> <a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> <a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
+                   + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="state-link has-text-'+(torrents[i]['active']?'success':'light')+'"><i class="mdi mdi-toggle-switch'+(torrents[i]['active']?'':'-off')+' state"></i></a> '
+                       + '<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> '
+                       + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
       tbody.append(tr);
     } 
   } else if (e.data.startsWith('{"active":')) {
@@ -125,7 +145,11 @@ function set_min_upload_speed(speed) {socket.send("{\"min_upload_speed\":"+speed
 function set_max_upload_speed(speed) {socket.send("{\"max_upload_speed\":"+speed+"}");}
 function toggle(h) {socket.send("{\"switch\":\""+h+"\"}");}
 function remove(h) {if(confirm("Do you really want to delete this torrent?\nIt will be removed from the server")) socket.send("{\"remove\":\""+h+"\"}");}
-function retracker(h, trackers) {socket.send("{\"retracker\":\""+h+"\",\"trackers\":\""+trackers+"\"}");}
+function retracker(h, trackers) {
+  var e=document.getElementById('retracker');
+  e.classList.add('is-active');
+  socket.send("{\"retracker\":\""+h+"\",\"trackers\":\""+trackers+"\"}");
+}
 window.onbeforeunload=function() {
   socket.onclose=function(){};
   socket.close();
@@ -187,8 +211,21 @@ function upload_file(file, url, success, progress){
 	ajax.open('POST', url, true);
 	ajax.send(data);
 }
+document.addEventListener('DOMContentLoaded', () => {
+  function closeModal($el) {$el.classList.remove('is-active');}
+  function closeAllModals() {(document.querySelectorAll('.modal') || []).forEach(($modal) => {closeModal($modal);});}
+  // Add a click event on various child elements to close the parent modal
+  (document.querySelectorAll('.modal-background, .modal-close, .modal-card-head .delete, .modal-card-foot .button') || []).forEach(($close) => {
+    const $target = $close.closest('.modal');
+    $close.addEventListener('click', () => {closeModal($target);});
+  });
+  // Add a keyboard event to close all modals
+  document.addEventListener('keydown', (event) => {
+    const e = event || window.event;
+    if (e.keyCode === 27) {closeAllModals();}// Escape key
+  });
+});
 </script>
-<script src="js/sha1.js" async></script>
 <script src="js/bulma-toast.min.js" async></script>
 </body>
 </html>
