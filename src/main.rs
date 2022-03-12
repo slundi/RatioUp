@@ -3,7 +3,6 @@
 extern crate rand;
 extern crate clap;
 extern crate lazy_static;
-
 extern crate serde_bytes;
 
 use clap::{Arg, value_t};
@@ -22,6 +21,9 @@ use lazy_static::lazy_static;
 use uuid::Uuid;
 use lava_torrent::torrent::v1::Torrent;
 
+/// Delay between tracker announce in minutes (30*60 = 30 minutes)
+const ANNOUNCE_DELAY: u64 = 30 * 60;
+
 //mod client;
 mod algorithm;
 mod config;
@@ -36,11 +38,27 @@ lazy_static! {
     static ref TORRENTS:RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 }
 
-/// do websocket handshake and start `RatioUpWS` actor
-async fn ws_index(r: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
-    let res = ws::start(RatioUpWS::new(), &r, stream);
-    res
+pub struct Scheduler;
+impl Actor for Scheduler {
+    type Context = Context<Self>;
+    fn started(&mut self, ctx: &mut Context<Self>) {
+        log::info!("Tracker annouces are in {} minutes", ANNOUNCE_DELAY/60);
+        ctx.run_interval(Duration::from_secs(ANNOUNCE_DELAY), move |this, ctx| { this.announce(ctx) });
+    }
+    fn stopped(&mut self, ctx: &mut Context<Self>) {
+        self.announce(ctx);
+    }
 }
+impl Scheduler {
+    fn announce(&self, _ctx: &mut Context<Self>) {
+        // executes every 1 minute based on cron schedule
+        log::info!("Announcing");
+        //TODO: 
+    }
+}
+
+/// do websocket handshake and start `RatioUpWS` actor
+async fn ws_index(r: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> { ws::start(RatioUpWS::new(), &r, stream) }
 
 async fn receive_files(mut payload: Multipart) -> Result<HttpResponse, Error> {
     while let Some(mut field) = payload.try_next().await? { // iterate over multipart stream
@@ -201,6 +219,7 @@ async fn main() -> std::io::Result<()> {
         let f = p.expect("Cannot get torrent path").path().into_os_string().into_string().expect("Cannot get file name");
         add_torrent(f);
     }
+    Scheduler.start();
     //start web server
     HttpServer::new(move || {App::new()
         .wrap(Logger::default())
