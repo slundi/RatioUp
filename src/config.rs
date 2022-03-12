@@ -122,6 +122,8 @@ pub fn get_config(path: &str) -> Config {
     cfg.max_upload_rate      = v["max_upload_rate"].as_u64().expect("Cannot get the min_upload_rate in config.json") as u32;
     cfg.seed_if_zero_leecher = v["seed_if_zero_leecher"].as_bool().expect("Cannot get the seed_if_zero_leecher in config.json");
     cfg.client               = v["client"].as_str().expect("Cannot get the client in config.json").to_owned();
+    cfg.num_want             = v["numwant"].as_u64().expect("Cannot get numwant in config.json") as u16;
+    cfg.num_want_on_stop     = v["numwant_on_stop"].as_u64().expect("Cannot get numwant_on_stop in config.json") as u16;
     log::info!("Client: {}", cfg.client);
     log::info!("Bandwidth: {} - {}", Byte::from_bytes(cfg.min_upload_rate as u128).get_appropriate_unit(true).to_string(), Byte::from_bytes(cfg.max_upload_rate as u128).get_appropriate_unit(true).to_string());
     //get client from xxxxxxxxxxx.client
@@ -130,8 +132,8 @@ pub fn get_config(path: &str) -> Config {
     BufReader::new(file).read_to_string(& mut buffer).expect("Cannot read client file");
     let v: Value = serde_json::from_str(&buffer).expect("Unable to parse client file: JSON not valid");
     cfg.query = v["query"].as_str().expect("Cannot get announce query on client file").to_owned();
-    if v["numwant"].is_u64() {cfg.num_want = v["numwant"].as_u64().unwrap() as u16;}
-    if v["numwantOnStop"].is_u64() {cfg.num_want = v["numwantOnStop"].as_u64().unwrap() as u16;}
+    //if v["numwant"].is_u64() {cfg.num_want = v["numwant"].as_u64().unwrap() as u16;} //numwant is defined in the config
+    //if v["numwantOnStop"].is_u64() {cfg.num_want = v["numwantOnStop"].as_u64().unwrap() as u16;}
     if v["requestHeaders"].is_array() {
         let a = v["requestHeaders"].as_array().unwrap();
         for rh in a {
