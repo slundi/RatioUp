@@ -95,13 +95,25 @@ socket.onmessage = function(e) {
       tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-file-multiple"></i></a> ') +torrents[i]['name']+ '</td><td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
                    + '<td class="has-text-right">0</td></td class="has-text-right"><td class="has-text-right">0</td><td class="has-text-right">0</td>'
                    + '<td class="has-text-centered"></td>'
-                   + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="has-text-success"><i class="mdi mdi-toggle-switch"></i></a> <a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> <a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
+                   + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="state-link has-text-'+(torrents[i]['active']?'success':'light')+'"><i class="mdi mdi-toggle-switch'+(torrents[i]['active']?'':'-off')+' state"></i></a> <a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> <a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
       tbody.append(tr);
     } 
   } else if (e.data.startsWith('{"active":')) {
-    msg['active'];
+    var tr = document.getElementById(msg['active']);
+    var icon = tr.getElementsByClassName("state")[0];
+    icon.classList.remove('mdi-toggle-switch','mdi-toggle-switch-off');
+    icon.classList.add('mdi-toggle-switch');
+    var link = tr.getElementsByClassName("state-link")[0];
+    link.classList.remove('has-text-success','has-text-light');
+    link.classList.add('has-text-success');
   } else if (e.data.startsWith('{"disabled":')) {
-    msg['disabled'];
+    var tr = document.getElementById(msg['disabled']);
+    var icon = tr.getElementsByClassName("state")[0];
+    icon.classList.remove('mdi-toggle-switch','mdi-toggle-switch-off');
+    icon.classList.add('mdi-toggle-switch-off');
+    var link = tr.getElementsByClassName("state-link")[0];
+    link.classList.remove('has-text-success','has-text-light');
+    link.classList.add('has-text-light');
   } else if (e.data.startsWith('{"removed":')) { document.getElementById(msg['removed']).remove(e); }
 }
 socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};
