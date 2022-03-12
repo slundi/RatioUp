@@ -196,12 +196,10 @@ async fn main() -> std::io::Result<()> {
     let torrent_folder = std::path::Path::new("torrents");
     std::fs::create_dir_all(torrent_folder).expect("Cannot create torrent folder");
     //load torrents
-    { //block to release the thread lock
-        let paths = std::fs::read_dir("./torrents/").expect("Cannot read torrent directory");
-        for p in paths {
-            let f = p.expect("Cannot get torrent path").path().into_os_string().into_string().expect("Cannot get file name");
-            add_torrent(f);
-        }
+    let paths = std::fs::read_dir("./torrents/").expect("Cannot read torrent directory");
+    for p in paths {
+        let f = p.expect("Cannot get torrent path").path().into_os_string().into_string().expect("Cannot get file name");
+        add_torrent(f);
     }
     //start web server
     HttpServer::new(move || {App::new()
