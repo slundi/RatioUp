@@ -3,6 +3,9 @@ name = "RatioUp"
 version = "0.1.0"
 edition = '2018'
 
+[source.vendored-sources]
+directory = "vendor"
+
 [dependencies]
 rand = "0.8"
 rand_regex = "0.15"
