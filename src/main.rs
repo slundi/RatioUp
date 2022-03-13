@@ -132,10 +132,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
         // process websocket messages
         //println!("Receiving... {:?}", msg);
         match msg {
-            Ok(ws::Message::Ping(msg)) => {
-                self.hb = Instant::now();
-                ctx.pong(&msg);
-            }
+            Ok(ws::Message::Ping(msg)) => { self.hb = Instant::now(); ctx.pong(&msg); }
             Ok(ws::Message::Pong(_)) => {self.hb = Instant::now();}
             Ok(ws::Message::Text(text)) => {
                 println!("Receiving text: {:?}", text);
@@ -146,10 +143,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                     *w = !*w;
                     if *w {
                         ctx.text("{\"running\": true}");
-                        log::info!("Seedding stopped");
+                        log::info!("Seedding resumed");
                     } else {
                         ctx.text("{\"running\": false}");
-                        log::info!("Seedding rusumed");
+                        log::info!("Seedding stopped");
                     }
                 } else if text.starts_with("{\"switch\":\"") { //enable disable torrent
                     let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
@@ -201,16 +198,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
 }
 
 impl RatioUpWS {
-    fn new() -> Self {Self {
-        hb: Instant::now(),
-    }}
+    fn new() -> Self {Self { hb: Instant::now(), }}
 
     /// helper method that sends ping to client every second also this method checks heartbeats from client
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {
         log::info!("Web server started");
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT { // check client heartbeats
-                println!("Websocket Client heartbeat failed, disconnecting!"); // heartbeat timed out
+                log::info!("Websocket Client heartbeat failed, disconnecting!"); // heartbeat timed out
                 ctx.stop(); // stop actor
                 return; // don't try to send a ping
             }
