@@ -23,6 +23,8 @@ pub struct BasicTorrent {
     pub private: bool,
     pub active: bool,
     pub downloaded: usize,
+    /// number of minutes when the previous announce happened
+    pub announced: u8,
 }
 
 impl BasicTorrent {
@@ -31,7 +33,7 @@ impl BasicTorrent {
         let hash = torrent.info_hash();
         let private = torrent.is_private();
         let mut t= BasicTorrent {path: path, name: torrent.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(),
-            comment: String::new(), active: true, length: torrent.length as usize, created_by: String::new(),
+            comment: String::new(), active: true, length: torrent.length as usize, created_by: String::new(), announced: 0,
             info_hash: hash, piece_length: torrent.piece_length as usize, private: private, files: None, downloaded: torrent.length as usize};
         if torrent.files.is_some() {
             let files = torrent.files.unwrap();

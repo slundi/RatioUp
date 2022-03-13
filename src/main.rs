@@ -15,7 +15,8 @@ use actix_web::{middleware::Logger, web, App, Error, HttpRequest, HttpResponse, 
 use futures_util::{TryStreamExt as _, TryFutureExt};
 use actix_web_actors::ws;
 use actix_files::Files;
-use env_logger;
+use tracing::{info, error, Level};
+use tracing_subscriber::FmtSubscriber;
 use std::sync::RwLock;
 use lazy_static::lazy_static;
 use uuid::Uuid;
@@ -23,9 +24,7 @@ use rand::Rng;
 use lava_torrent::torrent::v1::Torrent;
 
 /// Delay between tracker announce in minutes (30*60 = 30 minutes)
-const ANNOUNCE_DELAY: u64 = 30 * 60;
 
-//mod client;
 mod algorithm;
 mod config;
 mod torrent;
@@ -44,30 +43,28 @@ const EVENT_NONE: u8 = 0;
 const EVENT_STARTED: u8 = 2;
 const EVENT_STOPPED: u8 = 3;
 
+/// A cron that check every minutes if it needs to announce, stop or start a torrent
 pub struct Scheduler;
 impl Actor for Scheduler {
     type Context = Context<Self>;
     fn started(&mut self, ctx: &mut Context<Self>) {
-        log::info!("Tracker annouces are in {} minutes", ANNOUNCE_DELAY/60);
         self.announce(ctx, EVENT_STARTED);
-        ctx.run_interval(Duration::from_secs(ANNOUNCE_DELAY), move |this, ctx| { this.announce(ctx, EVENT_NONE) });
+        ctx.run_interval(Duration::from_secs(60), move |this, ctx| { this.announce(ctx, EVENT_NONE) });
     }
-    fn stopped(&mut self, ctx: &mut Context<Self>) {
-        self.announce(ctx, EVENT_STOPPED);
-    }
+    fn stopped(&mut self, ctx: &mut Context<Self>) { self.announce(ctx, EVENT_STOPPED); }
 }
 impl Scheduler {
     fn announce(&self, _ctx: &mut Context<Self>, event: u8) {
-        // executes every 1 minute based on cron schedule
-        log::info!("Announcing");
         //TODO: 
         let c=&*CONFIG.read().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         for t in list {
+            let should_announce = event == EVENT_STARTED || event == EVENT_STOPPED || t.announced >= 30;
+            if !should_announce {t.announced += 1; continue;}
             let mut url: String = t.announce.clone().unwrap();
             url.push('?');
             url.push_str(&c.query);
-            let uploaded = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate) * (ANNOUNCE_DELAY as u32);
+            let uploaded = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate) * 60 * (t.announced as u32);
             let url = url.replace("{peerid}", &c.peer_id).replace("{infohash}", &t.info_hash).replace("{uploaded}", uploaded.to_string().as_str())
                     .replace("{downloaded}", "0").replace("{left}", "0")
                     .replace("{event}", event.to_string().as_str()).replace("{numwant}", c.num_want.to_string().as_str()).replace("{port}", c.port.to_string().as_str());
@@ -76,9 +73,10 @@ impl Scheduler {
             if c.accept != "" {client = client.header("accept", &c.accept);}
             if c.accept_encoding != "" {client = client.header("accept-encoding", &c.accept_encoding);}
             if c.accept_language != "" {client = client.header("accept-language", &c.accept_language);}
-            log::info!("Annonce at: {}", url);
+            info!("Annonce at: {}", url);
             //client.send().await?;
             //"&&port={port}&uploaded={uploaded}&&left={left}&corrupt=0&key={key}&event={event}&&compact=1&no_peer_id=1",
+            t.announced = 0;
         }
     }
 }
@@ -129,25 +127,16 @@ impl Actor for RatioUpWS {
 // Handler for `ws::Message`
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context,) {
-        // process websocket messages
-        //println!("Receiving... {:?}", msg);
         match msg {
             Ok(ws::Message::Ping(msg)) => { self.hb = Instant::now(); ctx.pong(&msg); }
             Ok(ws::Message::Pong(_)) => {self.hb = Instant::now();}
             Ok(ws::Message::Text(text)) => {
-                println!("Receiving text: {:?}", text);
-                if text.starts_with("upload_start:") {}
-                else if text == "upload_end" {}
-                else if text == "toggle_start" { //enable or disable seeding, you should stop the app instead
+                info!("Receiving text: {:?}", text);
+                if text == "toggle_start" { //enable or disable seeding, you should stop the app instead
                     let mut w = ACTIVE.write().expect("Cannot change application state");
                     *w = !*w;
-                    if *w {
-                        ctx.text("{\"running\": true}");
-                        log::info!("Seedding resumed");
-                    } else {
-                        ctx.text("{\"running\": false}");
-                        log::info!("Seedding stopped");
-                    }
+                    if *w { ctx.text("{\"running\": true}"); info!("Seedding resumed"); }
+                    else  { ctx.text("{\"running\": false}");info!("Seedding stopped"); }
                 } else if text.starts_with("{\"switch\":\"") { //enable disable torrent
                     let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
                     let v: serde_json::Value = serde_json::from_str(&text).expect("Cannot parse switch message");
@@ -177,21 +166,21 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
                 }
             }
             Ok(ws::Message::Binary(bin)) => {
-                println!("Receiving binary, size={}", bin.len());
+                info!("Receiving binary, size={}", bin.len());
                 let mut pos = 0;
-                //let mut buffer = std::fs::File::create("foo.torrent").unwrap();  // notice the name of the file that will be written
-                let mut buffer = std::fs::OpenOptions::new().append(true).create(true).open("foo.torrent").unwrap();
+                let mut buffer = std::fs::File::create("./torrents/foo.torrent").unwrap();  // notice the name of the file that will be written
+                //let mut buffer = std::fs::OpenOptions::new().append(true).create(true).open("foo.torrent").unwrap();
                 while pos < bin.len() {
-                    let bytes_written = std::io::Write::write(&mut buffer, &bin[pos..]).unwrap();
+                    let bytes_written = buffer.write(&bin[pos..]).unwrap();
                     pos += bytes_written
                 };
                 //ctx.binary(bin)},
                 ctx.text("true");
-            },
+            }
             Ok(ws::Message::Close(reason)) => {
                 ctx.close(reason);
                 ctx.stop();
-            },
+            }
             _ => ctx.stop(),
         }
     }
@@ -202,10 +191,10 @@ impl RatioUpWS {
 
     /// helper method that sends ping to client every second also this method checks heartbeats from client
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {
-        log::info!("Web server started");
+        info!("Web server started");
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT { // check client heartbeats
-                log::info!("Websocket Client heartbeat failed, disconnecting!"); // heartbeat timed out
+                info!("Websocket Client heartbeat failed, disconnecting!"); // heartbeat timed out
                 ctx.stop(); // stop actor
                 return; // don't try to send a ping
             }
@@ -216,8 +205,10 @@ impl RatioUpWS {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    log::info!("Starting");
+    let subscriber = FmtSubscriber::builder()
+        // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.) will be written to stdout.
+        .with_max_level(Level::INFO).finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     //for c in clients.in {client_list.push(c.0);}
     //let path = std::env::current_dir()?; println!("The current directory is {}", path.display());
     //parse command line
@@ -256,7 +247,7 @@ fn add_torrent(path: String) {
     if path.to_lowercase().ends_with(".torrent") {
         let c=&*CONFIG.read().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-        log::info!("Loading torrent: \t{}", path);
+        info!("Loading torrent: \t{}", path);
         let t = Torrent::read_from_file(&path);
         if t.is_ok() {
             let mut t = torrent::BasicTorrent::from_torrent(t.unwrap(), path);
@@ -264,10 +255,10 @@ fn add_torrent(path: String) {
             if c.seed_public_torrent && !t.private {t.active = true;}
             else {t.active = false;}
             for bt in list.clone() { if bt.info_hash == t.info_hash {
-                log::info!("Torrent is already in list");
+                info!("Torrent is already in list");
                 return;
             }}
             list.push(t);
-        } else {log::error!("Cannot parse torrent: \t{}", path);}
+        } else {error!("Cannot parse torrent: \t{}", path);}
     }
 }

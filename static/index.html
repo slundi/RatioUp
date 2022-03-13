@@ -212,6 +212,18 @@ function upload_file(file, url, success, progress){
 	ajax.open('POST', url, true);
 	ajax.send(data);
 }
+function upload_file_ws(file, url, success, progress){
+  console.log("Uploading through WS");
+  var reader = new FileReader();
+  var rawData = new ArrayBuffer();  
+  reader.loadend = function() {}
+  reader.onload = function(e) {
+      rawData = e.target.result;
+      socket.send(rawData);
+      //bulmaToast.toast({ message: '<i class="mdi mdi-check"></i> Torrent file uploaded', type: 'is-success', duration: 3000, position: 'bottom-right' });
+  }
+  reader.readAsArrayBuffer(file);
+}
 document.addEventListener('DOMContentLoaded', () => {
   function closeModal($el) {$el.classList.remove('is-active');}
   function closeAllModals() {(document.querySelectorAll('.modal') || []).forEach(($modal) => {closeModal($modal);});}
