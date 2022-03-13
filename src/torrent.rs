@@ -51,7 +51,7 @@ pub struct Torrent {
 pub struct BasicTorrent {
     pub path: String,
     name: String, comment: String, created_by: String,
-    announce: Option<String>,  announce_list: Option<Vec<Vec<String>>>,
+    pub announce: Option<String>,  announce_list: Option<Vec<Vec<String>>>,
     //creation_date?
     pub info_hash: String,
     piece_length: usize, length: usize,

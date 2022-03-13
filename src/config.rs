@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 use byte_unit::Byte;
+use rand::Rng;
 use crate::algorithm;
 
 //refresh interval
@@ -25,6 +26,8 @@ const PEER_ID_LENGTH: usize = 20;
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
     pub client: String,
+    /// torrent port: random between 49152 and 65534
+    pub port: u16,
     pub min_upload_rate: u32, //in byte
     pub max_upload_rate: u32, //in byte
     pub seed_if_zero_leecher: bool,
@@ -58,17 +61,17 @@ pub struct Config {
 
     query: String,
     //request_headers: HashMap<String, String>, //HashMap<&str, i32> = [("Norway", 100), ("Denmark", 50), ("Iceland", 10)]
-    user_agent: String,
-    accept:String,
-    accept_encoding: String,
-    accept_language: String,
-    connection:Option<String>,
-    num_want: u16,
-    num_want_on_stop: u16,
+    pub user_agent: String,
+    pub accept:String,
+    pub accept_encoding: String,
+    pub accept_language: String,
+    pub connection:Option<String>,
+    pub num_want: u16,
+    pub num_want_on_stop: u16,
 
     //generated values
-    infohash :String,
-    peer_id: String,
+    pub infohash :String,
+    pub peer_id: String,
 }
 
 impl Config {
@@ -77,6 +80,7 @@ impl Config {
         seed_if_zero_leecher: false, seed_public_torrent: false,
         //simultaneous_seed:5,
         client: "qbittorrent-4.3.3".to_owned(),
+        port: rand::thread_rng().gen_range(49152..65534),
 
         //client configuration
         //key generator default values
