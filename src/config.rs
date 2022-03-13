@@ -211,6 +211,7 @@ pub fn get_config(path: &str) -> Config {
     return cfg;
 }
 
+/// Write a default configuration file from the given path. This fonction is call at the program stratup to generate the first config file if missing.
 pub fn write_default(path: String) {
     let file = std::fs::File::create(&path);
     if file.is_ok() {serde_json::to_writer_pretty(&file.unwrap(), &Config::default()).expect("Cannot write configuration file");}
