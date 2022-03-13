@@ -12,13 +12,14 @@ use std::io::Write;
 use actix::prelude::*;
 use actix_multipart::Multipart;
 use actix_web::{middleware::Logger, web, App, Error, HttpRequest, HttpResponse, HttpServer};
-use futures_util::TryStreamExt as _;
+use futures_util::{TryStreamExt as _, TryFutureExt};
 use actix_web_actors::ws;
 use actix_files::Files;
 use env_logger;
 use std::sync::RwLock;
 use lazy_static::lazy_static;
 use uuid::Uuid;
+use rand::Rng;
 use lava_torrent::torrent::v1::Torrent;
 
 /// Delay between tracker announce in minutes (30*60 = 30 minutes)
@@ -38,22 +39,47 @@ lazy_static! {
     static ref TORRENTS:RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 }
 
+const EVENT_NONE: u8 = 0;
+//const EVENT_COMPLETED: u8 = 1; //not used because we do not download for now
+const EVENT_STARTED: u8 = 2;
+const EVENT_STOPPED: u8 = 3;
+
 pub struct Scheduler;
 impl Actor for Scheduler {
     type Context = Context<Self>;
     fn started(&mut self, ctx: &mut Context<Self>) {
         log::info!("Tracker annouces are in {} minutes", ANNOUNCE_DELAY/60);
-        ctx.run_interval(Duration::from_secs(ANNOUNCE_DELAY), move |this, ctx| { this.announce(ctx) });
+        self.announce(ctx, EVENT_STARTED);
+        ctx.run_interval(Duration::from_secs(ANNOUNCE_DELAY), move |this, ctx| { this.announce(ctx, EVENT_NONE) });
     }
     fn stopped(&mut self, ctx: &mut Context<Self>) {
-        self.announce(ctx);
+        self.announce(ctx, EVENT_STOPPED);
     }
 }
 impl Scheduler {
-    fn announce(&self, _ctx: &mut Context<Self>) {
+    fn announce(&self, _ctx: &mut Context<Self>, event: u8) {
         // executes every 1 minute based on cron schedule
         log::info!("Announcing");
         //TODO: 
+        let c=&*CONFIG.read().expect("Cannot read configuration");
+        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+        for t in list {
+            let mut url: String = t.announce.clone().unwrap();
+            url.push('?');
+            url.push_str(&c.query);
+            let uploaded = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate) * (ANNOUNCE_DELAY as u32);
+            let url = url.replace("{peerid}", &c.peer_id).replace("{infohash}", &t.info_hash).replace("{uploaded}", uploaded.to_string().as_str())
+                    .replace("{downloaded}", "0").replace("{left}", "0")
+                    .replace("{event}", event.to_string().as_str()).replace("{numwant}", c.num_want.to_string().as_str()).replace("{port}", c.port.to_string().as_str());
+            let mut client = reqwest::Client::new().get(&url);
+            if c.user_agent != "" {client = client.header("user-agent", &c.user_agent);}
+            if c.accept != "" {client = client.header("accept", &c.accept);}
+            if c.accept_encoding != "" {client = client.header("accept-encoding", &c.accept_encoding);}
+            if c.accept_language != "" {client = client.header("accept-language", &c.accept_language);}
+            log::info!("Annonce at: {}", url);
+            //client.send().await?;
+            //"&&port={port}&uploaded={uploaded}&&left={left}&corrupt=0&key={key}&event={event}&&compact=1&no_peer_id=1",
+        }
     }
 }
 

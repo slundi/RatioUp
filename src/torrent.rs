@@ -58,6 +58,7 @@ pub struct BasicTorrent {
     files: Option<Vec<File>>,
     pub private: bool,
     pub active: bool,
+    pub downloaded: usize,
 }
 
 impl BasicTorrent {
@@ -68,7 +69,7 @@ impl BasicTorrent {
         let private = torrent.is_private();
         let mut t= BasicTorrent {path: path, name: torrent.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(),
             comment: String::new(), active: true, length: torrent.length as usize, created_by: String::new(),
-            info_hash: hash, piece_length: torrent.piece_length as usize, private: private, files: None};
+            info_hash: hash, piece_length: torrent.piece_length as usize, private: private, files: None, downloaded: torrent.length as usize};
         if torrent.files.is_some() {
             let files = torrent.files.unwrap();
             let mut list : Vec<File> = Vec::with_capacity(files.len());

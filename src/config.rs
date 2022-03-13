@@ -59,7 +59,7 @@ pub struct Config {
     uppercase_encoded_hex: bool,
     should_url_encode: bool,
 
-    query: String,
+    pub query: String,
     //request_headers: HashMap<String, String>, //HashMap<&str, i32> = [("Norway", 100), ("Denmark", 50), ("Iceland", 10)]
     pub user_agent: String,
     pub accept:String,

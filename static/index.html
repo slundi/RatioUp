@@ -61,6 +61,7 @@
             <div class="control"><label class="checkbox"><input type="checkbox" id="apply-all-trackers" /> Apply to all torrents with the same tracker(s)</label></div>
           </div></div>
       </div>
+      <a href="javascript:apply_retracker()"><i class="mdi mdi-check">Apply</i></a>
     </div>
     <button class="modal-close is-large" aria-label="close"></button>
   </div>
@@ -114,7 +115,7 @@ socket.onmessage = function(e) {
                    + '<td class="has-text-right">0</td></td class="has-text-right"><td class="has-text-right">0</td><td class="has-text-right">0</td>'
                    + '<td class="has-text-centered"></td>'
                    + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="state-link has-text-'+(torrents[i]['active']?'success':'light')+'"><i class="mdi mdi-toggle-switch'+(torrents[i]['active']?'':'-off')+' state"></i></a> '
-                       + '<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> '
+                       + '<!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
                        + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
       tbody.append(tr);
     } 
