@@ -19,7 +19,8 @@ regex = "1.5"
 reqwest = {version = "0.11", features = ["json"]}
 clap = "*"
 log = "0.4"
-env_logger = "0.9"
+tracing = "*"
+tracing-subscriber = "*"
 tokio = {version = "1.17", features=["fs"]}
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 sanitize-filename = "0.3"

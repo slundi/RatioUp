@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::Path;
 use byte_unit::Byte;
+use tracing::{info};
 use rand::Rng;
 use crate::algorithm;
 
@@ -128,8 +129,8 @@ pub fn get_config(path: &str) -> Config {
     cfg.client               = v["client"].as_str().expect("Cannot get the client in config.json").to_owned();
     cfg.num_want             = v["numwant"].as_u64().expect("Cannot get numwant in config.json") as u16;
     cfg.num_want_on_stop     = v["numwant_on_stop"].as_u64().expect("Cannot get numwant_on_stop in config.json") as u16;
-    log::info!("Client: {}", cfg.client);
-    log::info!("Bandwidth: {} - {}", Byte::from_bytes(cfg.min_upload_rate as u128).get_appropriate_unit(true).to_string(), Byte::from_bytes(cfg.max_upload_rate as u128).get_appropriate_unit(true).to_string());
+    info!("Client: {}", cfg.client);
+    info!("Bandwidth: {} - {}", Byte::from_bytes(cfg.min_upload_rate as u128).get_appropriate_unit(true).to_string(), Byte::from_bytes(cfg.max_upload_rate as u128).get_appropriate_unit(true).to_string());
     //get client from xxxxxxxxxxx.client
     let file = File::open(format!("{}{}{}", "./res/clients/", cfg.client.as_str(), ".client")).expect("Cannot open client file");
     let mut buffer = String::with_capacity(4096);
@@ -202,7 +203,7 @@ pub fn get_config(path: &str) -> Config {
         cfg.peer_id = algorithm::regex(cfg.peer_pattern.replace("\\", "")); //replace \ otherwise the generator crashes
     }
     else {algorithm::random_pool_with_checksum(PEER_ID_LENGTH, &cfg.peer_prefix, &cfg.peer_pattern);}
-    //log::info!("Peer ID: {}", cfg.peer_id); //do not log it because weird chars
+    //info!("Peer ID: {}", cfg.peer_id); //do not log it because weird chars
     //generate KEY
     if cfg.key_algorithm == HASH {algorithm::hash(8, false, cfg.key_uppercase);}
     else if cfg.key_algorithm == HASH_NO_LEADING_ZERO {algorithm::hash(8, true, cfg.key_uppercase);}
