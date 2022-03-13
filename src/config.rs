@@ -1,10 +1,10 @@
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
 use std::path::Path;
 use byte_unit::Byte;
-use tracing::{info};
+use tracing::{info, error, Subscriber};
 use rand::Rng;
 use crate::algorithm;
 
@@ -38,41 +38,41 @@ pub struct Config {
     //Client configuration
     //----------- algorithms
     ///key algorithm
-    key_algorithm: u8, //length=8
-    key_length: u8,
+    #[serde(skip_serializing)] key_algorithm: u8, //length=8
+    #[serde(skip_serializing)] key_length: u8,
     ///for REGEX method, for RANDOM_POOL_WITH_CHECKSUM: list pf available chars, the base is the length of the string
-    key_pattern: String,
+    #[serde(skip_serializing)] key_pattern: String,
     /// for RANDOM_POOL_WITH_CHECKSUM
-    prefix: String,
-    key_refresh_on: u8,
-    key_refresh_every: u16,
-    key_uppercase: Option<bool>,
+    #[serde(skip_serializing)] prefix: String,
+    #[serde(skip_serializing)] key_refresh_on: u8,
+    #[serde(skip_serializing)] key_refresh_every: u16,
+    #[serde(skip_serializing)] key_uppercase: Option<bool>,
 
     //----------- peer ID
-    peer_algorithm: u8,
-    peer_pattern: String,
-    peer_refresh_on: u8,
-    peer_prefix:String,
+    #[serde(skip_serializing)] peer_algorithm: u8,
+    #[serde(skip_serializing)] peer_pattern: String,
+    #[serde(skip_serializing)] peer_refresh_on: u8,
+    #[serde(skip_serializing)] peer_prefix:String,
 
     //----------- URL encoder 
-    encoding_exclusion_pattern: String,
+    #[serde(skip_serializing)] encoding_exclusion_pattern: String,
     /// if the encoded hex string should be in upper case or no
-    uppercase_encoded_hex: bool,
-    should_url_encode: bool,
+    #[serde(skip_serializing)] uppercase_encoded_hex: bool,
+    #[serde(skip_serializing)] should_url_encode: bool,
 
-    pub query: String,
+    #[serde(skip_serializing)] pub query: String,
     //request_headers: HashMap<String, String>, //HashMap<&str, i32> = [("Norway", 100), ("Denmark", 50), ("Iceland", 10)]
-    pub user_agent: String,
-    pub accept:String,
-    pub accept_encoding: String,
-    pub accept_language: String,
-    pub connection:Option<String>,
-    pub num_want: u16,
-    pub num_want_on_stop: u16,
+    #[serde(skip_serializing)] pub user_agent: String,
+    #[serde(skip_serializing)] pub accept:String,
+    #[serde(skip_serializing)] pub accept_encoding: String,
+    #[serde(skip_serializing)] pub accept_language: String,
+    #[serde(skip_serializing)] pub connection:Option<String>,
+    #[serde(skip_serializing)] pub num_want: u16,
+    #[serde(skip_serializing)] pub num_want_on_stop: u16,
 
     //generated values
-    pub infohash :String,
-    pub peer_id: String,
+    #[serde(skip_serializing)] pub infohash :String,
+    #[serde(skip_serializing)] pub peer_id: String,
 }
 
 impl Config {
@@ -209,6 +209,12 @@ pub fn get_config(path: &str) -> Config {
     else if cfg.key_algorithm == HASH_NO_LEADING_ZERO {algorithm::hash(8, true, cfg.key_uppercase);}
     else if cfg.key_algorithm == DIGIT_RANGE_TRANSFORMED_TO_HEX_WITHOUT_LEADING_ZEROES {algorithm::digit_range_transformed_to_hex_without_leading_zero();}
     return cfg;
+}
+
+pub fn write_default(path: String) {
+    let file = std::fs::File::create(&path);
+    if file.is_ok() {serde_json::to_writer_pretty(&file.unwrap(), &Config::default()).expect("Cannot write configuration file");}
+    else {error!("Cannot generate the configuration file");panic!();}
 }
 
 #[cfg(test)]

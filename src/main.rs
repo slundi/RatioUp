@@ -219,9 +219,22 @@ async fn main() -> std::io::Result<()> {
                           .arg(Arg::with_name("PORT")
                                .short("p").long("port")
                                .help("Sets HTTP web port").default_value("7070").takes_value(true))
+                          .arg(Arg::with_name("CONFIG")
+                               .short("c").long("config")
+                               .help("Path to the config file. It'll be generated if it does not exists").default_value("config.json").takes_value(true))
+                          .arg(Arg::with_name("DIRECTORY")
+                               .short("d").long("dir")
+                               .help("Directory where torrents are saved").default_value("./torrents").takes_value(true))
                           .get_matches();
-    let port = value_t!(matches, "PORT", u16).unwrap_or_else(|e| e.exit());
-    let root=value_t!(matches, "WEB_ROOT", String).unwrap_or_else(|e| e.exit());
+    let port = value_t!(matches, "PORT", u16).unwrap_or_else(|e| {error!("Server port is not defined"); e.exit()});
+    let root=value_t!(matches, "WEB_ROOT", String).unwrap_or_else(|e| {error!("Web root is not defined"); e.exit()});
+    let config = value_t!(matches, "CONFIG", String).unwrap_or_else(|e| {error!("Config file is not defined"); e.exit()});
+    let directory = value_t!(matches, "DIRECTORY", String).unwrap_or_else(|e| {error!("Config file is not defined"); e.exit()});
+    if !std::path::Path::new(&config).is_file() {config::write_default(config);}
+    if !std::path::Path::new(&directory).is_dir() {
+        std::fs::create_dir_all(&directory).unwrap_or_else(|_e| {error!("Cannot create torrent folder directory(ies)");});
+        info!("Torrent directory created: {}", directory);
+    }
     //create torrent folder
     let torrent_folder = std::path::Path::new("torrents");
     std::fs::create_dir_all(torrent_folder).expect("Cannot create torrent folder");
@@ -241,8 +254,7 @@ async fn main() -> std::io::Result<()> {
         .bind(format!("127.0.0.1:{}",port))?.system_exit().run().await
 }
 
-/// Add a torrent to the list
-/// If the filename does not end with .torrent, the file is not processed
+/// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed
 fn add_torrent(path: String) {
     if path.to_lowercase().ends_with(".torrent") {
         let c=&*CONFIG.read().expect("Cannot read configuration");

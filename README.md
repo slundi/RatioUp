@@ -29,4 +29,3 @@ Change the **PATH** in order to keep your configuration.
 [] Handle downloads
 [] Torrent file explorer when the torrent has multiple files
 [] Retracker torrents
-[] Command line
