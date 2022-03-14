@@ -1,6 +1,6 @@
 # RatioUp
 
-Tool to fake upload on your torrents. It can be useful on private or semi-private bittorrent trackers especially if you have a slow internet connection. Furthermore, 
+Tool to fake upload on your torrents. It can be useful on private or semi-private bittorrent trackers especially if you have a slow internet connection. Furthermore,
 there are often many seeders so it becomes hard to seed and increase your ratio.
 
 It is a tool like [JOAL](https://github.com/anthonyraymond/joal) or [Ratio Master](http://ratiomaster.net/).
@@ -34,7 +34,7 @@ Arguments are:
 | `c` or `config` | `config.json` | Path to the JSON configuration file                                      |
 | `d` or `dir`    | `./torrents`  | Path to the directory where torrents are saved (without trailing slash)  |
 | `p` or `port`   | `7070`        | Web server port                                                          |
-| `root`          | `/`           | Web root (ie: http://127.0.0.1:8070/ROOT/)                               |
+| `root`          | `/`           | Web root (ie: <http://127.0.0.1:8070/ROOT/>)                             |
 
 ## Configuration
 
