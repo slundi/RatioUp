@@ -123,7 +123,6 @@ impl Config {
             DIGIT_RANGE_TRANSFORMED_TO_HEX_WITHOUT_LEADING_ZEROES => self.key = algorithm::digit_range_transformed_to_hex_without_leading_zero(),
             _ => {error!("Cannot generate key"); panic!("Cannot generate pkey");},
         }
-        self.key = byte_serialize(self.key.as_bytes()).collect(); //encode it because weird chars
         info!("Key: {}", self.key); 
     }
     /// Generate the peer ID and encode it for HTTP request
@@ -133,7 +132,7 @@ impl Config {
             RANDOM_POOL_WITH_CHECKSUM => self.peer_id = algorithm::random_pool_with_checksum(PEER_ID_LENGTH as usize, &self.peer_prefix, &self.peer_pattern),
             _ => {error!("Cannot generate peer ID"); panic!("Cannot generate peer ID");},
         }
-        self.peer_id = byte_serialize(self.peer_id.as_bytes()).collect();
+        self.peer_id = byte_serialize(self.peer_id.as_bytes()).collect(); //encode it because weird chars
         info!("Peer ID: {}", self.peer_id); 
     }
 }

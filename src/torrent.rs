@@ -3,6 +3,7 @@ extern crate serde;
 
 use serde::Serialize;
 use lava_torrent::torrent::v1::Torrent;
+use url::form_urlencoded::byte_serialize;
 
 #[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct File {
@@ -25,16 +26,19 @@ pub struct BasicTorrent {
     pub downloaded: usize,
     /// number of minutes when the previous announce happened
     pub announced: u8,
+    #[serde(skip_serializing)] pub info_hash_urlencoded: String,
 }
 
 impl BasicTorrent {
     /// Load essential data from a parsed torrent using the lava_torrent lib
     pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         let hash = torrent.info_hash();
+        let hash_bytes = torrent.info_hash_bytes();
         let private = torrent.is_private();
-        let mut t= BasicTorrent {path: path, name: torrent.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(),
+        let mut t= BasicTorrent {path: path, name: torrent.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
             comment: String::new(), active: true, length: torrent.length as usize, created_by: String::new(), announced: 0,
             info_hash: hash, piece_length: torrent.piece_length as usize, private: private, files: None, downloaded: torrent.length as usize};
+        t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
         if torrent.files.is_some() {
             let files = torrent.files.unwrap();
             let mut list : Vec<File> = Vec::with_capacity(files.len());

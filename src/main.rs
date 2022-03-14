@@ -69,7 +69,7 @@ impl Scheduler {
             url.push('?');
             url.push_str(&c.query);
             let uploaded = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate) * 60 * (t.announced as u32);
-            let url = url.replace("{peerid}", &c.peer_id).replace("{infohash}", &t.info_hash).replace("{key}", &c.key)
+            let url = url.replace("{peerid}", &c.peer_id).replace("{infohash}", &t.info_hash_urlencoded).replace("{key}", &c.key)
                     .replace("{uploaded}", uploaded.to_string().as_str())
                     .replace("{downloaded}", "0").replace("{left}", "0")
                     .replace("{event}", event.to_string().as_str()).replace("{numwant}", c.num_want.to_string().as_str()).replace("{port}", c.port.to_string().as_str());
