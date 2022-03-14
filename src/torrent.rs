@@ -7,7 +7,11 @@ use url::form_urlencoded::byte_serialize;
 
 #[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct File {
+    /// a list containing one or more string elements that together represent the path and filename. Each element in the list corresponds to 
+    /// either a directory name or (in the case of the final element) the filename. For example, a the file "dir1/dir2/file.ext" would 
+    /// consist of three string elements: "dir1", "dir2", and "file.ext". This is encoded as a bencoded list of strings such as l4:dir14:dir28:file.exte
     path: String, //Vec<String>,
+    /// length of the file in bytes (integer)
     length: usize, //i64,
 }
 
@@ -15,12 +19,32 @@ pub struct File {
 #[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct BasicTorrent {
     pub path: String,
-    name: String, comment: String, created_by: String,
-    pub announce: Option<String>,  announce_list: Option<Vec<Vec<String>>>,
-    //creation_date?
+    /// the filename. This is purely advisory. (string)
+    name: String,
+    /// (optional) free-form textual comments of the author (string)
+    comment: String,
+    /// (optional) name and version of the program used to create the .torrent (string)
+    created_by: String,
+    /// The announce URL of the tracker
+    pub announce: Option<String>, 
+    /// (optional) this is an extention to the official specification, offering backwards-compatibility. (list of lists of strings). http://bittorrent.org/beps/bep_0012.html
+    announce_list: Option<Vec<Vec<String>>>,
+    //creation_date? (optional) the creation time of the torrent, in standard UNIX epoch format (integer, seconds since 1-Jan-1970 00:00:00 UTC)
+    /// urlencoded 20-byte SHA1 hash of the value of the info key from the Metainfo file. Note that the value will be a bencoded dictionary, given the definition of the info key above.
     pub info_hash: String,
-    piece_length: usize, length: usize,
+    /// number of bytes in each piece (integer)
+    piece_length: usize,
+    /// length of the file in bytes (integer)
+    length: usize,
+    /// a list of dictionaries, one for each file.
     files: Option<Vec<File>>,
+    /// (optional) this field is an integer. If it is set to "1", the client MUST publish its presence to get other peers ONLY via the trackers explicitly described 
+    /// in the metainfo file. If this field is set to "0" or is not present, the client may obtain peer from other means, e.g. PEX peer exchange, dht. Here, "private" 
+    /// may be read as "no external peer source". 
+    /// 
+    /// - NOTE: There is much debate surrounding private trackers.
+    /// - The official request for a specification change is here: http://bittorrent.org/beps/bep_0027.html
+    /// - Azureus/Vuze was the first client to respect private trackers, see their wiki (http://wiki.vuze.com/w/Private_torrent) for more details.
     pub private: bool,
     pub active: bool,
     pub downloaded: usize,
