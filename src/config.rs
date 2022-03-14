@@ -1,11 +1,12 @@
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Read};
 use std::path::Path;
 use byte_unit::Byte;
-use tracing::{info, error, Subscriber};
+use tracing::{info, error};
 use rand::Rng;
+use url::form_urlencoded::byte_serialize;
 use crate::algorithm;
 
 //refresh interval
@@ -45,7 +46,7 @@ pub struct Config {
     /// for RANDOM_POOL_WITH_CHECKSUM
     #[serde(skip_serializing)] prefix: String,
     #[serde(skip_serializing)] key_refresh_on: u8,
-    #[serde(skip_serializing)] key_refresh_every: u16,
+    #[serde(skip_serializing)] pub key_refresh_every: u16,
     #[serde(skip_serializing)] key_uppercase: Option<bool>,
 
     //----------- peer ID
@@ -71,7 +72,7 @@ pub struct Config {
     #[serde(skip_serializing)] pub num_want_on_stop: u16,
 
     //generated values
-    #[serde(skip_serializing)] pub infohash :String,
+    #[serde(skip_serializing)] pub key :String,
     #[serde(skip_serializing)] pub peer_id: String,
 }
 
@@ -92,7 +93,7 @@ impl Config {
         key_refresh_on: TIMED_OR_AFTER_STARTED_ANNOUNCE,
         key_refresh_every: 0,
         //peer ID generator
-        peer_algorithm: HASH,
+        peer_algorithm: REGEX,
         peer_pattern: String::new(),
         peer_prefix:String::new(),
         peer_refresh_on: NEVER,
@@ -110,9 +111,31 @@ impl Config {
         accept_encoding: String::from("gzip"),
         accept_language: String::new(),
         connection: Some(String::from("Close")),
-        infohash: String::new(),
+        key: String::new(),
         peer_id: String::new(),
     }}
+
+    /// Generate the client key, and encode it for HTTP request
+    pub fn generate_key(&mut self) {
+        match self.key_algorithm {
+            HASH => self.key = algorithm::hash(8, false, self.key_uppercase),
+            HASH_NO_LEADING_ZERO => self.key = algorithm::hash(8, true, self.key_uppercase),
+            DIGIT_RANGE_TRANSFORMED_TO_HEX_WITHOUT_LEADING_ZEROES => self.key = algorithm::digit_range_transformed_to_hex_without_leading_zero(),
+            _ => {error!("Cannot generate key"); panic!("Cannot generate pkey");},
+        }
+        self.key = byte_serialize(self.key.as_bytes()).collect(); //encode it because weird chars
+        info!("Key: {}", self.key); 
+    }
+    /// Generate the peer ID and encode it for HTTP request
+    pub fn generate_peer_id(&mut self) {
+        match self.peer_algorithm {
+            REGEX                     => self.peer_id = algorithm::regex(self.peer_pattern.replace("\\", "")), //replace \ otherwise the generator crashes
+            RANDOM_POOL_WITH_CHECKSUM => self.peer_id = algorithm::random_pool_with_checksum(PEER_ID_LENGTH as usize, &self.peer_prefix, &self.peer_pattern),
+            _ => {error!("Cannot generate peer ID"); panic!("Cannot generate peer ID");},
+        }
+        self.peer_id = byte_serialize(self.peer_id.as_bytes()).collect();
+        info!("Peer ID: {}", self.peer_id); 
+    }
 }
 
 pub fn get_config(path: &str) -> Config {
@@ -186,6 +209,7 @@ pub fn get_config(path: &str) -> Config {
             //"PEER_ID_LENGTH" => cfg.key_algorithm = PEER_ID_LENGTH,
             _ => panic!("Cannot get a valid peer ID type"),
         }
+        if v["peerIdGenerator"]["algorithm"].get("prefix").is_some() {cfg.prefix = v["peerIdGenerator"]["algorithm"]["prefix"].as_str().unwrap().to_owned();}
         if v["peerIdGenerator"]["algorithm"].get("pattern").is_some() {cfg.peer_pattern = v["peerIdGenerator"]["algorithm"]["pattern"].as_str().unwrap().to_owned();}
         if v["peerIdGenerator"]["refreshOn"].is_string() {
             if v["peerIdGenerator"]["refreshOn"].as_str().unwrap() == "NEVER" {cfg.peer_refresh_on = NEVER;}
@@ -198,16 +222,8 @@ pub fn get_config(path: &str) -> Config {
         if v["urlEncoder"]["encodedHexCase"].is_string() {cfg.uppercase_encoded_hex = v["urlEncoder"]["encodedHexCase"].as_str().unwrap() == "upper";}
     }
     //build keys
-    //generate PEER_ID
-    if cfg.peer_algorithm == REGEX {
-        cfg.peer_id = algorithm::regex(cfg.peer_pattern.replace("\\", "")); //replace \ otherwise the generator crashes
-    }
-    else {algorithm::random_pool_with_checksum(PEER_ID_LENGTH, &cfg.peer_prefix, &cfg.peer_pattern);}
-    //info!("Peer ID: {}", cfg.peer_id); //do not log it because weird chars
-    //generate KEY
-    if cfg.key_algorithm == HASH {algorithm::hash(8, false, cfg.key_uppercase);}
-    else if cfg.key_algorithm == HASH_NO_LEADING_ZERO {algorithm::hash(8, true, cfg.key_uppercase);}
-    else if cfg.key_algorithm == DIGIT_RANGE_TRANSFORMED_TO_HEX_WITHOUT_LEADING_ZEROES {algorithm::digit_range_transformed_to_hex_without_leading_zero();}
+    cfg.generate_key();
+    cfg.generate_peer_id();
     return cfg;
 }
 

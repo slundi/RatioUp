@@ -26,6 +26,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 sanitize-filename = "0.3"
 uuid = { version = "0.8", features = ["v4"] }
 byte-unit = "4"
+url = "2"
 
 # actix
 actix = "0.13"

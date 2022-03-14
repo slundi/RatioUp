@@ -12,7 +12,7 @@ use std::io::Write;
 use actix::prelude::*;
 use actix_multipart::Multipart;
 use actix_web::{middleware::Logger, web, App, Error, HttpRequest, HttpResponse, HttpServer};
-use futures_util::{TryStreamExt as _, TryFutureExt};
+use futures_util::{TryStreamExt as _};
 use actix_web_actors::ws;
 use actix_files::Files;
 use tracing::{info, error, Level};
@@ -50,6 +50,10 @@ impl Actor for Scheduler {
     fn started(&mut self, ctx: &mut Context<Self>) {
         self.announce(ctx, EVENT_STARTED);
         ctx.run_interval(Duration::from_secs(60), move |this, ctx| { this.announce(ctx, EVENT_NONE) });
+        let c=&*CONFIG.read().expect("Cannot read configuration");
+        if c.key_refresh_every > 0 {
+            ctx.run_interval(Duration::from_secs((c.key_refresh_every as u64) * 60), move |this, ctx| { this.refresh_key(ctx) });
+        }
     }
     fn stopped(&mut self, ctx: &mut Context<Self>) { self.announce(ctx, EVENT_STOPPED); }
 }
@@ -65,7 +69,8 @@ impl Scheduler {
             url.push('?');
             url.push_str(&c.query);
             let uploaded = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate) * 60 * (t.announced as u32);
-            let url = url.replace("{peerid}", &c.peer_id).replace("{infohash}", &t.info_hash).replace("{uploaded}", uploaded.to_string().as_str())
+            let url = url.replace("{peerid}", &c.peer_id).replace("{infohash}", &t.info_hash).replace("{key}", &c.key)
+                    .replace("{uploaded}", uploaded.to_string().as_str())
                     .replace("{downloaded}", "0").replace("{left}", "0")
                     .replace("{event}", event.to_string().as_str()).replace("{numwant}", c.num_want.to_string().as_str()).replace("{port}", c.port.to_string().as_str());
             let mut client = reqwest::Client::new().get(&url);
@@ -73,11 +78,19 @@ impl Scheduler {
             if c.accept != "" {client = client.header("accept", &c.accept);}
             if c.accept_encoding != "" {client = client.header("accept-encoding", &c.accept_encoding);}
             if c.accept_language != "" {client = client.header("accept-language", &c.accept_language);}
+            client.build().expect("Cannot build announce query");
             info!("Annonce at: {}", url);
             //client.send().await?;
             //"&&port={port}&uploaded={uploaded}&&left={left}&corrupt=0&key={key}&event={event}&&compact=1&no_peer_id=1",
+            //Responce is like: type AnnounceResponse struct { interval   int // Interval in seconds a client should wait |.| messages, trackerID  string, complete   uint, incomplete uint
             t.announced = 0;
         }
+    }
+
+    fn refresh_key(&self, _ctx: &mut Context<Self>) {
+        info!("Refreshing key");
+        let c = &mut *CONFIG.write().expect("Cannot read configuration");
+        c.generate_key();
     }
 }
 
