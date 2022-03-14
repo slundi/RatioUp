@@ -54,9 +54,9 @@ Here is an example of the config.json:
 
 ## Roadmap
 
-[] Docker image
-[] Upload torrent file using websocket, currently working by posting in ajax but it requires a page reload
-[] Improve UI
-[] Handle downloads
-[] Torrent file explorer when the torrent has multiple files
-[] Retracker torrents
+- [ ] Docker image
+- [ ] Upload torrent file using websocket, currently working by posting in ajax but it requires a page reload
+- [ ] Improve UI
+- [ ] Handle downloads
+- [ ] Torrent file explorer when the torrent has multiple files
+- [ ] Retracker torrents
