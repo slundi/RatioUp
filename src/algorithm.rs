@@ -19,7 +19,7 @@ pub fn hash(length: usize, no_leading_zero: bool, uppercase: Option<bool>) -> St
 /// Generate a string from a regex pattern
 pub fn regex(pattern: String) -> String {
     let mut rng=rand::thread_rng();
-    let gen = rand_regex::Regex::compile(&pattern, 100).unwrap();
+    let gen = rand_regex::Regex::compile(&pattern, 64).unwrap();
     let out = (&mut rng).sample_iter(&gen).nth(64).unwrap();
     return out;
 }

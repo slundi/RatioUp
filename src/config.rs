@@ -129,17 +129,17 @@ impl Config {
             DIGIT_RANGE_TRANSFORMED_TO_HEX_WITHOUT_LEADING_ZEROES => self.key = algorithm::digit_range_transformed_to_hex_without_leading_zero(),
             _ => {error!("Cannot generate key"); panic!("Cannot generate pkey");},
         }
-        info!("Key: {}", self.key); 
+        info!("Key:     \t{}", self.key); 
     }
     /// Generate the peer ID and encode it for HTTP request
     pub fn generate_peer_id(&mut self) {
         match self.peer_algorithm {
-            REGEX                     => self.peer_id = algorithm::regex(self.peer_pattern.replace("\\", "")), //replace \ otherwise the generator crashes
+            REGEX                     => self.peer_id = algorithm::regex(self.peer_pattern.replace("\\\\", "\\")), //replace \ otherwise the generator crashes
             RANDOM_POOL_WITH_CHECKSUM => self.peer_id = algorithm::random_pool_with_checksum(PEER_ID_LENGTH as usize, &self.peer_prefix, &self.peer_pattern),
             _ => {error!("Cannot generate peer ID"); panic!("Cannot generate peer ID");},
         }
-        self.peer_id = byte_serialize(self.peer_id.as_bytes()).collect(); //encode it because weird chars
-        info!("Peer ID: {}", self.peer_id); 
+        self.peer_id = byte_serialize(&self.peer_id.as_bytes()[0..PEER_ID_LENGTH]).collect(); //take the first 20 charsencode it because weird chars
+        info!("Peer ID: \t{}", self.peer_id); 
     }
 }
 

@@ -38,10 +38,10 @@ lazy_static! {
     static ref TORRENTS:RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 }
 
-const EVENT_NONE: u8 = 0;
-//const EVENT_COMPLETED: u8 = 1; //not used because we do not download for now
-const EVENT_STARTED: u8 = 2;
-const EVENT_STOPPED: u8 = 3;
+const EVENT_NONE: &str = "";
+//const EVENT_COMPLETED: &str = "completed"; //not used because we do not download for now
+const EVENT_STARTED: &str = "started";
+const EVENT_STOPPED: &str = "stopped";
 
 /// A cron that check every minutes if it needs to announce, stop or start a torrent
 pub struct Scheduler;
@@ -58,7 +58,7 @@ impl Actor for Scheduler {
     fn stopped(&mut self, ctx: &mut Context<Self>) { self.announce(ctx, EVENT_STOPPED); }
 }
 impl Scheduler {
-    fn announce(&self, _ctx: &mut Context<Self>, event: u8) {
+    fn announce(&self, _ctx: &mut Context<Self>, event: &str) {
         //TODO: 
         let c=&*CONFIG.read().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
@@ -73,7 +73,7 @@ impl Scheduler {
             let url = url.replace("{peerid}", &c.peer_id).replace("{infohash}", &t.info_hash_urlencoded).replace("{key}", &c.key)
                     .replace("{uploaded}", uploaded.to_string().as_str())
                     .replace("{downloaded}", "0").replace("{left}", "0")
-                    .replace("{event}", event.to_string().as_str()).replace("{numwant}", c.num_want.to_string().as_str()).replace("{port}", c.port.to_string().as_str());
+                    .replace("{event}", event).replace("{numwant}", c.num_want.to_string().as_str()).replace("{port}", c.port.to_string().as_str());
             let mut client = reqwest::Client::new().get(&url);
             if c.user_agent != "" {client = client.header("user-agent", &c.user_agent);}
             if c.accept != "" {client = client.header("accept", &c.accept);}
