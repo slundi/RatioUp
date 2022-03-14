@@ -1,6 +1,4 @@
 {
-    "port":7070,
-    "web_root":"/",
     "client":"rtorrent-0.9.6_0.13.6",
     "min_upload_rate":4096,
     "max_upload_rate":16777216,
