@@ -15,13 +15,15 @@ use actix_web::{middleware::Logger, web, App, Error, HttpRequest, HttpResponse, 
 use futures_util::{TryStreamExt as _};
 use actix_web_actors::ws;
 use actix_files::Files;
-use tracing::{info, error, Level};
+use tracing::{info, warn, error, Level};
 use tracing_subscriber::FmtSubscriber;
 use std::sync::RwLock;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 use rand::Rng;
 use lava_torrent::torrent::v1::Torrent;
+use lava_torrent::tracker::TrackerResponse;
+
 
 /// Delay between tracker announce in minutes (30*60 = 30 minutes)
 
@@ -49,7 +51,7 @@ impl Actor for Scheduler {
     type Context = Context<Self>;
     fn started(&mut self, ctx: &mut Context<Self>) {
         self.announce(ctx, EVENT_STARTED);
-        ctx.run_interval(Duration::from_secs(60), move |this, ctx| { this.announce(ctx, EVENT_NONE) });
+        ctx.run_interval(Duration::from_secs(60), move |this, ctx| { this.announce(ctx, EVENT_NONE); });
         let c=&*CONFIG.read().expect("Cannot read configuration");
         if c.key_refresh_every > 0 {
             ctx.run_interval(Duration::from_secs((c.key_refresh_every as u64) * 60), move |this, ctx| { this.refresh_key(ctx) });
@@ -58,7 +60,8 @@ impl Actor for Scheduler {
     fn stopped(&mut self, ctx: &mut Context<Self>) { self.announce(ctx, EVENT_STOPPED); }
 }
 impl Scheduler {
-    fn announce(&self, _ctx: &mut Context<Self>, event: &str) {
+    /// Build the announce query and perform it in another thread
+    fn announce(&self, ctx: &mut Context<Self>, event: &str) {
         //TODO: 
         let c=&*CONFIG.read().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
@@ -74,18 +77,40 @@ impl Scheduler {
                     .replace("{uploaded}", uploaded.to_string().as_str())
                     .replace("{downloaded}", "0").replace("{left}", "0")
                     .replace("{event}", event).replace("{numwant}", c.num_want.to_string().as_str()).replace("{port}", c.port.to_string().as_str());
-            let mut client = reqwest::Client::new().get(&url);
-            if c.user_agent != "" {client = client.header("user-agent", &c.user_agent);}
-            if c.accept != "" {client = client.header("accept", &c.accept);}
-            if c.accept_encoding != "" {client = client.header("accept-encoding", &c.accept_encoding);}
-            if c.accept_language != "" {client = client.header("accept-language", &c.accept_language);}
-            client.build().expect("Cannot build announce query");
-            info!("Annonce at: {}", url);
-            //client.send().await?;
-            //"&&port={port}&uploaded={uploaded}&&left={left}&corrupt=0&key={key}&event={event}&&compact=1&no_peer_id=1",
-            //Responce is like: type AnnounceResponse struct { interval   int // Interval in seconds a client should wait |.| messages, trackerID  string, complete   uint, incomplete uint
+            let mut headers = reqwest::header::HeaderMap::new();
+            if c.user_agent != "" {headers.insert(reqwest::header::USER_AGENT, c.user_agent.parse().unwrap());}
+            if c.accept != "" {headers.insert(reqwest::header::ACCEPT, c.accept.parse().unwrap());}
+            if c.accept_encoding != "" {headers.insert(reqwest::header::ACCEPT_ENCODING, c.accept_encoding.parse().unwrap());}
+            if c.accept_language != "" {headers.insert(reqwest::header::ACCEPT_LANGUAGE, c.accept_language.parse().unwrap());}
+            self.send_announce(ctx, url, headers.clone(), t.info_hash.clone());
             t.announced = 0;
         }
+    }
+
+    fn send_announce(&self, _ctx: &mut Context<Self>, url:String, headers: reqwest::header::HeaderMap, infohash: String) {
+        actix_web::rt::spawn(async move {
+            let client = reqwest::Client::builder().default_headers(headers).build().expect("Cannot build web client");
+            let res = client.get(&url).send().await;
+            if res.is_ok() {
+                info!("Annonce at: {}", url);
+                let response = TrackerResponse::from_bytes(res.unwrap().bytes().await.unwrap());
+                if response.is_ok() {
+                    println!("\t\tRESPONSE");
+                    match response.unwrap() {
+                        TrackerResponse::Failure { reason } => error!("Announce error: {} at {}", reason, url),
+                        TrackerResponse::Success {complete, incomplete, interval, min_interval, extra_fields, peers, tracker_id, warning} => {
+                            let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+                            for t in list {if t.info_hash == infohash {
+                                if complete.is_some()   {t.seeders = complete.unwrap()    as u16;} else {warn!("Unable to get seeders for torrent: {}", t.name);}
+                                if incomplete.is_some() {t.leechers = incomplete.unwrap() as u16;} else {warn!("Unable to get leechers for torrent: {}",t.name);}
+                                break;
+                            }}
+                        },
+                    }
+
+                }
+            } else {error!("Cannot send announce query");}
+        });
     }
 
     fn refresh_key(&self, _ctx: &mut Context<Self>) {

@@ -20,7 +20,7 @@ pub struct File {
 pub struct BasicTorrent {
     pub path: String,
     /// the filename. This is purely advisory. (string)
-    name: String,
+    pub name: String,
     /// (optional) free-form textual comments of the author (string)
     comment: String,
     /// (optional) name and version of the program used to create the .torrent (string)
@@ -51,6 +51,10 @@ pub struct BasicTorrent {
     /// number of minutes when the previous announce happened
     pub announced: u8,
     #[serde(skip_serializing)] pub info_hash_urlencoded: String,
+    /// Number of seeders, it is used on the web UI
+    pub seeders: u16,
+    /// Number of leechers, it is used on the web UI
+    pub leechers: u16,
 }
 
 impl BasicTorrent {
@@ -61,7 +65,8 @@ impl BasicTorrent {
         let private = torrent.is_private();
         let mut t= BasicTorrent {path: path, name: torrent.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
             comment: String::new(), active: true, length: torrent.length as usize, created_by: String::new(), announced: 0,
-            info_hash: hash, piece_length: torrent.piece_length as usize, private: private, files: None, downloaded: torrent.length as usize};
+            info_hash: hash, piece_length: torrent.piece_length as usize, private: private, files: None, downloaded: torrent.length as usize,
+            seeders: 0, leechers: 0};
         t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
         if torrent.files.is_some() {
             let files = torrent.files.unwrap();
