@@ -61,6 +61,10 @@ pub struct BasicTorrent {
     pub seeders: u16,
     /// Number of leechers, it is used on the web UI
     pub leechers: u16,
+    /// It is the next upload speed that will be announced. It is also used for UI display.
+    pub next_upload_speed: u32,
+    /// It is the next download speed that will be announced. It allows to end a complete event earlier than the normal interval, It is also used for UI display.
+    pub next_download_speed: u32,
 }
 
 impl BasicTorrent {
@@ -72,7 +76,7 @@ impl BasicTorrent {
         let mut t= BasicTorrent {path: path, name: torrent.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
             comment: String::new(), active: true, length: torrent.length as usize, created_by: String::new(), last_announce: std::time::Instant::now(),
             info_hash: hash, piece_length: torrent.piece_length as usize, private: private, files: None, downloaded: torrent.length as usize,
-            seeders: 0, leechers: 0};
+            seeders: 0, leechers: 0, next_upload_speed: 0, next_download_speed: 0};
         t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
         if torrent.files.is_some() {
             let files = torrent.files.unwrap();

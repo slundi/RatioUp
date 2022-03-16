@@ -156,6 +156,8 @@ pub fn get_config(path: &str) -> Config {
     let v: Value = serde_json::from_str(&buffer).expect("Unable to parse configuration file: JSON not valid!");
     cfg.min_upload_rate      = v["min_upload_rate"].as_u64().expect("Cannot get the min_upload_rate in config.json") as u32;
     cfg.max_upload_rate      = v["max_upload_rate"].as_u64().expect("Cannot get the min_upload_rate in config.json") as u32;
+    cfg.min_download_rate    = v["min_download_rate"].as_u64().expect("Cannot get the min_download_rate in config.json") as u32;
+    cfg.max_download_rate    = v["max_download_rate"].as_u64().expect("Cannot get the max_download_rate in config.json") as u32;
     cfg.seed_if_zero_leecher = v["seed_if_zero_leecher"].as_bool().expect("Cannot get the seed_if_zero_leecher in config.json");
     cfg.client               = v["client"].as_str().expect("Cannot get the client in config.json").to_owned();
     cfg.num_want             = v["numwant"].as_u64().expect("Cannot get numwant in config.json") as u16;
