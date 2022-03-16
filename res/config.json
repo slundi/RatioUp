@@ -1,6 +1,8 @@
 {
   "min_upload_rate": 30720,
   "max_upload_rate": 174080,
+  "min_download_rate": 0,
+  "max_download_rate": 0,
   "numwant": 200,
   "numwant_on_stop": 0,
   "client": "utorrent-3.5.4_44498.client",

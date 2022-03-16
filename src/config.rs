@@ -33,6 +33,8 @@ pub struct Config {
     pub port: u16,
     pub min_upload_rate: u32, //in byte
     pub max_upload_rate: u32, //in byte
+    pub min_download_rate: u32, //in byte
+    pub max_download_rate: u32, //in byte
     pub seed_if_zero_leecher: bool,
     pub seed_public_torrent: bool,
     //pub simultaneous_seed: u16, //useful ?
@@ -85,6 +87,7 @@ pub struct Config {
 impl Config {
     fn default() -> Self { Config {
         min_upload_rate: 8*1024, max_upload_rate: 2048*1024,
+        min_download_rate: 8*1024, max_download_rate: 16*1024*1024,
         seed_if_zero_leecher: false, seed_public_torrent: false,
         //simultaneous_seed:5,
         client: "qbittorrent-4.3.3".to_owned(),

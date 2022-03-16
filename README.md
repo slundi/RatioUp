@@ -45,6 +45,8 @@ Here is an example of the config.json:
     "client":"qbittorrent-4.3.9",
     "min_upload_rate":8192,
     "max_upload_rate":104857600,
+    "min_download_rate": 0,
+    "max_download_rate": 0,
     "numwant": 100,
     "numwant_on_stop": 0,
     "seed_if_zero_leecher": false,
@@ -52,11 +54,13 @@ Here is an example of the config.json:
 }
 ```
 
+Download and upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes).
+To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
+
 ## Roadmap
 
 - [ ] Docker image
 - [ ] Upload torrent file using websocket, currently working by posting in ajax but it requires a page reload
 - [ ] Improve UI
-- [ ] Handle downloads
 - [ ] Torrent file explorer when the torrent has multiple files
 - [ ] Retracker torrents

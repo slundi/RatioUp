@@ -62,20 +62,23 @@ impl Actor for Scheduler {
 impl Scheduler {
     /// Build the announce query and perform it in another thread
     fn announce(&self, ctx: &mut Context<Self>, event: &str) {
-        //TODO: 
         let c=&*CONFIG.read().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         for t in list {
-            let should_announce = event == EVENT_STARTED || event == EVENT_STOPPED || t.announced >= 30;
-            if !should_announce {t.announced += 1; continue;}
             let mut url: String = t.announce.clone().unwrap();
             url.push('?');
             url.push_str(&c.query);
-            let uploaded = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate) * 60 * (t.announced as u32);
-            //https://wiki.theory.org/BitTorrentSpecification#Tracker_Request_Parameters
+            //compute downloads and uploads
+            let elapsed: u32 = if event == EVENT_STARTED {0} else {t.last_announce.elapsed().as_secs() as u32};
+            let uploaded = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate) * elapsed;
+            let downloaded = (rand::thread_rng().gen_range(c.min_download_rate..c.max_download_rate) * elapsed) as usize;
+            info!("Torrent {}", t.name);
+            info!("\tDownloaded: {} \t Uploaded: {}", byte_unit::Byte::from_bytes(downloaded as u128).get_appropriate_unit(true).to_string(), byte_unit::Byte::from_bytes(uploaded as u128).get_appropriate_unit(true).to_string());
+            t.downloaded += downloaded;
+            //build tracker announce URL, see [doc](https://wiki.theory.org/BitTorrentSpecification#Tracker_Request_Parameters)
             let url = url.replace("{peerid}", &c.peer_id).replace("{infohash}", &t.info_hash_urlencoded).replace("{key}", &c.key)
                     .replace("{uploaded}", uploaded.to_string().as_str())
-                    .replace("{downloaded}", "0").replace("{left}", "0")
+                    .replace("{downloaded}", downloaded.to_string().as_str()).replace("{left}", (t.length - t.downloaded).to_string().as_str())
                     .replace("{event}", event).replace("{numwant}", c.num_want.to_string().as_str()).replace("{port}", c.port.to_string().as_str());
             let mut headers = reqwest::header::HeaderMap::new();
             if c.user_agent != "" {headers.insert(reqwest::header::USER_AGENT, c.user_agent.parse().unwrap());}
@@ -83,7 +86,7 @@ impl Scheduler {
             if c.accept_encoding != "" {headers.insert(reqwest::header::ACCEPT_ENCODING, c.accept_encoding.parse().unwrap());}
             if c.accept_language != "" {headers.insert(reqwest::header::ACCEPT_LANGUAGE, c.accept_language.parse().unwrap());}
             self.send_announce(ctx, url, headers.clone(), t.info_hash.clone());
-            t.announced = 0;
+            t.last_announce = std::time::Instant::now();
         }
     }
 
@@ -103,6 +106,9 @@ impl Scheduler {
                             for t in list {if t.info_hash == infohash {
                                 if complete.is_some()   {t.seeders = complete.unwrap()    as u16;} else {warn!("Unable to get seeders for torrent: {}", t.name);}
                                 if incomplete.is_some() {t.leechers = incomplete.unwrap() as u16;} else {warn!("Unable to get leechers for torrent: {}",t.name);}
+                                info!("Torrent: {}", t.name);
+                                info!("\tSeeders: {}\tLeechers: {}", t.seeders, t.leechers);
+                                info!("Interval: {:?}\tMin interval: {:?}", interval, min_interval);
                                 break;
                             }}
                         },
@@ -305,6 +311,8 @@ fn add_torrent(path: String) {
             //enable seeding on public torrents depending on the config value of seed_public_torrent
             if c.seed_public_torrent && !t.private {t.active = true;}
             else {t.active = false;}
+            //download torrent if download speeds are set
+            if c.min_download_rate > 0 && c.max_download_rate > 0 {t.downloaded = 0;}
             for bt in list.clone() { if bt.info_hash == t.info_hash {
                 info!("Torrent is already in list");
                 return;

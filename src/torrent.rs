@@ -18,7 +18,6 @@ pub struct File {
 /// Store only essential information
 #[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct BasicTorrent {
-    pub path: String,
     /// the filename. This is purely advisory. (string)
     pub name: String,
     /// (optional) free-form textual comments of the author (string)
@@ -35,7 +34,7 @@ pub struct BasicTorrent {
     /// number of bytes in each piece (integer)
     piece_length: usize,
     /// length of the file in bytes (integer)
-    length: usize,
+    pub length: usize,
     /// a list of dictionaries, one for each file.
     files: Option<Vec<File>>,
     /// (optional) this field is an integer. If it is set to "1", the client MUST publish its presence to get other peers ONLY via the trackers explicitly described 
@@ -46,10 +45,17 @@ pub struct BasicTorrent {
     /// - The official request for a specification change is here: http://bittorrent.org/beps/bep_0027.html
     /// - Azureus/Vuze was the first client to respect private trackers, see their wiki (http://wiki.vuze.com/w/Private_torrent) for more details.
     pub private: bool,
+
+    //Fields used by RatioUp
+    /// Path to the torrent file
+    pub path: String,
+    ///If the torrent is active: so we announce it at the defined interval
     pub active: bool,
+    /// If we have to virtually download the torrent first, it is the downloaded size in bytes
     pub downloaded: usize,
-    /// number of minutes when the previous announce happened
-    pub announced: u8,
+    /// Last announce to the tracker
+    #[serde(skip_serializing)] pub last_announce: std::time::Instant,
+    /// URL encoded hash thet is used to build the tracker query
     #[serde(skip_serializing)] pub info_hash_urlencoded: String,
     /// Number of seeders, it is used on the web UI
     pub seeders: u16,
@@ -64,7 +70,7 @@ impl BasicTorrent {
         let hash_bytes = torrent.info_hash_bytes();
         let private = torrent.is_private();
         let mut t= BasicTorrent {path: path, name: torrent.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
-            comment: String::new(), active: true, length: torrent.length as usize, created_by: String::new(), announced: 0,
+            comment: String::new(), active: true, length: torrent.length as usize, created_by: String::new(), last_announce: std::time::Instant::now(),
             info_hash: hash, piece_length: torrent.piece_length as usize, private: private, files: None, downloaded: torrent.length as usize,
             seeders: 0, leechers: 0};
         t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
