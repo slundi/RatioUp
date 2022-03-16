@@ -115,33 +115,6 @@ impl Scheduler {
         }
     }
 
-    /*fn send_announce(&self, ctx: &mut Context<Self>, url:String, headers: reqwest::header::HeaderMap, infohash: String) {
-        actix_web::rt::spawn(async move {
-            let client = reqwest::Client::builder().default_headers(headers).build().expect("Cannot build web client");
-            let res = client.get(&url).send().await;
-            if res.is_ok() {
-                info!("Annonce at: {}", url);
-                let response = TrackerResponse::from_bytes(res.unwrap().bytes().await.unwrap());
-                if response.is_ok() {
-                    match response.unwrap() {
-                        TrackerResponse::Failure { reason } => error!("Announce error: {} at {}", reason, url),
-                        TrackerResponse::Success {complete, incomplete, interval, min_interval, extra_fields, peers, tracker_id, warning} => {
-                            let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-                            for t in list {if t.info_hash == infohash {
-                                if complete.is_some()   {t.seeders = complete.unwrap()    as u16;} else {warn!("Unable to get seeders for torrent: {}", t.name);}
-                                if incomplete.is_some() {t.leechers = incomplete.unwrap() as u16;} else {warn!("Unable to get leechers for torrent: {}",t.name);}
-                                info!("Torrent: {}", t.name);
-                                info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}\tMin interval: {:?}", t.seeders, t.leechers, interval, min_interval);
-                                break;
-                            }}
-                        },
-                    }
-
-                }
-            } else {error!("Cannot send announce query");}
-        });
-    }*/
-
     fn refresh_key(&self, _ctx: &mut Context<Self>) {
         info!("Refreshing key");
         let c = &mut *CONFIG.write().expect("Cannot read configuration");
@@ -277,8 +250,6 @@ async fn main() -> std::io::Result<()> {
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.) will be written to stdout.
         .with_max_level(Level::INFO).finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-    //for c in clients.in {client_list.push(c.0);}
-    //let path = std::env::current_dir()?; println!("The current directory is {}", path.display());
     //parse command line
     let matches = clap::App::new("RatioUp")
                           .arg(Arg::with_name("WEB_ROOT")

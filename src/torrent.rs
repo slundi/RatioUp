@@ -14,40 +14,6 @@ pub struct File {
     length: usize, //i64,
 }
 
-
-/// Everything found in a tracker response.
-///
-/// Modeled after the specifications in
-/// [BEP 3](http://bittorrent.org/beps/bep_0003.html) and
-/// [theory.org](https://wiki.theory.org/index.php/BitTorrentSpecification#Tracker_Response).
-/// Unknown/extension fields will be placed in `extra_fields`. If you
-/// need any of those extra fields you would have to parse it yourself.
-/*#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub enum TrackerResponse {
-    Success {
-        /// The number of seconds the downloader should wait between regular requests.
-        interval: u64,
-        /// A list of dictionaries corresponding to `Peer`.
-        peers: Vec<Peer>,
-        /// Warning message.
-        warning: Option<String>,
-        /// Minimum announce interval. If present clients must not reannounce more frequently than this.
-        min_interval: Option<u64>,
-        /// A string that the client should send back on its next announcements.
-        tracker_id: Option<String>,
-        /// Number of peers with the entire file, i.e. seeders.
-        complete: Option<u64>,
-        /// Number of non-seeder peers, i.e. leechers.
-        incomplete: Option<u64>,
-        /// Fields not listed above.
-        extra_fields: Option<Dictionary>,
-    },
-    Failure {
-        /// Error message.
-        reason: String,
-    },
-}*/
-
 /// Store only essential information
 #[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct BasicTorrent {
