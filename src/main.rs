@@ -3,12 +3,11 @@
 extern crate rand;
 extern crate clap;
 extern crate lazy_static;
-extern crate serde_bytes;
 
 use clap::{Arg, value_t};
 use serde_json::{json};
 use std::{time::{Duration, Instant}};
-use std::io::Write;
+use std::io::{Read, Write};
 use actix::prelude::*;
 use actix_multipart::Multipart;
 use actix_web::{middleware::Logger, web, App, Error, HttpRequest, HttpResponse, HttpServer};
@@ -24,15 +23,13 @@ use rand::Rng;
 use lava_torrent::torrent::v1::Torrent;
 use lava_torrent::tracker::TrackerResponse;
 
-
-/// Delay between tracker announce in minutes (30*60 = 30 minutes)
-
 mod algorithm;
 mod config;
 mod torrent;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
+//const DEFAULT_ANNOUNCE_INTERVAL: Duration = Duration::from_secs(1800); //1800s = 30min
 
 lazy_static! {
     static ref CONFIG: RwLock<config::Config> = RwLock::new(config::get_config("config.json"));
@@ -50,9 +47,8 @@ pub struct Scheduler;
 impl Actor for Scheduler {
     type Context = Context<Self>;
     fn started(&mut self, ctx: &mut Context<Self>) {
-        self.announce(ctx, EVENT_STARTED);
-        ctx.run_interval(Duration::from_secs(60), move |this, ctx| { this.announce(ctx, EVENT_NONE); });
         let c=&*CONFIG.read().expect("Cannot read configuration");
+        self.announce(ctx, EVENT_STARTED);
         if c.key_refresh_every > 0 {
             ctx.run_interval(Duration::from_secs((c.key_refresh_every as u64) * 60), move |this, ctx| { this.refresh_key(ctx) });
         }
@@ -68,11 +64,12 @@ impl Scheduler {
             let mut url: String = t.announce.clone().unwrap();
             url.push('?');
             url.push_str(&c.query);
-            //compute downloads and uploads
-            let elapsed: u32 = if event == EVENT_STARTED {0} else {t.last_announce.elapsed().as_secs() as u32};
-            let uploaded = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate) * elapsed;
-            let downloaded = (rand::thread_rng().gen_range(c.min_download_rate..c.max_download_rate) * elapsed) as usize;
             info!("Torrent {}", t.name);
+            //compute downloads and uploads
+            let elapsed: usize = if event == EVENT_STARTED {0} else {t.last_announce.elapsed().as_secs() as usize};
+            let uploaded: usize = t.next_upload_speed as usize * elapsed;
+            let mut downloaded: usize = t.next_download_speed as usize * elapsed;
+            if t.length <= t.downloaded + downloaded {downloaded = t.length - t.downloaded;} //do not download more thant the torrent size
             info!("\tDownloaded: {} \t Uploaded: {}", byte_unit::Byte::from_bytes(downloaded as u128).get_appropriate_unit(true).to_string(), byte_unit::Byte::from_bytes(uploaded as u128).get_appropriate_unit(true).to_string());
             t.downloaded += downloaded;
             //build tracker announce URL, see [doc](https://wiki.theory.org/BitTorrentSpecification#Tracker_Request_Parameters)
@@ -80,17 +77,45 @@ impl Scheduler {
                     .replace("{uploaded}", uploaded.to_string().as_str())
                     .replace("{downloaded}", downloaded.to_string().as_str()).replace("{left}", (t.length - t.downloaded).to_string().as_str())
                     .replace("{event}", event).replace("{numwant}", c.num_want.to_string().as_str()).replace("{port}", c.port.to_string().as_str());
-            let mut headers = reqwest::header::HeaderMap::new();
-            if c.user_agent != "" {headers.insert(reqwest::header::USER_AGENT, c.user_agent.parse().unwrap());}
-            if c.accept != "" {headers.insert(reqwest::header::ACCEPT, c.accept.parse().unwrap());}
-            if c.accept_encoding != "" {headers.insert(reqwest::header::ACCEPT_ENCODING, c.accept_encoding.parse().unwrap());}
-            if c.accept_language != "" {headers.insert(reqwest::header::ACCEPT_LANGUAGE, c.accept_language.parse().unwrap());}
-            self.send_announce(ctx, url, headers.clone(), t.info_hash.clone());
+            let mut agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(60));
+            if c.user_agent != "" {agent = agent.user_agent(&c.user_agent);}
+            let mut req = agent.build().get(&url);
+            if c.accept != "" {req = req.set("accept", &c.accept);}
+            if c.accept_encoding != "" {req = req.set("accept-encoding", &c.accept_encoding);}
+            if c.accept_language != "" {req = req.set("accept-language", &c.accept_language);}
+            let resp = req.call();
+            if resp.is_ok() {
+                info!("\tAnnonce at: {}", url);
+                let resp = resp.unwrap();
+                let mut bytes: Vec<u8> = Vec::with_capacity(1024);
+                if resp.into_reader().take(1024).read_to_end(&mut bytes).is_err() {error!("Cannot get response data"); continue;}
+                //serde_bencode::de::from_bytes(&bytes);
+                info!("\tResponse: {}/{}\t{:?}", bytes.len(), 1024, String::from_utf8_lossy(&bytes));
+                let response = TrackerResponse::from_bytes(bytes);
+                //response.unwrap();
+                if response.is_ok() {
+                    match response.unwrap() {
+                        TrackerResponse::Failure { reason } => error!("Announce error: {} at {}", reason, url),
+                        TrackerResponse::Success {complete, incomplete, interval, min_interval, extra_fields, peers, tracker_id, warning} => {
+                            t.seeders = if complete.is_some()   {complete.unwrap()   as u16} else {0};
+                            t.leechers= if incomplete.is_some() {incomplete.unwrap() as u16} else {0};
+                            if complete.is_none() || incomplete.is_none() {warn!("\tUnable to get seeders or leechers for torrent");}
+                            info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}\tMin interval: {:?}", t.seeders, t.leechers, interval, min_interval);
+                            t.next_upload_speed   = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate);
+                            if c.min_download_rate>0 && c.max_download_rate>0 {t.next_download_speed = rand::thread_rng().gen_range(c.min_download_rate..c.max_download_rate);}
+                            if t.length < t.downloaded + (t.next_download_speed as usize * interval as usize) { //compute next interval to for an EVENT_COMPLETED
+                                let t: u64 = (t.length - t.downloaded).div_euclid(t.next_download_speed as usize) as u64;
+                                ctx.run_later(Duration::from_secs(t + 5), move |this, ctx| { this.announce(ctx, EVENT_NONE); });
+                            } else {ctx.run_later(Duration::from_secs(interval as u64), move |this, ctx| { this.announce(ctx, EVENT_NONE); });}
+                        },
+                    }
+                } else {error!("Cannot parse torrent response: {:?}", response.err());}
+            } else {error!("Response of announce query has a problem: {:?}", resp.err());}
             t.last_announce = std::time::Instant::now();
         }
     }
 
-    fn send_announce(&self, _ctx: &mut Context<Self>, url:String, headers: reqwest::header::HeaderMap, infohash: String) {
+    /*fn send_announce(&self, ctx: &mut Context<Self>, url:String, headers: reqwest::header::HeaderMap, infohash: String) {
         actix_web::rt::spawn(async move {
             let client = reqwest::Client::builder().default_headers(headers).build().expect("Cannot build web client");
             let res = client.get(&url).send().await;
@@ -98,7 +123,6 @@ impl Scheduler {
                 info!("Annonce at: {}", url);
                 let response = TrackerResponse::from_bytes(res.unwrap().bytes().await.unwrap());
                 if response.is_ok() {
-                    println!("\t\tRESPONSE");
                     match response.unwrap() {
                         TrackerResponse::Failure { reason } => error!("Announce error: {} at {}", reason, url),
                         TrackerResponse::Success {complete, incomplete, interval, min_interval, extra_fields, peers, tracker_id, warning} => {
@@ -107,8 +131,7 @@ impl Scheduler {
                                 if complete.is_some()   {t.seeders = complete.unwrap()    as u16;} else {warn!("Unable to get seeders for torrent: {}", t.name);}
                                 if incomplete.is_some() {t.leechers = incomplete.unwrap() as u16;} else {warn!("Unable to get leechers for torrent: {}",t.name);}
                                 info!("Torrent: {}", t.name);
-                                info!("\tSeeders: {}\tLeechers: {}", t.seeders, t.leechers);
-                                info!("Interval: {:?}\tMin interval: {:?}", interval, min_interval);
+                                info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}\tMin interval: {:?}", t.seeders, t.leechers, interval, min_interval);
                                 break;
                             }}
                         },
@@ -117,7 +140,7 @@ impl Scheduler {
                 }
             } else {error!("Cannot send announce query");}
         });
-    }
+    }*/
 
     fn refresh_key(&self, _ctx: &mut Context<Self>) {
         info!("Refreshing key");

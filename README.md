@@ -13,6 +13,8 @@ RatioUp is not designed to help or encourage you downloading illegal materials !
 
 I am not responsible if you get banned using this tool. However, you can reduce risk by using popular torrents (with many seeders and leechers).
 
+For now, I'm not planning add a security layer because I'll use it on my home lan network. If you want to secure it, use a reverse proxy with **nginx** (and any other web server you ar familiar with) and add a SSL layer and a basic authentication.
+
 ## Deployment
 
 ```shell
@@ -57,10 +59,17 @@ Here is an example of the config.json:
 Download and upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes).
 To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
+## Todo
+
+- [ ] UI: File explorer when the torrent has multiple files
+- [ ] Announce at the correct interval
+- [ ] Send torrent list through the websocket to refreh next announce, seeders and leechers
+- [ ] Docker image
+
 ## Roadmap
 
-- [ ] Docker image
 - [ ] Upload torrent file using websocket, currently working by posting in ajax but it requires a page reload
+- [ ] Torrents with multiple trackers?
 - [ ] Improve UI
-- [ ] Torrent file explorer when the torrent has multiple files
-- [ ] Retracker torrents
+- [ ] Retracker torrents, and download torrents
+- [ ] Further testings (I use rtorrent and qBittorrent, other clients may not work properly)

@@ -13,10 +13,8 @@ lazy_static = "1.4"
 serde = {version = "1", features = ["derive"]}
 serde_json = "1"
 serde_bytes = "0.11"
-serde_derive = "1"
 lava_torrent = "0.5"
-regex = "1.5"
-reqwest = {version = "0.11", features = ["json"]}
+ureq = { version = "2", features = ["charset"]}
 clap = "*"
 log = "0.4"
 tracing = "*"
