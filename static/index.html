@@ -112,7 +112,7 @@ socket.onmessage = function(e) {
       tr=document.createElement('tr');
       tr.setAttribute('id', torrents[i]['info_hash']);
       tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-file-multiple"></i></a> ') +torrents[i]['name']+ '</td><td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
-                   + '<td class="has-text-right">0</td></td class="has-text-right"><td class="has-text-right">0</td><td class="has-text-right">0</td>'
+                   + '<td class="has-text-right uploading">0 B/s</td><td class="has-text-right seeders">0</td><td class="has-text-right leechers">0</td>'
                    + '<td class="has-text-centered"></td>'
                    + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="state-link has-text-'+(torrents[i]['active']?'success':'light')+'"><i class="mdi mdi-toggle-switch'+(torrents[i]['active']?'':'-off')+' state"></i></a> '
                        + '<!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
@@ -135,6 +135,14 @@ socket.onmessage = function(e) {
     var link = tr.getElementsByClassName("state-link")[0];
     link.classList.remove('has-text-success','has-text-light');
     link.classList.add('has-text-light');
+  } else if (e.data.startsWith('{"infos":')) {
+    infos = msg['infos'];
+    for(let i=0; i<infos.length; i++) {
+      var tr = document.getElementById(infos[i]['info_hash']);
+      tr.getElementsByClassName("uploading")[0].innerHTML = bytes_to_Size(infos[i]['upload_speed']) + "/s";
+      tr.getElementsByClassName("seeders")[0].innerHTML = infos[i]['seeders'];
+      tr.getElementsByClassName("leechers")[0].innerHTML = infos[i]['leechers'];
+    }
   } else if (e.data.startsWith('{"removed":')) { document.getElementById(msg['removed']).remove(e); }
 }
 socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};

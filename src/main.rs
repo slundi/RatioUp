@@ -29,6 +29,7 @@ mod torrent;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
+const TORRENT_INFO_INTERVAL: Duration = Duration::from_secs(120);
 //const DEFAULT_ANNOUNCE_INTERVAL: Duration = Duration::from_secs(1800); //1800s = 30min
 
 lazy_static! {
@@ -61,6 +62,7 @@ impl Scheduler {
         let c=&*CONFIG.read().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         for t in list {
+            //if !t.active {continue;}
             let mut url: String = t.announce.clone().unwrap();
             url.push('?');
             url.push_str(&c.query);
@@ -70,7 +72,6 @@ impl Scheduler {
             let uploaded: usize = t.next_upload_speed as usize * elapsed;
             let mut downloaded: usize = t.next_download_speed as usize * elapsed;
             if t.length <= t.downloaded + downloaded {downloaded = t.length - t.downloaded;} //do not download more thant the torrent size
-            info!("\tDownloaded: {} \t Uploaded: {}", byte_unit::Byte::from_bytes(downloaded as u128).get_appropriate_unit(true).to_string(), byte_unit::Byte::from_bytes(uploaded as u128).get_appropriate_unit(true).to_string());
             t.downloaded += downloaded;
             //build tracker announce URL, see [doc](https://wiki.theory.org/BitTorrentSpecification#Tracker_Request_Parameters)
             let url = url.replace("{peerid}", &c.peer_id).replace("{infohash}", &t.info_hash_urlencoded).replace("{key}", &c.key)
@@ -85,7 +86,7 @@ impl Scheduler {
             if c.accept_language != "" {req = req.set("accept-language", &c.accept_language);}
             let resp = req.call();
             if resp.is_ok() {
-                info!("\tAnnonce at: {}", url);
+                info!("\tDownloaded: {} \t Uploaded: {} \t Annonce at: {}", byte_unit::Byte::from_bytes(downloaded as u128).get_appropriate_unit(true).to_string(), byte_unit::Byte::from_bytes(uploaded as u128).get_appropriate_unit(true).to_string(), url);
                 let resp = resp.unwrap();
                 let mut bytes: Vec<u8> = Vec::with_capacity(1024);
                 if resp.into_reader().take(1024).read_to_end(&mut bytes).is_err() {error!("Cannot get response data"); continue;}
@@ -156,6 +157,7 @@ impl Actor for RatioUpWS {
     /// Method is called on actor start, it means a web browser just loaded the page. We start the heartbeat process here.
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb(ctx);
+        self.create_job_send_info_at_interval(ctx);
         //read the configuration
         let c=&*CONFIG.read().expect("Cannot read configuration");
         ctx.text(format!("{{\"config\":{}}}", json!(c)));
@@ -242,6 +244,30 @@ impl RatioUpWS {
             ctx.ping(b"");
         });
     }
+
+    /// Function to send periodically torrent informations: up/download speeds, seeders, leechers, butes completed, ...
+    fn create_job_send_info_at_interval(&self, ctx: &mut <Self as Actor>::Context) {
+        ctx.run_interval(TORRENT_INFO_INTERVAL, |act, ctx| {
+            let list = &*TORRENTS.read().expect("Cannot get torrent list");
+            let mut msg = String::from("{\"infos\":[");
+            for i in 0..list.len() {
+                msg.push_str("{\"info_hash\":\"");
+                msg.push_str(&list[i].info_hash);
+                msg.push_str("\",\"downloaded\":");
+                msg.push_str(list[i].downloaded.to_string().as_str());
+                msg.push_str(",\"seeders\":");
+                msg.push_str(list[i].seeders.to_string().as_str());
+                msg.push_str(",\"leechers\":");
+                msg.push_str(list[i].leechers.to_string().as_str());
+                msg.push_str(",\"download_speed\":");
+                msg.push_str(list[i].next_download_speed.to_string().as_str());
+                msg.push_str(",\"upload_speed\":");
+                msg.push_str(list[i].next_upload_speed.to_string().as_str());
+                if i < list.len() - 1 {msg.push_str("},");}else{msg.push_str("}]}");}
+            }
+            ctx.text(msg);
+        });
+    }
 }
 
 #[actix_web::main]
@@ -306,7 +332,7 @@ fn add_torrent(path: String) {
             if c.seed_public_torrent && !t.private {t.active = true;}
             else {t.active = false;}
             //download torrent if download speeds are set
-            if c.min_download_rate > 0 && c.max_download_rate > 0 {t.downloaded = 0;}
+            if c.min_download_rate > 0 && c.max_download_rate > 0 {t.downloaded = 0;} else {t.downloaded = t.length;}
             for bt in list.clone() { if bt.info_hash == t.info_hash {
                 info!("Torrent is already in list");
                 return;
