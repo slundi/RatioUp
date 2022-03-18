@@ -112,7 +112,9 @@ socket.onmessage = function(e) {
       tr=document.createElement('tr');
       tr.setAttribute('id', torrents[i]['info_hash']);
       tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-file-multiple"></i></a> ') +torrents[i]['name']+ '</td><td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
-                   + '<td class="has-text-right uploading">0 B/s</td><td class="has-text-right seeders">0</td><td class="has-text-right leechers">0</td>'
+                   + '<td class="has-text-right uploading">'+bytes_to_Size(torrents[i]['next_upload_speed'])+'/s</td>'
+                   + '<td class="has-text-right seeders">'+torrents[i]['seeders']+'</td>'
+                   + '<td class="has-text-right leechers">'+torrents[i]['leechers']+'</td>'
                    + '<td class="has-text-centered"></td>'
                    + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="state-link has-text-'+(torrents[i]['active']?'success':'light')+'"><i class="mdi mdi-toggle-switch'+(torrents[i]['active']?'':'-off')+' state"></i></a> '
                        + '<!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
