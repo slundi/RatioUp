@@ -1,7 +1,9 @@
 [package]
 name = "RatioUp"
+author = "slundi"
 version = "0.1.0"
-edition = '2018'
+edition = "2018"
+homepage = "https://github.com/slundi/RatioUp"
 
 [source.vendored-sources]
 directory = "vendor"
@@ -12,19 +14,26 @@ rand_regex = "0.15"
 lazy_static = "1.4"
 serde = {version = "1", features = ["derive"]}
 serde_json = "1"
-serde_bytes = "0.11"
-lava_torrent = "0.5"
 ureq = { version = "2", features = ["charset"]}
 clap = "*"
-log = "0.4"
-tracing = "*"
-tracing-subscriber = "*"
 tokio = {version = "1.17", features=["fs"]}
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 sanitize-filename = "0.3"
 uuid = { version = "0.8", features = ["v4"] }
 byte-unit = "4"
 url = "2"
+
+#logging
+log = "0.4"
+tracing = "*"
+tracing-subscriber = "*"
+
+#bittorrent parsing
+serde_bytes = "0.11"
+serde_bencode = "0.2"
+serde_derive = "1"
+sha1 = "*"
+hex = "0.4"
 
 # actix
 actix = "0.13"

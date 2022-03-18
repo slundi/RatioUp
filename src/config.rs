@@ -144,6 +144,17 @@ impl Config {
         self.peer_id = byte_serialize(&self.peer_id.as_bytes()[0..PEER_ID_LENGTH]).collect(); //take the first 20 charsencode it because weird chars
         info!("Peer ID: \t{}", self.peer_id); 
     }
+
+    /// Get the HTTP request with the bittorrent client headers (user-agent, accept, accept-encoding, accept-language)
+    pub fn get_http_request(&self, url: &str) -> ureq::Request {
+        let mut agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(60));
+        if self.user_agent != "" {agent = agent.user_agent(&self.user_agent);}
+        let mut req = agent.build().get(&url);
+        if self.accept != "" {req = req.set("accept", &self.accept);}
+        if self.accept_encoding != "" {req = req.set("accept-encoding", &self.accept_encoding);}
+        if self.accept_language != "" {req = req.set("accept-language", &self.accept_language);}
+        return req;
+    }
 }
 
 pub fn get_config(path: &str) -> Config {

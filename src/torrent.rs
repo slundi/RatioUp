@@ -1,17 +1,150 @@
 // https://wiki.theory.org/BitTorrentSpecification#Metainfo_File_Structure
 extern crate serde;
+extern crate serde_bencode;
+extern crate serde_bytes;
+extern crate sha1;
+use serde_bytes::ByteBuf;
 use url::form_urlencoded::byte_serialize;
 use serde::Serialize;
+use serde_bencode::ser;
+use sha1::{Digest, Sha1};
+use hex::ToHex;
 
+pub const EVENT_NONE: &str = "";
+//pub const EVENT_COMPLETED: &str = "completed"; //not used because we do not download for now
+pub const EVENT_STARTED: &str = "started";
+pub const EVENT_STOPPED: &str = "stopped";
 
-#[derive(Debug, Serialize, PartialEq, Clone)]
+/// The tracker responds with "text/plain" document consisting of a bencoded dictionary
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct FailureTrackerResponse {
+    /// If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
+    #[serde(rename = "failure reason")] pub reason: String,
+}
+
+#[derive(Debug, PartialEq, Deserialize, Clone)]
+pub struct Peer {
+    /// A string of length 20 which this peer uses as its id. This field will be `None` for compact peer info.
+    pub id: Option<String>,
+    /// peer's IP address either IPv6 (hexed) or IPv4 (dotted quad) or DNS name (string)
+    pub ip: String,
+    /// peer's port number
+    pub port: i64,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub struct OkTrackerResponse {
+    /// (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
+    #[serde(default, rename = "warning message")] pub warning_message: Option<String>,
+    /// Interval in seconds that the client should wait between sending regular requests to the tracker
+    pub interval: i64,
+    /// (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
+    #[serde(default, rename = "min interval")] pub min_interval: Option<i64>,
+    /// A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
+    pub tracker_id: Option<String>,
+    /// number of peers with the entire file, i.e. seeders
+    pub complete: i64,
+    /// number of non-seeder peers, aka "leechers"
+    pub incomplete: i64,
+    /// (dictionary model) The value is a list of dictionaries, each with the following keys.
+    /// peers: (binary model) Instead of using the dictionary model described above, the peers value may be a string consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number. All in network (big endian) notation.
+    #[serde(default, skip_deserializing)] peers: Option<u8>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone)]
+pub enum TrackerResponse {
+    Success {
+        /// (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
+        #[serde(default, rename = "warning message")] warning_message: Option<String>,
+        /// Interval in seconds that the client should wait between sending regular requests to the tracker
+        interval: i64,
+        /// (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
+        #[serde(default, rename = "min interval")] min_interval: Option<i64>,
+        /// A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
+        tracker_id: Option<String>,
+        /// number of peers with the entire file, i.e. seeders
+        complete: i64,
+        /// number of non-seeder peers, aka "leechers"
+        incomplete: i64,
+        /// (dictionary model) The value is a list of dictionaries, each with the following keys.
+        /// peers: (binary model) Instead of using the dictionary model described above, the peers value may be a string consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number. All in network (big endian) notation.
+        #[serde(default, skip_serializing)] peers: Option<u8>,
+    },
+    Failure {
+        /// If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
+        #[serde(rename = "failure reason")] reason: String,
+    }
+}
+
+pub fn from_response(data: Vec<u8>, encoding: &str) -> Result<TrackerResponse, serde_bencode::Error> {
+    return serde_bencode::de::from_bytes::<TrackerResponse>(&data);
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct Node(String, i64);
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct File {
     /// a list containing one or more string elements that together represent the path and filename. Each element in the list corresponds to 
     /// either a directory name or (in the case of the final element) the filename. For example, a the file "dir1/dir2/file.ext" would 
     /// consist of three string elements: "dir1", "dir2", and "file.ext". This is encoded as a bencoded list of strings such as l4:dir14:dir28:file.exte
-    path: String, //Vec<String>,
+    pub path: Vec<String>,
     /// length of the file in bytes (integer)
-    length: usize, //i64,
+    pub length: i64,
+    #[serde(default)] md5sum: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Info {
+    pub name: String,
+    pieces: ByteBuf,
+    #[serde(rename = "piece length")] pub piece_length: i64,
+    #[serde(default)] md5sum: Option<String>,
+    #[serde(default)] pub length: Option<i64>,
+    #[serde(default)] pub files: Option<Vec<File>>,
+    #[serde(default)] pub private: Option<u8>,
+    #[serde(default)] pub path: Option<Vec<String>>,
+    #[serde(default, rename = "root hash")] pub root_hash: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Torrent {
+    pub info: Info,
+    #[serde(default)] pub announce: Option<String>,
+    #[serde(default)] nodes: Option<Vec<Node>>,
+    #[serde(default)] pub encoding: Option<String>,
+    #[serde(default)] httpseeds: Option<Vec<String>>,
+    /// http://bittorrent.org/beps/bep_0012.html
+    #[serde(default, rename = "announce-list")] pub announce_list: Option<Vec<Vec<String>>>,
+    #[serde(default, rename = "creation date")] pub creation_date: Option<i64>,
+    #[serde(rename = "comment")] pub comment: Option<String>,
+    #[serde(default, rename = "created by")] pub created_by: Option<String>,
+}
+
+impl Torrent {
+    pub fn files(&self) -> &Option<Vec<File>> {
+        &self.info.files
+    }
+    pub fn num_files(&self) -> usize {
+        match self.files() {
+            Some(f) => f.len(),
+            None => 1,
+        }
+    }
+    pub fn total_size(&self) -> usize {
+        if self.files().is_none() { return self.info.length.unwrap_or_default() as usize; }
+        let mut total_size = 0;
+        if let Some(files) = self.files() {
+            for file in files { total_size += file.length; }
+        }
+        total_size as usize
+    }
+
+    pub fn info_hash(&self) -> Option<Vec<u8>> {
+        let info = ser::to_bytes(&self.info);
+        if info.is_err() {return None;}
+        return Some(Sha1::digest(&info.unwrap()).to_vec());
+    }
 }
 
 /// Store only essential information
@@ -67,24 +200,58 @@ pub struct BasicTorrent {
 }
 
 impl BasicTorrent {
-    /// Load essential data from a parsed torrent using the lava_torrent lib
-    pub fn from_torrent(torrent: lava_torrent::torrent::v1::Torrent, path: String) -> BasicTorrent {
-        let hash = torrent.info_hash();
-        let hash_bytes = torrent.info_hash_bytes();
-        let private = torrent.is_private();
-        let mut t= BasicTorrent {path: path, name: torrent.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
-            comment: String::new(), active: true, length: torrent.length as usize, created_by: String::new(), last_announce: std::time::Instant::now(),
-            info_hash: hash, piece_length: torrent.piece_length as usize, private: private, files: None, downloaded: torrent.length as usize,
-            seeders: 0, leechers: 0, next_upload_speed: 0, next_download_speed: 0};
-        t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
-        if torrent.files.is_some() {
-            let files = torrent.files.unwrap();
-            let mut list : Vec<File> = Vec::with_capacity(files.len());
-            for f in files {
-                list.push(File {path: f.path.into_os_string().into_string().expect("Cannot get a file in the torrent"), length: f.length as usize});
-            }
-            t.files = Some(list);
+    /// Build the announce URLs for the listed trackers in the torrent file. FOR NOW IT DOES NOT HANDLE MULTIPLE URLS!
+    pub fn build_urls(&mut self, query: String, event: &str, peer_id: String, key: String, port: u16, numwant: u16) -> Vec<String> {
+        tracing::info!("Torrent: {}", self.name);
+        //compute downloads and uploads
+        let elapsed: usize = if event == EVENT_STARTED {0} else {self.last_announce.elapsed().as_secs() as usize};
+        let uploaded: usize = self.next_upload_speed as usize * elapsed;
+        let mut downloaded: usize = self.next_download_speed as usize * elapsed;
+        if self.length <= self.downloaded + downloaded {downloaded = self.length - self.downloaded;} //do not download more thant the torrent size
+        self.downloaded += downloaded;
+
+        //build URL list
+        let mut urls = Vec::new();
+        let mut url= String::new();
+        if self.announce.as_ref().is_some() {
+            url = self.announce.clone().unwrap();
+            url.push('?');
+            url.push_str(&query);
         }
-        return t;
+        url = url.replace("{peerid}", &peer_id).replace("{infohash}", &self.info_hash_urlencoded).replace("{key}", &key)
+                 .replace("{uploaded}", uploaded.to_string().as_str())
+                 .replace("{downloaded}", downloaded.to_string().as_str()).replace("{left}", (self.length - self.downloaded).to_string().as_str())
+                 .replace("{event}", event).replace("{numwant}", numwant.to_string().as_str()).replace("{port}", port.to_string().as_str());
+        tracing::info!("\tDownloaded: {} \t Uploaded: {} \t Annonce at: {}", byte_unit::Byte::from_bytes(downloaded as u128).get_appropriate_unit(true).to_string(), byte_unit::Byte::from_bytes(uploaded as u128).get_appropriate_unit(true).to_string(), url);
+        urls.push(url);
+        return urls;
     }
+}
+
+/// Load essential data from a parsed torrent using the full parsed torrent file. It reduces the RAM use to have smaller data
+pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
+    let hash_bytes = torrent.info_hash().expect("Cannot get torrent info hash");
+    let hash = hash_bytes.encode_hex::<String>();
+    //let hash = hash_bytes.???;
+    let private = if torrent.info.private.is_some() && torrent.info.private == Some(1) {true} else {false};
+    let size = torrent.total_size();
+    let mut t= BasicTorrent {path: path, name: torrent.info.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
+        comment: String::new(), active: true, length: size, created_by: String::new(), last_announce: std::time::Instant::now(),
+        info_hash: hash, piece_length: torrent.info.piece_length as usize, private: private, files: None, downloaded: size,
+        seeders: 0, leechers: 0, next_upload_speed: 0, next_download_speed: 0};
+    t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
+    if torrent.info.files.is_some() {
+        let files = torrent.info.files.unwrap();
+        let mut list : Vec<File> = Vec::with_capacity(files.len());
+        for f in files {
+            list.push(File {length: f.length, path: f.path, md5sum: None});
+        }
+        t.files = Some(list);
+    }
+    return t;
+}
+
+pub fn from_file(path: String) -> Result<Torrent, serde_bencode::Error> {
+    let data=std::fs::read(path).expect("Cannot read torrent file");
+    return serde_bencode::de::from_bytes::<Torrent>(&data);
 }

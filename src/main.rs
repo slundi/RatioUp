@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+#[macro_use] extern crate serde_derive;
+
 extern crate rand;
 extern crate clap;
 extern crate lazy_static;
@@ -20,8 +22,6 @@ use std::sync::RwLock;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 use rand::Rng;
-use lava_torrent::torrent::v1::Torrent;
-use lava_torrent::tracker::TrackerResponse;
 
 mod algorithm;
 mod config;
@@ -38,23 +38,18 @@ lazy_static! {
     static ref TORRENTS:RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 }
 
-const EVENT_NONE: &str = "";
-//const EVENT_COMPLETED: &str = "completed"; //not used because we do not download for now
-const EVENT_STARTED: &str = "started";
-const EVENT_STOPPED: &str = "stopped";
-
 /// A cron that check every minutes if it needs to announce, stop or start a torrent
 pub struct Scheduler;
 impl Actor for Scheduler {
     type Context = Context<Self>;
     fn started(&mut self, ctx: &mut Context<Self>) {
         let c=&*CONFIG.read().expect("Cannot read configuration");
-        self.announce(ctx, EVENT_STARTED);
+        self.announce(ctx, torrent::EVENT_STARTED);
         if c.key_refresh_every > 0 {
             ctx.run_interval(Duration::from_secs((c.key_refresh_every as u64) * 60), move |this, ctx| { this.refresh_key(ctx) });
         }
     }
-    fn stopped(&mut self, ctx: &mut Context<Self>) { self.announce(ctx, EVENT_STOPPED); }
+    fn stopped(&mut self, ctx: &mut Context<Self>) { self.announce(ctx, torrent::EVENT_STOPPED); }
 }
 impl Scheduler {
     /// Build the announce query and perform it in another thread
@@ -63,56 +58,51 @@ impl Scheduler {
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         for t in list {
             //if !t.active {continue;}
-            let mut url: String = t.announce.clone().unwrap();
-            url.push('?');
-            url.push_str(&c.query);
-            info!("Torrent {}", t.name);
-            //compute downloads and uploads
-            let elapsed: usize = if event == EVENT_STARTED {0} else {t.last_announce.elapsed().as_secs() as usize};
-            let uploaded: usize = t.next_upload_speed as usize * elapsed;
-            let mut downloaded: usize = t.next_download_speed as usize * elapsed;
-            if t.length <= t.downloaded + downloaded {downloaded = t.length - t.downloaded;} //do not download more thant the torrent size
-            t.downloaded += downloaded;
-            //build tracker announce URL, see [doc](https://wiki.theory.org/BitTorrentSpecification#Tracker_Request_Parameters)
-            let url = url.replace("{peerid}", &c.peer_id).replace("{infohash}", &t.info_hash_urlencoded).replace("{key}", &c.key)
-                    .replace("{uploaded}", uploaded.to_string().as_str())
-                    .replace("{downloaded}", downloaded.to_string().as_str()).replace("{left}", (t.length - t.downloaded).to_string().as_str())
-                    .replace("{event}", event).replace("{numwant}", c.num_want.to_string().as_str()).replace("{port}", c.port.to_string().as_str());
-            let mut agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(60));
-            if c.user_agent != "" {agent = agent.user_agent(&c.user_agent);}
-            let mut req = agent.build().get(&url);
-            if c.accept != "" {req = req.set("accept", &c.accept);}
-            if c.accept_encoding != "" {req = req.set("accept-encoding", &c.accept_encoding);}
-            if c.accept_language != "" {req = req.set("accept-language", &c.accept_language);}
-            let resp = req.call();
-            if resp.is_ok() {
-                info!("\tDownloaded: {} \t Uploaded: {} \t Annonce at: {}", byte_unit::Byte::from_bytes(downloaded as u128).get_appropriate_unit(true).to_string(), byte_unit::Byte::from_bytes(uploaded as u128).get_appropriate_unit(true).to_string(), url);
-                let resp = resp.unwrap();
-                let mut bytes: Vec<u8> = Vec::with_capacity(1024);
-                if resp.into_reader().take(1024).read_to_end(&mut bytes).is_err() {error!("Cannot get response data"); continue;}
-                //serde_bencode::de::from_bytes(&bytes);
-                info!("\tResponse: {}/{}\t{:?}", bytes.len(), 1024, String::from_utf8_lossy(&bytes));
-                let response = TrackerResponse::from_bytes(bytes);
-                //response.unwrap();
-                if response.is_ok() {
-                    match response.unwrap() {
-                        TrackerResponse::Failure { reason } => error!("Announce error: {} at {}", reason, url),
-                        TrackerResponse::Success {complete, incomplete, interval, min_interval, extra_fields, peers, tracker_id, warning} => {
-                            t.seeders = if complete.is_some()   {complete.unwrap()   as u16} else {0};
-                            t.leechers= if incomplete.is_some() {incomplete.unwrap() as u16} else {0};
-                            if complete.is_none() || incomplete.is_none() {warn!("\tUnable to get seeders or leechers for torrent");}
-                            info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}\tMin interval: {:?}", t.seeders, t.leechers, interval, min_interval);
-                            t.next_upload_speed   = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate);
-                            if c.min_download_rate>0 && c.max_download_rate>0 {t.next_download_speed = rand::thread_rng().gen_range(c.min_download_rate..c.max_download_rate);}
-                            if t.length < t.downloaded + (t.next_download_speed as usize * interval as usize) { //compute next interval to for an EVENT_COMPLETED
-                                let t: u64 = (t.length - t.downloaded).div_euclid(t.next_download_speed as usize) as u64;
-                                ctx.run_later(Duration::from_secs(t + 5), move |this, ctx| { this.announce(ctx, EVENT_NONE); });
-                            } else {ctx.run_later(Duration::from_secs(interval as u64), move |this, ctx| { this.announce(ctx, EVENT_NONE); });}
-                        },
+            let url = &t.build_urls(c.query.clone(), event, c.peer_id.clone(), c.key.clone(), c.port, c.num_want)[0];
+            let req = c.get_http_request(&url);
+            match req.call() {
+                Ok(resp) => {
+                    let code = resp.status();
+                    let mut bytes: Vec<u8> = Vec::with_capacity(2048);
+                    resp.into_reader().take(1024).read_to_end(&mut bytes).expect("Cannot read response");
+                    //we start to check if the tracker has returned an error message, if yes, we will reannounce later
+                    let response = serde_bencode::de::from_bytes::<torrent::FailureTrackerResponse>(&bytes.clone());
+                    if response.is_ok() {
+                        warn!("Announce error from the tracker: {}", response.unwrap().reason);
+                        ctx.run_later(Duration::from_secs(1800), move |this, ctx| { this.announce(ctx, torrent::EVENT_NONE); });
+                        continue;
                     }
-                } else {error!("Cannot parse torrent response: {:?}", response.err());}
-            } else {error!("Response of announce query has a problem: {:?}", resp.err());}
-            t.last_announce = std::time::Instant::now();
+                    info!("RESPONSE: {:?}", String::from_utf8_lossy(&bytes));
+                    let response = serde_bencode::de::from_bytes::<torrent::OkTrackerResponse>(&bytes);
+                    //info!("\tResponse: \t{:?}", resp.into_string());
+                    //let mut bytes: Vec<u8> = Vec::with_capacity(1024);
+                    //if resp.into_reader().take(1024).read_to_end(&mut bytes).is_err() {error!("Cannot get response data"); continue;}
+                    info!("\tResponse: {}/{}\t{}   {:?}", bytes.len(), 1024, code, response);
+                    //let response = TrackerResponse::from_bytes(bytes);
+                    //let response = TrackerResponse::from_bytes(resp.into_string().unwrap().as_bytes());
+                    //response.unwrap();
+                    if response.is_ok() {
+                        /*match response.unwrap() {
+                            TrackerResponse::Failure { reason } => error!("Announce error: {} at {}", reason, url),
+                            TrackerResponse::Success {complete, incomplete, interval, min_interval, extra_fields, peers, tracker_id, warning} => {
+                                t.seeders = if complete.is_some()   {complete.unwrap()   as u16} else {0};
+                                t.leechers= if incomplete.is_some() {incomplete.unwrap() as u16} else {0};
+                                if complete.is_none() || incomplete.is_none() {warn!("\tUnable to get seeders or leechers for torrent");}
+                                info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}\tMin interval: {:?}", t.seeders, t.leechers, interval, min_interval);
+                                t.next_upload_speed   = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate);
+                                if c.min_download_rate>0 && c.max_download_rate>0 {t.next_download_speed = rand::thread_rng().gen_range(c.min_download_rate..c.max_download_rate);}
+                                if t.length < t.downloaded + (t.next_download_speed as usize * interval as usize) { //compute next interval to for an EVENT_COMPLETED
+                                    let t: u64 = (t.length - t.downloaded).div_euclid(t.next_download_speed as usize) as u64;
+                                    ctx.run_later(Duration::from_secs(t + 5), move |this, ctx| { this.announce(ctx, torrent::EVENT_NONE); });
+                                } else {ctx.run_later(Duration::from_secs(interval as u64), move |this, ctx| { this.announce(ctx, torrent::EVENT_NONE); });}
+                            },
+                        }
+                        t.last_announce = std::time::Instant::now();*/
+                    } else {error!("Cannot parse torrent response: {:?}", response.err());}
+                }
+                Err(ureq::Error::Status(code, response)) => {warn!("Unexpected server response status: {}\t{:?}", code, response); } //the server returned an unexpected status code (such as 400, 500 etc)
+                Err(_) => {if event != torrent::EVENT_STOPPED {error!("I/O error while announcing");}}
+            }
         }
     }
 
@@ -234,7 +224,7 @@ impl RatioUpWS {
 
     /// helper method that sends ping to client every second also this method checks heartbeats from client
     fn hb(&self, ctx: &mut <Self as Actor>::Context) {
-        info!("Web server started");
+        info!("Client connected to UI");
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT { // check client heartbeats
                 info!("Websocket Client heartbeat failed, disconnecting!"); // heartbeat timed out
@@ -325,9 +315,10 @@ fn add_torrent(path: String) {
         let c=&*CONFIG.read().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         info!("Loading torrent: \t{}", path);
-        let t = Torrent::read_from_file(&path);
+        let t=torrent::from_file(path.clone());
+        //let t = Torrent::read_from_file(&path);
         if t.is_ok() {
-            let mut t = torrent::BasicTorrent::from_torrent(t.unwrap(), path);
+            let mut t = torrent::from_torrent(t.unwrap(), path);
             //enable seeding on public torrents depending on the config value of seed_public_torrent
             if c.seed_public_torrent && !t.private {t.active = true;}
             else {t.active = false;}
