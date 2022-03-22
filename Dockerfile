@@ -1,31 +1,36 @@
 FROM rust:alpine as builder
 
-WORKDIR /app
+WORKDIR /code
 
 #RUN apk add --no-cache build-base
 RUN apk add musl-dev
 
-# create a new empty project
-RUN cargo init
+# Download crates-io index and fetch dependency code.
+# This step avoids needing to spend time on every build downloading the index
+# which can take a long time within the docker context. Docker will cache it.
+RUN USER=root cargo init
+COPY Cargo.toml Cargo.toml
+RUN cargo fetch
 
-COPY ./.cargo .cargo
-COPY ./vendor vendor
-COPY Cargo.toml Cargo.lock ./
 # build dependencies, when my source code changes, this build can be cached, we don't need to compile dependency again.
+COPY src src
 RUN cargo build --release
-# remove the dummy build.
-RUN cargo clean -p RatioUp
 
 # build with x86_64-unknown-linux-musl to make it run with alpine. $(uname -m)
-RUN cargo install --path . --target=$(uname -m)-unknown-linux-musl
+#RUN cargo install --path . --target=$(uname -m)-unknown-linux-musl
 
 # second stage.
 FROM alpine
-COPY --from=builder /usr/local/cargo/bin/* /usr/local/bin
+WORKDIR /app
+# copy server binary from build stage
+#COPY --from=builder /usr/local/cargo/bin/* /usr/local/bin
+COPY --from=builder /code/target/release/RatioUp RatioUp
 
 LABEL author="Slundi"
 RUN mkdir /app /config
 WORKDIR /config
 COPY --from=builder /usr/local/cargo/bin/RatioUp /app/RatioUp
-ENTRYPOINT [ "/app/RatioUp" ]
+# set user to non-root unless root is required for your app
+USER 1001
 EXPOSE 7070
+ENTRYPOINT [ "/app/RatioUp" ]
