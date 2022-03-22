@@ -73,41 +73,12 @@
 var torrents = [];
 var seed_if_zero_leecher=false;
 // Handle messages sent by the server.
-socket.onmessage = function(e) {
-  console.log(e);
+/*
   //console.log("Message: "+e.data);
   let msg = (e.data!=null)?JSON.parse(e.data):'';
   if (e.data.startsWith('{"config":')) {
     console.log("CONFIG");
     console.log(msg['config']);
-    document.getElementById("client").innerText=msg['config']['client'];
-    document.getElementById("min_upload").innerText=bytes_to_Size(msg['config']['min_upload_rate']);
-    document.getElementById("max_upload").innerText=bytes_to_Size(msg['config']['max_upload_rate']);
-    var s=document.getElementById("toggle_seed_0_leecher");
-    seed_if_zero_leecher=String(msg['config']['seed_if_zero_leecher'])=="true";
-  } else if (e.data.startsWith('{"running":')) {
-
-  } else if (e.data.startsWith('{"torrents":')) {
-    tbody = document.getElementById("content");
-    tbody.innerHTML = "";
-    torrents = msg['torrents'].sort(function(t1, t2) { //sort torrents by name
-      if(t1['name'].toLowerCase() < t2['name'].toLowerCase()) return -1;
-      if(t1['name'].toLowerCase() > t2['name'].toLowerCase()) return 1;
-    });
-    for(let i=0; i<torrents.length; i++) {
-      console.log(torrents[i]);
-      tr=document.createElement('tr');
-      tr.setAttribute('id', torrents[i]['info_hash']);
-      tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-file-multiple"></i></a> ') +torrents[i]['name']+ '</td><td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
-                   + '<td class="has-text-right uploading">'+bytes_to_Size(torrents[i]['next_upload_speed'])+'/s</td>'
-                   + '<td class="has-text-right seeders">'+torrents[i]['seeders']+'</td>'
-                   + '<td class="has-text-right leechers">'+torrents[i]['leechers']+'</td>'
-                   + '<td class="has-text-centered"></td>'
-                   + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="state-link has-text-'+(torrents[i]['active']?'success':'light')+'"><i class="mdi mdi-toggle-switch'+(torrents[i]['active']?'':'-off')+' state"></i></a> '
-                       + '<!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
-                       + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
-      tbody.append(tr);
-    } 
   } else if (e.data.startsWith('{"active":')) {
     var tr = document.getElementById(msg['active']);
     var icon = tr.getElementsByClassName("state")[0];
@@ -133,7 +104,7 @@ socket.onmessage = function(e) {
       tr.getElementsByClassName("leechers")[0].innerHTML = infos[i]['leechers'];
     }
   } else if (e.data.startsWith('{"removed":')) { document.getElementById(msg['removed']).remove(e); }
-}
+}*/
 function start_stop() {
   let r = new XMLHttpRequest();
   r.onreadystatechange = function() {
@@ -243,7 +214,50 @@ document.addEventListener('DOMContentLoaded', () => {
     const e = event || window.event;
     if (e.keyCode === 27) {closeAllModals();}// Escape key
   });
+  let rc = new XMLHttpRequest();
+  rc.onreadystatechange = function() {
+    if (rc.readyState == 4 && rc.status === 200) {
+      let msg = JSON.parse(rc.responseText);
+      document.getElementById("client").innerText=msg['config']['client'];
+      document.getElementById("min_upload").innerText=bytes_to_Size(msg['config']['min_upload_rate']);
+      document.getElementById("max_upload").innerText=bytes_to_Size(msg['config']['max_upload_rate']);
+      let s=document.getElementById("toggle_seed_0_leecher");
+      seed_if_zero_leecher=String(msg['config']['seed_if_zero_leecher'])=="true";
+    }
+  }
+  rc.open('GET', '/config');
+  rc.send();
+  let rt = new XMLHttpRequest();
+  rt.onreadystatechange = function() {
+    if (rt.readyState == 4 && rt.status === 200) {
+      let msg = JSON.parse(rt.responseText);
+      tbody = document.getElementById("content");
+      tbody.innerHTML = "";
+      torrents = msg['torrents'].sort(function(t1, t2) { //sort torrents by name
+        if(t1['name'].toLowerCase() < t2['name'].toLowerCase()) return -1;
+        if(t1['name'].toLowerCase() > t2['name'].toLowerCase()) return 1;
+      });
+      for(let i=0; i<torrents.length; i++) {
+        console.log(torrents[i]);
+        tr=document.createElement('tr');
+        tr.setAttribute('id', torrents[i]['info_hash']);
+        tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-file-multiple"></i></a> ') +torrents[i]['name']+ '</td><td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
+                    + '<td class="has-text-right uploading">'+bytes_to_Size(torrents[i]['next_upload_speed'])+'/s</td>'
+                    + '<td class="has-text-right seeders">'+torrents[i]['seeders']+'</td>'
+                    + '<td class="has-text-right leechers">'+torrents[i]['leechers']+'</td>'
+                    + '<td class="has-text-centered"></td>'
+                    + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="state-link has-text-'+(torrents[i]['active']?'success':'light')+'"><i class="mdi mdi-toggle-switch'+(torrents[i]['active']?'':'-off')+' state"></i></a> '
+                        + '<!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
+                        + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
+        tbody.append(tr);
+      }
+    }
+  }
+  rt.open('GET', '/torrents');
+  rt.send();
 });
+//TODO: onload, load config and torrents
+
 </script>
 <script src="js/bulma-toast.min.js" async></script>
 </body>
