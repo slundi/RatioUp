@@ -8,13 +8,19 @@ extern crate lazy_static;
 
 use clap::{Arg, value_t};
 use serde_json::{json};
-use std::{time::{Duration, Instant}};
+use std::{time::Duration};
 use std::io::{Read, Write};
 use actix::prelude::*;
 use actix_multipart::Multipart;
-use actix_web::{middleware::Logger, web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{
+    get, post,
+    http::{
+        header::{self, ContentType},
+        Method, StatusCode,
+    },
+    middleware, web, App, HttpResponse, HttpServer, Result,
+};
 use futures_util::{TryStreamExt as _};
-use actix_web_actors::ws;
 use actix_files::Files;
 use tracing::{info, warn, error, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -27,8 +33,6 @@ mod algorithm;
 mod config;
 mod torrent;
 
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
-const CLIENT_TIMEOUT: Duration = Duration::from_secs(30);
 const TORRENT_INFO_INTERVAL: Duration = Duration::from_secs(120);
 //const DEFAULT_ANNOUNCE_INTERVAL: Duration = Duration::from_secs(1800); //1800s = 30min
 
@@ -113,10 +117,8 @@ impl Scheduler {
     }
 }
 
-/// do websocket handshake and start `RatioUpWS` actor
-async fn ws_index(r: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> { ws::start(RatioUpWS::new(), &r, stream) }
-
-async fn receive_files(mut payload: Multipart) -> Result<HttpResponse, Error> {
+#[post("/add_torrents")]
+async fn receive_files(mut payload: Multipart) -> Result<HttpResponse> {
     while let Some(mut field) = payload.try_next().await? { // iterate over multipart stream
         let content_disposition = field.content_disposition(); // A multipart/form-data stream has to contain `content_disposition`
         let filename = content_disposition
@@ -131,111 +133,65 @@ async fn receive_files(mut payload: Multipart) -> Result<HttpResponse, Error> {
         }
         add_torrent(filepath2);
     }
-    //TODO: send new torrent list to the client
-    //let list = &*TORRENTS.read().expect("Cannot get torrent list");
-    //ctx.text(format!("{{\"torrents\":{}}}", json!(list)));
-    Ok(HttpResponse::Ok().into())
+    let list = &*TORRENTS.read().expect("Cannot get torrent list");
+    Ok(HttpResponse::build(StatusCode::OK).content_type(ContentType::json()).body(format!("{{\"torrents\":{}}}", json!(list))))
 }
 
-/// websocket connection is long running connection, it easier to handle with an actor
-struct RatioUpWS {
-    /// Client must send ping at least once per 30 seconds (CLIENT_TIMEOUT), otherwise we drop connection.
-    hb: Instant,
-}
-impl Actor for RatioUpWS {
-    type Context = ws::WebsocketContext<Self>;
-    /// Method is called on actor start, it means a web browser just loaded the page. We start the heartbeat process here.
-    fn started(&mut self, ctx: &mut Self::Context) {
-        self.hb(ctx);
-        self.create_job_send_info_at_interval(ctx);
-        //read the configuration
-        let c=&*CONFIG.read().expect("Cannot read configuration");
-        ctx.text(format!("{{\"config\":{}}}", json!(c)));
-        //load torrents
-        let list = &*TORRENTS.read().expect("Cannot get torrent list");
-        ctx.text(format!("{{\"torrents\":{}}}", json!(list)));
-    }
+/// Returns the configuration as a JSON string
+#[get("/config")]
+async fn get_config() -> Result<HttpResponse> {
+    let c=&*CONFIG.read().expect("Cannot read configuration");
+    Ok(HttpResponse::build(StatusCode::OK).content_type(ContentType::json()).body(format!("{{\"config\":{}}}", json!(c))))
 }
 
-// Handler for `ws::Message`
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RatioUpWS {
-    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context,) {
-        match msg {
-            Ok(ws::Message::Ping(msg)) => { self.hb = Instant::now(); ctx.pong(&msg); }
-            Ok(ws::Message::Pong(_)) => {self.hb = Instant::now();}
-            Ok(ws::Message::Text(text)) => {
-                info!("Receiving text: {:?}", text);
-                if text == "toggle_start" { //enable or disable seeding, you should stop the app instead
-                    let mut w = ACTIVE.write().expect("Cannot change application state");
-                    *w = !*w;
-                    if *w { ctx.text("{\"running\": true}"); info!("Seedding resumed"); }
-                    else  { ctx.text("{\"running\": false}");info!("Seedding stopped"); }
-                } else if text.starts_with("{\"switch\":\"") { //enable disable torrent
-                    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-                    let v: serde_json::Value = serde_json::from_str(&text).expect("Cannot parse switch message");
-                    let h = v["switch"].as_str().expect("Switch message does not contain a hash");
-                    for t in list {
-                        if t.info_hash == h {
-                            t.active = !t.active;
-                            if t.active {ctx.text(format!("{{\"active\":\"{}\"}}", h));}
-                            else {ctx.text(format!("{{\"disabled\":\"{}\"}}", h));}
-                            break;
-                        }
-                    }
-                } else if text.starts_with("{\"remove\":\"") { //remove a torrent
-                    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-                    let v: serde_json::Value = serde_json::from_str(&text).expect("Cannot parse remove message");
-                    let h = v["remove"].as_str().expect("Remove message does not contain a hash");
-                    for i in 0..list.len() {
-                        if list[i].info_hash == h {
-                            let r = std::fs::remove_file(&list[i].path);
-                            if r.is_ok() {
-                                list.remove(i);
-                                ctx.text(format!("{{\"removed\":\"{}\"}}", h));
-                            } else {ctx.text(format!("{{\"error\":\"Cannot remove torrent file\"}}"))}
-                            break;
-                        }
-                    }
-                }
+/// Returns the torrent list as a JSON string
+#[get("/torrents")]
+async fn get_torrents() -> Result<HttpResponse> {
+    let list = &*TORRENTS.read().expect("Cannot get torrent list");
+    Ok(HttpResponse::build(StatusCode::OK).content_type(ContentType::json()).body(format!("{{\"torrents\":{}}}", json!(list))))
+}
+
+/// Stort or stop the seeding depending on the current state, you should stop the app instead
+#[get("/toggle")]
+async fn toggle_active() -> Result<HttpResponse> {
+    let mut w = ACTIVE.write().expect("Cannot change application state");
+    *w = !*w;
+    if *w { info!("Seedding resumed"); return Ok(HttpResponse::build(StatusCode::OK).content_type(ContentType::json()).body("true"));}
+    else  { info!("Seedding stopped"); return Ok(HttpResponse::build(StatusCode::OK).content_type(ContentType::json()).body("false"));}
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct CommandParams {
+    command: String,
+    infohash: String,
+}
+#[post("/command")]
+async fn process_user_command(params: web::Form<CommandParams>) -> HttpResponse {
+    info!("Processing user command");
+    if params.command.to_lowercase() == "switch" && params.infohash != "" { //enable disable torrent
+        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+        for t in list {
+            if t.info_hash == params.infohash {
+                t.active = !t.active;
+                if t.active {return HttpResponse::build(StatusCode::OK).content_type(ContentType::json()).body(format!("{{\"active\":\"{}\"}}", params.infohash));}
+                else        {return HttpResponse::build(StatusCode::OK).content_type(ContentType::json()).body(format!("{{\"disabled\":\"{}\"}}", params.infohash));}
             }
-            Ok(ws::Message::Binary(bin)) => {
-                info!("Receiving binary, size={}", bin.len());
-                let mut pos = 0;
-                let mut buffer = std::fs::File::create("./torrents/foo.torrent").unwrap();  // notice the name of the file that will be written
-                //let mut buffer = std::fs::OpenOptions::new().append(true).create(true).open("foo.torrent").unwrap();
-                while pos < bin.len() {
-                    let bytes_written = buffer.write(&bin[pos..]).unwrap();
-                    pos += bytes_written
-                };
-                //ctx.binary(bin)},
-                ctx.text("true");
+        }
+    } else if params.command.to_lowercase() == "remove" && params.infohash != "" { //enable disable torrent
+        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+        for i in 0..list.len() {
+            if list[i].info_hash == params.infohash {
+                let r = std::fs::remove_file(&list[i].path);
+                if r.is_ok() {
+                    list.remove(i);
+                    return HttpResponse::build(StatusCode::OK).content_type(ContentType::json()).body(format!("{{\"removed\":\"{}\"}}", params.infohash));
+                } else {return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).body("Cannot remove torrent file");}
             }
-            Ok(ws::Message::Close(reason)) => {
-                ctx.close(reason);
-                ctx.stop();
-            }
-            _ => ctx.stop(),
         }
     }
+    HttpResponse::build(StatusCode::BAD_REQUEST).body("")
 }
-
-impl RatioUpWS {
-    fn new() -> Self {Self { hb: Instant::now(), }}
-
-    /// helper method that sends ping to client every second also this method checks heartbeats from client
-    fn hb(&self, ctx: &mut <Self as Actor>::Context) {
-        info!("Client connected to UI");
-        ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
-            if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT { // check client heartbeats
-                info!("Websocket Client heartbeat failed, disconnecting!"); // heartbeat timed out
-                ctx.stop(); // stop actor
-                return; // don't try to send a ping
-            }
-            ctx.ping(b"");
-        });
-    }
-
-    /// Function to send periodically torrent informations: up/download speeds, seeders, leechers, butes completed, ...
+/*  /// Function to send periodically torrent informations: up/download speeds, seeders, leechers, butes completed, ...
     fn create_job_send_info_at_interval(&self, ctx: &mut <Self as Actor>::Context) {
         ctx.run_interval(TORRENT_INFO_INTERVAL, |act, ctx| {
             let list = &*TORRENTS.read().expect("Cannot get torrent list");
@@ -258,7 +214,7 @@ impl RatioUpWS {
             ctx.text(msg);
         });
     }
-}
+}*/
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -268,17 +224,13 @@ async fn main() -> std::io::Result<()> {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     //parse command line
     let matches = clap::App::new("RatioUp")
-                          .arg(Arg::with_name("WEB_ROOT")
-                               .long("root")
+                          .arg(Arg::with_name("WEB_ROOT").long("root")
                                .help("Set a custom web root (ex: / or /ratio-up/").default_value("/").takes_value(true))
-                          .arg(Arg::with_name("PORT")
-                               .short("p").long("port")
+                          .arg(Arg::with_name("PORT").short("p").long("port")
                                .help("Sets HTTP web port").default_value("7070").takes_value(true))
-                          .arg(Arg::with_name("CONFIG")
-                               .short("c").long("config")
+                          .arg(Arg::with_name("CONFIG").short("c").long("config")
                                .help("Path to the config file. It'll be generated if it does not exists").default_value("config.json").takes_value(true))
-                          .arg(Arg::with_name("DIRECTORY")
-                               .short("d").long("dir")
+                          .arg(Arg::with_name("DIRECTORY").short("d").long("dir")
                                .help("Directory where torrents are saved").default_value("./torrents").takes_value(true))
                           .get_matches();
     let port = value_t!(matches, "PORT", u16).unwrap_or_else(|e| {error!("Server port is not defined"); e.exit()});
@@ -302,9 +254,8 @@ async fn main() -> std::io::Result<()> {
     Scheduler.start();
     //start web server
     HttpServer::new(move || {App::new()
-        .wrap(Logger::default())
-        .service(web::resource("/ws/").route(web::get().to(ws_index)))
-        .service(web::resource("/add_torrents").route(web::post().to(receive_files)))
+        .wrap(middleware::Logger::default())
+        .service(toggle_active).service(get_config).service(get_torrents).service(receive_files).service(process_user_command)
         .service(Files::new(&root, "static/").index_file("index.html"))})
         .bind(format!("127.0.0.1:{}",port))?.system_exit().run().await
 }

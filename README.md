@@ -64,12 +64,10 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 - [ ] UI: File explorer when the torrent has multiple files
 - [ ] Announce at the correct interval
 - [ ] Fix response parsing: MalformedBencode("Input contains invalid UTF-8."), MalformedResponse("peers" does not map to a dict or a string of bytes.")
-- [ ] Send torrent list through the websocket to refreh next announce, seeders and leechers
 - [ ] Docker image
 
 ## Roadmap
 
-- [ ] Upload torrent file using websocket, currently working by posting in ajax but it requires a page reload
 - [ ] Torrents with multiple trackers?
 - [ ] Improve UI
 - [ ] Retracker torrents, and download torrents

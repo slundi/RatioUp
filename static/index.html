@@ -70,11 +70,7 @@
   <div style="font-size: small; text-align: center;"><a href="https://github.com/slundi/RatioUp" target="_blank"><i class="mdi mdi-github"></i> RatioUp on GitHub</a></div>
 </div>
 <script>
-var socket=new WebSocket((window.location.protocol.toLowerCase()=='http'?'ws://':'ws://')+window.location.host+'/ws/');
 var torrents = [];
-socket.binaryType = 'arraybuffer';
-socket.onerror=function(error) {console.log('WebSocket Error: '+error);};
-socket.onopen=function(event) {console.log('Connected to: '+event.currentTarget.url);};
 var seed_if_zero_leecher=false;
 // Handle messages sent by the server.
 socket.onmessage = function(e) {
@@ -90,16 +86,7 @@ socket.onmessage = function(e) {
     var s=document.getElementById("toggle_seed_0_leecher");
     seed_if_zero_leecher=String(msg['config']['seed_if_zero_leecher'])=="true";
   } else if (e.data.startsWith('{"running":')) {
-    s=document.getElementById("server-status");
-    s.classList.remove("mdi-play-circle", "mdi-pause-circle", "has-text-success", "has-text-danger");
-    if(msg['running']) {
-      s.classList.add("mdi-play-circle", "has-text-success");
-      bulmaToast.toast({ message: '<i class="mdi mdi-check"></i> Server started', type: 'is-success', duration: 3000, position: 'bottom-right' })
-    }
-    else {
-      s.classList.add("mdi-pause-circle", "has-text-danger");
-      bulmaToast.toast({ message: '<i class="mdi mdi-alert"></i> Server stopped', type: 'is-warning', duration: 3000, position: 'bottom-right' })
-    }
+
   } else if (e.data.startsWith('{"torrents":')) {
     tbody = document.getElementById("content");
     tbody.innerHTML = "";
@@ -147,24 +134,45 @@ socket.onmessage = function(e) {
     }
   } else if (e.data.startsWith('{"removed":')) { document.getElementById(msg['removed']).remove(e); }
 }
-socket.onclose = function(event) {console.log('Disconnected from WebSocket.');};
-function start_stop() {socket.send("toggle_start");}
-function update() {socket.send("update");}
-function change_client(c) {socket.send("{\"client\":\""+c+"\"}");}
-function toggle_seed_0_leecher() {socket.send("toggle_0_leecher");}
-function set_min_upload_speed(speed) {socket.send("{\"min_upload_speed\":"+speed+"}");}
-function set_max_upload_speed(speed) {socket.send("{\"max_upload_speed\":"+speed+"}");}
-function toggle(h) {socket.send("{\"switch\":\""+h+"\"}");}
-function remove(h) {if(confirm("Do you really want to delete this torrent?\nIt will be removed from the server")) socket.send("{\"remove\":\""+h+"\"}");}
+function start_stop() {
+  let r = new XMLHttpRequest();
+  r.onreadystatechange = function() {
+    if (r.readyState == 4 && r.status === 200) {
+      s=document.getElementById("server-status");
+      s.classList.remove("mdi-play-circle", "mdi-pause-circle", "has-text-success", "has-text-danger");
+      if(r.responseText === "true") {
+        s.classList.add("mdi-play-circle", "has-text-success");
+        bulmaToast.toast({ message: '<i class="mdi mdi-check"></i> Server started', type: 'is-success', duration: 3000, position: 'bottom-right' })
+      }
+      else {
+        s.classList.add("mdi-pause-circle", "has-text-danger");
+        bulmaToast.toast({ message: '<i class="mdi mdi-alert"></i> Server stopped', type: 'is-warning', duration: 3000, position: 'bottom-right' })
+      }
+    }
+  }
+  r.open('GET', '/toggle');
+  r.send();
+}
+function send_command(c, h){
+  let r = new XMLHttpRequest();
+  r.onreadystatechange = function() {
+    if (r.readyState == 4 && r.status === 200) {
+      
+    }
+  }
+  r.open('POST', '/command', true);
+  r.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+  r.send('command:'+c+'&infohash='+h);
+  r.send();
+}
+function refresh() {socket.send("refresh");}
+function toggle(h) {send_command("switch", h);}
+function remove(h) {if(confirm("Do you really want to delete this torrent?\nIt will be removed from the server")) send_command("remove", h);}
 function retracker(h, trackers) {
   var e=document.getElementById('retracker');
   e.classList.add('is-active');
-  socket.send("{\"retracker\":\""+h+"\",\"trackers\":\""+trackers+"\"}");
+  //TODO: socket.send("{\"retracker\":\""+h+"\",\"trackers\":\""+trackers+"\"}");
 }
-window.onbeforeunload=function() {
-  socket.onclose=function(){};
-  socket.close();
-};
 function bytes_to_Size(bytes){
   if(bytes==0)return '0 B';
   var i=parseInt(Math.floor(Math.log(bytes)/Math.log(1024)));
@@ -221,18 +229,6 @@ function upload_file(file, url, success, progress){
 	if (success) ajax.addEventListener('load', success, false);
 	ajax.open('POST', url, true);
 	ajax.send(data);
-}
-function upload_file_ws(file, url, success, progress){
-  console.log("Uploading through WS");
-  var reader = new FileReader();
-  var rawData = new ArrayBuffer();  
-  reader.loadend = function() {}
-  reader.onload = function(e) {
-      rawData = e.target.result;
-      socket.send(rawData);
-      //bulmaToast.toast({ message: '<i class="mdi mdi-check"></i> Torrent file uploaded', type: 'is-success', duration: 3000, position: 'bottom-right' });
-  }
-  reader.readAsArrayBuffer(file);
 }
 document.addEventListener('DOMContentLoaded', () => {
   function closeModal($el) {$el.classList.remove('is-active');}
