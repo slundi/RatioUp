@@ -72,39 +72,6 @@
 <script>
 var torrents = [];
 var seed_if_zero_leecher=false;
-// Handle messages sent by the server.
-/*
-  //console.log("Message: "+e.data);
-  let msg = (e.data!=null)?JSON.parse(e.data):'';
-  if (e.data.startsWith('{"config":')) {
-    console.log("CONFIG");
-    console.log(msg['config']);
-  } else if (e.data.startsWith('{"active":')) {
-    var tr = document.getElementById(msg['active']);
-    var icon = tr.getElementsByClassName("state")[0];
-    icon.classList.remove('mdi-toggle-switch','mdi-toggle-switch-off');
-    icon.classList.add('mdi-toggle-switch');
-    var link = tr.getElementsByClassName("state-link")[0];
-    link.classList.remove('has-text-success','has-text-light');
-    link.classList.add('has-text-success');
-  } else if (e.data.startsWith('{"disabled":')) {
-    var tr = document.getElementById(msg['disabled']);
-    var icon = tr.getElementsByClassName("state")[0];
-    icon.classList.remove('mdi-toggle-switch','mdi-toggle-switch-off');
-    icon.classList.add('mdi-toggle-switch-off');
-    var link = tr.getElementsByClassName("state-link")[0];
-    link.classList.remove('has-text-success','has-text-light');
-    link.classList.add('has-text-light');
-  } else if (e.data.startsWith('{"infos":')) {
-    infos = msg['infos'];
-    for(let i=0; i<infos.length; i++) {
-      var tr = document.getElementById(infos[i]['info_hash']);
-      tr.getElementsByClassName("uploading")[0].innerHTML = bytes_to_Size(infos[i]['upload_speed']) + "/s";
-      tr.getElementsByClassName("seeders")[0].innerHTML = infos[i]['seeders'];
-      tr.getElementsByClassName("leechers")[0].innerHTML = infos[i]['leechers'];
-    }
-  } else if (e.data.startsWith('{"removed":')) { document.getElementById(msg['removed']).remove(e); }
-}*/
 function start_stop() {
   let r = new XMLHttpRequest();
   r.onreadystatechange = function() {
@@ -128,15 +95,38 @@ function send_command(c, h){
   let r = new XMLHttpRequest();
   r.onreadystatechange = function() {
     if (r.readyState == 4 && r.status === 200) {
-      
+      let msg = JSON.parse(r.responseText);
+      if (r.responseText.startsWith('{"active":')) {
+        var tr = document.getElementById(msg['active']);
+        var icon = tr.getElementsByClassName("state")[0];
+        icon.classList.remove('mdi-toggle-switch','mdi-toggle-switch-off');
+        icon.classList.add('mdi-toggle-switch');
+        var link = tr.getElementsByClassName("state-link")[0];
+        link.classList.remove('has-text-success','has-text-light');
+        link.classList.add('has-text-success');
+      } else if (r.responseText.startsWith('{"disabled":')) {
+        var tr = document.getElementById(msg['disabled']);
+        var icon = tr.getElementsByClassName("state")[0];
+        icon.classList.remove('mdi-toggle-switch','mdi-toggle-switch-off');
+        icon.classList.add('mdi-toggle-switch-off');
+        var link = tr.getElementsByClassName("state-link")[0];
+        link.classList.remove('has-text-success','has-text-light');
+        link.classList.add('has-text-light');
+      } else if (r.responseText.startsWith('{"infos":')) {
+        infos = msg['infos'];
+        for(let i=0; i<infos.length; i++) {
+          var tr = document.getElementById(infos[i]['info_hash']);
+          tr.getElementsByClassName("uploading")[0].innerHTML = bytes_to_Size(infos[i]['upload_speed']) + "/s";
+          tr.getElementsByClassName("seeders")[0].innerHTML = infos[i]['seeders'];
+          tr.getElementsByClassName("leechers")[0].innerHTML = infos[i]['leechers'];
+        }
+      } else if (r.responseText.startsWith('{"removed":')) { document.getElementById(msg['removed']).remove(); }
     }
   }
   r.open('POST', '/command', true);
   r.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-  r.send('command:'+c+'&infohash='+h);
-  r.send();
+  r.send('command='+c+'&infohash='+h);
 }
-function refresh() {socket.send("refresh");}
 function toggle(h) {send_command("switch", h);}
 function remove(h) {if(confirm("Do you really want to delete this torrent?\nIt will be removed from the server")) send_command("remove", h);}
 function retracker(h, trackers) {
@@ -238,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(t1['name'].toLowerCase() > t2['name'].toLowerCase()) return 1;
       });
       for(let i=0; i<torrents.length; i++) {
-        console.log(torrents[i]);
+        //console.log(torrents[i]);
         tr=document.createElement('tr');
         tr.setAttribute('id', torrents[i]['info_hash']);
         tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-file-multiple"></i></a> ') +torrents[i]['name']+ '</td><td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
