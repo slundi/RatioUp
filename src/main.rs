@@ -1,12 +1,10 @@
 #![allow(non_snake_case)]
 
 #[macro_use] extern crate serde_derive;
-
 extern crate rand;
-extern crate clap;
 extern crate lazy_static;
 
-use clap::{Arg, value_t};
+use clap::Parser;
 use serde_json::{json};
 use std::{time::Duration};
 use std::io::{Read, Write};
@@ -216,6 +214,19 @@ async fn process_user_command(params: web::Form<CommandParams>) -> HttpResponse 
     }
 }*/
 
+#[derive(Parser, Debug, Clone)]
+#[clap(author="Sébastien L", version="1.0", about="A tool to cheat on your various tracker ratios", long_about = None)]
+struct Args {
+    /// Path to the config file. It'll be generated if it does not exists
+    #[clap(short='c', long, default_value="config.json", help="Path to the config file. It'll be generated if it does not exists")] config: String,
+    /// Directory where torrents are saved
+    #[clap(short='d', long="dir", default_value="./torrents", help="Directory where torrents are saved")] directory: String,
+    /// Sets HTTP web port
+    #[clap(short='p', long, default_value="8070", help="Sets HTTP web port")] port: u16,
+    /// Set a custom web root (ex: / or /ratio-up/
+    #[clap(long="root", default_value="/", help="Set a custom web root (ex: / or /ratio-up/")] web_root: String,
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let subscriber = FmtSubscriber::builder()
@@ -223,20 +234,11 @@ async fn main() -> std::io::Result<()> {
         .with_max_level(Level::INFO).finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
     //parse command line
-    let matches = clap::App::new("RatioUp")
-                          .arg(Arg::with_name("WEB_ROOT").long("root")
-                               .help("Set a custom web root (ex: / or /ratio-up/").default_value("/").takes_value(true))
-                          .arg(Arg::with_name("PORT").short("p").long("port")
-                               .help("Sets HTTP web port").default_value("7070").takes_value(true))
-                          .arg(Arg::with_name("CONFIG").short("c").long("config")
-                               .help("Path to the config file. It'll be generated if it does not exists").default_value("config.json").takes_value(true))
-                          .arg(Arg::with_name("DIRECTORY").short("d").long("dir")
-                               .help("Directory where torrents are saved").default_value("./torrents").takes_value(true))
-                          .get_matches();
-    let port = value_t!(matches, "PORT", u16).unwrap_or_else(|e| {error!("Server port is not defined"); e.exit()});
-    let root=value_t!(matches, "WEB_ROOT", String).unwrap_or_else(|e| {error!("Web root is not defined"); e.exit()});
-    let config = value_t!(matches, "CONFIG", String).unwrap_or_else(|e| {error!("Config file is not defined"); e.exit()});
-    let directory = value_t!(matches, "DIRECTORY", String).unwrap_or_else(|e| {error!("Config file is not defined"); e.exit()});
+    let args: Args = Args::parse();
+    let config = args.config;
+    let directory = args.directory;
+    let web_root = args.web_root;
+    let port = args.port;
     if !std::path::Path::new(&config).is_file() {config::write_default(config);}
     if !std::path::Path::new(&directory).is_dir() {
         std::fs::create_dir_all(&directory).unwrap_or_else(|_e| {error!("Cannot create torrent folder directory(ies)");});
@@ -256,8 +258,8 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {App::new()
         .wrap(middleware::Logger::default())
         .service(toggle_active).service(get_config).service(get_torrents).service(receive_files).service(process_user_command)
-        .service(Files::new(&root, "static/").index_file("index.html"))})
-        .bind(format!("127.0.0.1:{}",port))?.system_exit().run().await
+        .service(Files::new(&web_root, "static/").index_file("index.html"))})
+        .bind(format!("127.0.0.1:{}", port))?.system_exit().run().await
 }
 
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed
