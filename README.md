@@ -35,7 +35,7 @@ Arguments are:
 |-----------------|---------------|--------------------------------------------------------------------------|
 | `c` or `config` | `config.json` | Path to the JSON configuration file                                      |
 | `d` or `dir`    | `./torrents`  | Path to the directory where torrents are saved (without trailing slash)  |
-| `p` or `port`   | `7070`        | Web server port                                                          |
+| `p` or `port`   | `8070`        | Web server port                                                          |
 | `root`          | `/`           | Web root (ie: <http://127.0.0.1:8070/ROOT/>)                             |
 
 ## Configuration
@@ -63,7 +63,7 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
 - [ ] Announce at the correct interval or after 30 minutes if we are unable to parse the tracker response (sometimes there is an utf8 string, sometimes it is binary data)
 - [ ] Fix response parsing: MalformedBencode("Input contains invalid UTF-8."), MalformedResponse("peers" does not map to a dict or a string of bytes.")
-- [ ] Docker image
+- [ ] Docker image, seems OK, further testing required
 - [ ] Decrease torrent speeds from global download and upload speeds
 
 ## Roadmap
@@ -73,3 +73,4 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 - [ ] Improve UI
 - [ ] Retracker torrents
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
+- [ ] Publish on [DockerHub](https://hub.docker.com/)
