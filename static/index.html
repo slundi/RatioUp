@@ -225,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   rc.open('GET', '/config');
   rc.send();
-  load_torrents();
+  setInterval(load_torrents, 5000);
 });
 function load_torrents(){
   let r = new XMLHttpRequest();
