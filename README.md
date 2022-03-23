@@ -61,14 +61,14 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
 ## Todo
 
-- [ ] UI: File explorer when the torrent has multiple files
-- [ ] Announce at the correct interval
+- [ ] Announce at the correct interval or after 30 minutes if we are unable to parse the tracker response (sometimes there is an utf8 string, sometimes it is binary data)
 - [ ] Fix response parsing: MalformedBencode("Input contains invalid UTF-8."), MalformedResponse("peers" does not map to a dict or a string of bytes.")
 - [ ] Docker image
+- [ ] Decrease torrent speeds from global download and upload speeds
 
 ## Roadmap
 
 - [ ] Torrents with multiple trackers?
 - [ ] Improve UI
-- [ ] Retracker torrents, and download torrents
-- [ ] Further testings (I use rtorrent and qBittorrent, other clients may not work properly)
+- [ ] Retracker torrents
+- [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)

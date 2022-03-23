@@ -65,6 +65,13 @@
     </div>
     <button class="modal-close is-large" aria-label="close"></button>
   </div>
+  <div class="modal" id="files"><div class="modal-background"></div>
+    <div class="modal-content">
+      <h5>Files</h5>
+      <table class="table is-striped is-narrow is-fullwidth"><thead><tr><td>Path</td><td class="c2"><i class="mdi mdi-harddisk"></i> Size</td></tr></thead><tbody id="paths"></tbody></table>
+    </div>
+    <button class="modal-close is-large" aria-label="close"></button>
+  </div>
 
 <!--Icons to display on the torrent file browser (future feature): mdi-folder-multiple mdi-folder mdi-folder-open mdi-grid (chunks) mdi-information-->
   <div style="font-size: small; text-align: center;"><a href="https://github.com/slundi/RatioUp" target="_blank"><i class="mdi mdi-github"></i> RatioUp on GitHub</a></div>
@@ -204,6 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const e = event || window.event;
     if (e.keyCode === 27) {closeAllModals();}// Escape key
   });
+  //load config
   let rc = new XMLHttpRequest();
   rc.onreadystatechange = function() {
     if (rc.readyState == 4 && rc.status === 200) {
@@ -217,10 +225,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   rc.open('GET', '/config');
   rc.send();
-  let rt = new XMLHttpRequest();
-  rt.onreadystatechange = function() {
-    if (rt.readyState == 4 && rt.status === 200) {
-      let msg = JSON.parse(rt.responseText);
+  load_torrents();
+});
+function load_torrents(){
+  let r = new XMLHttpRequest();
+  r.onreadystatechange = function() {
+    if (r.readyState == 4 && r.status === 200) {
+      let msg = JSON.parse(r.responseText);
       tbody = document.getElementById("content");
       tbody.innerHTML = "";
       torrents = msg['torrents'].sort(function(t1, t2) { //sort torrents by name
@@ -243,11 +254,24 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   }
-  rt.open('GET', '/torrents');
-  rt.send();
-});
-//TODO: onload, load config and torrents
-
+  r.open('GET', '/torrents');
+  r.send();
+}
+function files(hash){
+  for(let i=0; i<torrents.length; i++){
+    if(torrents[i]['info_hash']==hash){
+      let e=document.getElementById('files');
+      e.classList.add('is-active');
+      let table=document.getElementById('paths');
+      for(let j=0; j<torrents[i]['files'].length; j++){
+        tr=document.createElement('tr');
+        tr.innerHTML='<tr><td>'+torrents[i]['files'][j]['path'].join('/')+'</td><td  class="has-text-right">'+bytes_to_Size(torrents[i]['files'][j]['length'])+'</td></tr>';
+        table.append(tr);
+      }
+      break;
+    }
+  }
+}
 </script>
 <script src="js/bulma-toast.min.js" async></script>
 </body>
