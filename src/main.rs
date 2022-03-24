@@ -86,9 +86,11 @@ impl Scheduler {
                     t.leechers = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {0};
                     let x = RE_INTERVAL.captures(&rawdata);
                     let interval: u64 = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {120};
-                    t.next_upload_speed   = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate);
                     info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s", t.seeders, t.leechers, interval);
                     if code != StatusCode::OK {info!("\tResponse: code={}\tdata={:?}", code, response);}
+                    if event != torrent::EVENT_STOPPED {return;}
+                    t.uploaded += (interval as usize) * (t.next_upload_speed as usize);
+                    t.next_upload_speed   = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate);
                     if c.min_download_rate>0 && c.max_download_rate>0 {t.next_download_speed = rand::thread_rng().gen_range(c.min_download_rate..c.max_download_rate);}
                     if t.length < t.downloaded + (t.next_download_speed as usize * interval as usize) { //compute next interval to for an EVENT_COMPLETED
                         let t: u64 = (t.length - t.downloaded).div_euclid(t.next_download_speed as usize) as u64;
@@ -209,7 +211,7 @@ async fn process_user_command(params: web::Form<CommandParams>) -> HttpResponse 
 }*/
 
 #[derive(Parser, Debug, Clone)]
-#[clap(author="Sébastien L", version="1.0", about="A tool to cheat on your various tracker ratios", long_about = None)]
+#[clap(author="Sébastien L", version, about="A tool to cheat on your various tracker ratios", long_about = None)]
 struct Args {
     /// Path to the config file. It'll be generated if it does not exists
     #[clap(short='c', long, default_value="config.json", help="Path to the config file. It'll be generated if it does not exists")] config: String,

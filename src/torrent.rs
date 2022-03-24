@@ -185,6 +185,8 @@ pub struct BasicTorrent {
     pub active: bool,
     /// If we have to virtually download the torrent first, it is the downloaded size in bytes
     pub downloaded: usize,
+    /// Total of fake uploaded data since the start of RatioUp
+    pub uploaded: usize,
     /// Last announce to the tracker
     #[serde(skip_serializing)] pub last_announce: std::time::Instant,
     /// URL encoded hash thet is used to build the tracker query
@@ -237,7 +239,7 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
     let size = torrent.total_size();
     let mut t= BasicTorrent {path: path, name: torrent.info.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
         comment: String::new(), active: true, length: size, created_by: String::new(), last_announce: std::time::Instant::now(),
-        info_hash: hash, piece_length: torrent.info.piece_length as usize, private: private, files: None, downloaded: size,
+        info_hash: hash, piece_length: torrent.info.piece_length as usize, private: private, files: None, downloaded: size, uploaded: 0,
         seeders: 0, leechers: 0, next_upload_speed: 0, next_download_speed: 0};
     t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
     if torrent.info.files.is_some() {
