@@ -92,7 +92,7 @@ impl Scheduler {
                     let interval: u64 = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {120};
                     t.next_upload_speed   = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate);
                     info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s", t.seeders, t.leechers, interval);
-                    info!("\tResponse: {}/{}\t{}   {:?}", bytes.len(), 1024, code, response);
+                    //info!("\tResponse: {}/{}\t{}   {:?}", bytes.len(), 1024, code, response);
                     if c.min_download_rate>0 && c.max_download_rate>0 {t.next_download_speed = rand::thread_rng().gen_range(c.min_download_rate..c.max_download_rate);}
                     if t.length < t.downloaded + (t.next_download_speed as usize * interval as usize) { //compute next interval to for an EVENT_COMPLETED
                         let t: u64 = (t.length - t.downloaded).div_euclid(t.next_download_speed as usize) as u64;
@@ -163,7 +163,7 @@ struct CommandParams {
 }
 #[post("/command")]
 async fn process_user_command(params: web::Form<CommandParams>) -> HttpResponse {
-    info!("Processing user command");
+    info!("Processing user command: {}", params.command);
     if params.command.to_lowercase() == "switch" && params.infohash != "" { //enable disable torrent
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         for t in list {

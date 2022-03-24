@@ -153,7 +153,7 @@ impl Config {
         if self.accept != "" {req = req.set("accept", &self.accept);}
         if self.accept_encoding != "" {req = req.set("accept-encoding", &self.accept_encoding);}
         if self.accept_language != "" {req = req.set("accept-language", &self.accept_language);}
-        return req;
+        return req.timeout(std::time::Duration::from_secs(90));
     }
 }
 
