@@ -12,10 +12,7 @@ use actix::prelude::*;
 use actix_multipart::Multipart;
 use actix_web::{
     get, post,
-    http::{
-        header::{self, ContentType},
-        Method, StatusCode,
-    },
+    http::{header::ContentType, StatusCode, },
     middleware, web, App, HttpResponse, HttpServer, Result,
 };
 use futures_util::{TryStreamExt as _};
@@ -32,8 +29,7 @@ mod algorithm;
 mod config;
 mod torrent;
 
-const TORRENT_INFO_INTERVAL: Duration = Duration::from_secs(120);
-//const DEFAULT_ANNOUNCE_INTERVAL: Duration = Duration::from_secs(1800); //1800s = 30min
+const TORRENT_INFO_INTERVAL: Duration = Duration::from_secs(1800); //1800s = 30min
 
 lazy_static! {
     static ref CONFIG: RwLock<config::Config> = RwLock::new(config::get_config("config.json"));
@@ -72,7 +68,7 @@ impl Scheduler {
                     let response = serde_bencode::de::from_bytes::<torrent::FailureTrackerResponse>(&bytes.clone());
                     if response.is_ok() {
                         warn!("Announce error from the tracker: {}", response.unwrap().reason);
-                        ctx.run_later(Duration::from_secs(1800), move |this, ctx| { this.announce(ctx, torrent::EVENT_NONE); });
+                        ctx.run_later(TORRENT_INFO_INTERVAL, move |this, ctx| { this.announce(ctx, torrent::EVENT_NONE); });
                         continue;
                     }
                     let rawdata = String::from_utf8_lossy(&bytes);
@@ -92,7 +88,7 @@ impl Scheduler {
                     let interval: u64 = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {120};
                     t.next_upload_speed   = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate);
                     info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s", t.seeders, t.leechers, interval);
-                    //info!("\tResponse: {}/{}\t{}   {:?}", bytes.len(), 1024, code, response);
+                    if code != StatusCode::OK {info!("\tResponse: code={}\tdata={:?}", code, response);}
                     if c.min_download_rate>0 && c.max_download_rate>0 {t.next_download_speed = rand::thread_rng().gen_range(c.min_download_rate..c.max_download_rate);}
                     if t.length < t.downloaded + (t.next_download_speed as usize * interval as usize) { //compute next interval to for an EVENT_COMPLETED
                         let t: u64 = (t.length - t.downloaded).div_euclid(t.next_download_speed as usize) as u64;

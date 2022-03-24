@@ -76,7 +76,7 @@ pub enum TrackerResponse {
     }
 }
 
-pub fn from_response(data: Vec<u8>, encoding: &str) -> Result<TrackerResponse, serde_bencode::Error> {
+pub fn _from_response(data: Vec<u8>, _encoding: &str) -> Result<TrackerResponse, serde_bencode::Error> {
     return serde_bencode::de::from_bytes::<TrackerResponse>(&data);
 }
 
@@ -125,7 +125,7 @@ impl Torrent {
     pub fn files(&self) -> &Option<Vec<File>> {
         &self.info.files
     }
-    pub fn num_files(&self) -> usize {
+    pub fn _num_files(&self) -> usize {
         match self.files() {
             Some(f) => f.len(),
             None => 1,
