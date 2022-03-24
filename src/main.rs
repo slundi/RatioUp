@@ -79,6 +79,7 @@ impl Scheduler {
                         static ref RE_INCOMPLETE: Regex = Regex::new("10:incompletei(\\d+)e").unwrap();
                         static ref RE_INTERVAL:   Regex = Regex::new("8:intervali(\\d+)e").unwrap();
                         //static ref RE_MIN_INTERVAL:   Regex = Regex::new("12:min intervali(\\d+)e").unwrap();
+                        //TODO: get torrent_id?
                     }
                     let x = RE_COMPLETE.captures(&rawdata);
                     t.seeders = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {0};
@@ -162,16 +163,7 @@ struct CommandParams {
 #[post("/command")]
 async fn process_user_command(params: web::Form<CommandParams>) -> HttpResponse {
     info!("Processing user command: {}", params.command);
-    if params.command.to_lowercase() == "switch" && params.infohash != "" { //enable disable torrent
-        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-        for t in list {
-            if t.info_hash == params.infohash {
-                t.active = !t.active;
-                if t.active {return HttpResponse::build(StatusCode::OK).content_type(ContentType::json()).body(format!("{{\"active\":\"{}\"}}", params.infohash));}
-                else        {return HttpResponse::build(StatusCode::OK).content_type(ContentType::json()).body(format!("{{\"disabled\":\"{}\"}}", params.infohash));}
-            }
-        }
-    } else if params.command.to_lowercase() == "remove" && params.infohash != "" { //enable disable torrent
+    if params.command.to_lowercase() == "remove" && params.infohash != "" { //enable disable torrent
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         for i in 0..list.len() {
             if list[i].info_hash == params.infohash {
@@ -269,8 +261,6 @@ fn add_torrent(path: String) {
         if t.is_ok() {
             let mut t = torrent::from_torrent(t.unwrap(), path);
             //enable seeding on public torrents depending on the config value of seed_public_torrent
-            if c.seed_public_torrent && !t.private {t.active = true;}
-            else {t.active = false;}
             //download torrent if download speeds are set
             if c.min_download_rate > 0 && c.max_download_rate > 0 {t.downloaded = 0;} else {t.downloaded = t.length;}
             for bt in list.clone() { if bt.info_hash == t.info_hash {

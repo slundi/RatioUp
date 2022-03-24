@@ -5,7 +5,5 @@
     "min_download_rate": 0,
     "max_download_rate": 0,
     "numwant": 200,
-    "numwant_on_stop": 0,
-    "seed_if_zero_leecher": false,
-    "seed_public_torrent": false
+    "numwant_on_stop": 0
 }

@@ -78,7 +78,6 @@
 </div>
 <script>
 var torrents = [];
-var seed_if_zero_leecher=false;
 function start_stop() {
   let r = new XMLHttpRequest();
   r.onreadystatechange = function() {
@@ -103,23 +102,7 @@ function send_command(c, h){
   r.onreadystatechange = function() {
     if (r.readyState == 4 && r.status === 200) {
       let msg = JSON.parse(r.responseText);
-      if (r.responseText.startsWith('{"active":')) {
-        var tr = document.getElementById(msg['active']);
-        var icon = tr.getElementsByClassName("state")[0];
-        icon.classList.remove('mdi-toggle-switch','mdi-toggle-switch-off');
-        icon.classList.add('mdi-toggle-switch');
-        var link = tr.getElementsByClassName("state-link")[0];
-        link.classList.remove('has-text-success','has-text-light');
-        link.classList.add('has-text-success');
-      } else if (r.responseText.startsWith('{"disabled":')) {
-        var tr = document.getElementById(msg['disabled']);
-        var icon = tr.getElementsByClassName("state")[0];
-        icon.classList.remove('mdi-toggle-switch','mdi-toggle-switch-off');
-        icon.classList.add('mdi-toggle-switch-off');
-        var link = tr.getElementsByClassName("state-link")[0];
-        link.classList.remove('has-text-success','has-text-light');
-        link.classList.add('has-text-light');
-      } else if (r.responseText.startsWith('{"infos":')) {
+      if (r.responseText.startsWith('{"infos":')) {
         infos = msg['infos'];
         for(let i=0; i<infos.length; i++) {
           var tr = document.getElementById(infos[i]['info_hash']);
@@ -134,7 +117,6 @@ function send_command(c, h){
   r.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
   r.send('command='+c+'&infohash='+h);
 }
-function toggle(h) {send_command("switch", h);}
 function remove(h) {if(confirm("Do you really want to delete this torrent?\nIt will be removed from the server")) send_command("remove", h);}
 function retracker(h, trackers) {
   var e=document.getElementById('retracker');
@@ -219,8 +201,6 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById("client").innerText=msg['config']['client'];
       document.getElementById("min_upload").innerText=bytes_to_Size(msg['config']['min_upload_rate']);
       document.getElementById("max_upload").innerText=bytes_to_Size(msg['config']['max_upload_rate']);
-      let s=document.getElementById("toggle_seed_0_leecher");
-      seed_if_zero_leecher=String(msg['config']['seed_if_zero_leecher'])=="true";
     }
   }
   rc.open('GET', '/config');
@@ -247,8 +227,7 @@ function load_torrents(){
                     + '<td class="has-text-right seeders">'+torrents[i]['seeders']+'</td>'
                     + '<td class="has-text-right leechers">'+torrents[i]['leechers']+'</td>'
                     + '<td class="has-text-centered"></td>'
-                    + '<td><a href="javascript:toggle(\''+torrents[i]['info_hash']+'\')" class="state-link has-text-'+(torrents[i]['active']?'success':'light')+'"><i class="mdi mdi-toggle-switch'+(torrents[i]['active']?'':'-off')+' state"></i></a> '
-                        + '<!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
+                    + '<td><!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
                         + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
         tbody.append(tr);
       }

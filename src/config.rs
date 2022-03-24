@@ -35,8 +35,6 @@ pub struct Config {
     pub max_upload_rate: u32, //in byte
     pub min_download_rate: u32, //in byte
     pub max_download_rate: u32, //in byte
-    pub seed_if_zero_leecher: bool,
-    pub seed_public_torrent: bool,
     //pub simultaneous_seed: u16, //useful ?
 
     //Client configuration
@@ -88,7 +86,6 @@ impl Config {
     fn default() -> Self { Config {
         min_upload_rate: 8*1024, max_upload_rate: 2048*1024,
         min_download_rate: 8*1024, max_download_rate: 16*1024*1024,
-        seed_if_zero_leecher: false, seed_public_torrent: false,
         //simultaneous_seed:5,
         client: "qbittorrent-4.3.3".to_owned(),
         port: rand::thread_rng().gen_range(49152..65534),
@@ -169,7 +166,6 @@ pub fn get_config(path: &str) -> Config {
     cfg.max_upload_rate      = v["max_upload_rate"].as_u64().expect("Cannot get the min_upload_rate in config.json") as u32;
     cfg.min_download_rate    = v["min_download_rate"].as_u64().expect("Cannot get the min_download_rate in config.json") as u32;
     cfg.max_download_rate    = v["max_download_rate"].as_u64().expect("Cannot get the max_download_rate in config.json") as u32;
-    cfg.seed_if_zero_leecher = v["seed_if_zero_leecher"].as_bool().expect("Cannot get the seed_if_zero_leecher in config.json");
     cfg.client               = v["client"].as_str().expect("Cannot get the client in config.json").to_owned();
     cfg.num_want             = v["numwant"].as_u64().expect("Cannot get numwant in config.json") as u16;
     cfg.num_want_on_stop     = v["numwant_on_stop"].as_u64().expect("Cannot get numwant_on_stop in config.json") as u16;
@@ -271,7 +267,6 @@ mod tests {
         let cfg = get_config(&path);
         assert_eq!(cfg.min_upload_rate, 8*1024);
         assert_eq!(cfg.max_upload_rate, 2048*2048);
-        assert_eq!(cfg.seed_if_zero_leecher, true);
         //assert_eq!(cfg.simultaneous_seed, 5);
         assert_eq!(cfg.client, String::from("qbittorrent-4.3.3"));
     }

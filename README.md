@@ -50,9 +50,7 @@ Here is an example of the config.json:
     "min_download_rate": 0,
     "max_download_rate": 0,
     "numwant": 100,
-    "numwant_on_stop": 0,
-    "seed_if_zero_leecher": false,
-    "seed_public_torrent": false
+    "numwant_on_stop": 0
 }
 ```
 
@@ -64,6 +62,7 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 - [ ] Docker image, seems OK, further testing required
 - [ ] Decrease torrent speeds from global download and upload speeds
 - [ ] Display session upload (global & per torrent)
+- [ ] Do not seed if zero leechers, do not download if zero seeders and leechers. It is to avoid bans
 
 ## Roadmap
 
