@@ -123,11 +123,7 @@ function retracker(h, trackers) {
   e.classList.add('is-active');
   //TODO: socket.send("{\"retracker\":\""+h+"\",\"trackers\":\""+trackers+"\"}");
 }
-function bytes_to_Size(bytes){
-  if(bytes==0)return '0 B';
-  var i=parseInt(Math.floor(Math.log(bytes)/Math.log(1024)));
-  return Math.round(bytes/Math.pow(1024, i), 2)+' '+['B', 'KB', 'MB', 'GB', 'TB'][i];
-}
+function bytes_to_Size(a,b=1,k=1024){with(Math){let d=floor(log(a)/log(k));return 0==a?"0 Bytes":parseFloat((a/pow(k,d)).toFixed(max(0,b)))+" "+["Bytes","KB","MB","GB","TB","PB","EB","ZB","YB"][d]}}
 ['dragenter', 'dragover'].forEach(event_name=>
 document.addEventListener(event_name, function(e){e.preventDefault();document.getElementById("dropoverlay").style.display="block";}, false));
 ['dragleave', 'drop'].forEach(event_name=>
@@ -222,13 +218,14 @@ function load_torrents(){
         //console.log(torrents[i]);
         tr=document.createElement('tr');
         tr.setAttribute('id', torrents[i]['info_hash']);
-        tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-file-multiple"></i></a> ') +torrents[i]['name']+ '</td><td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
+        tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-folder"></i></a> ') +torrents[i]['name']+ '</td>'
+                    + '<td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
                     + '<td class="has-text-right uploading">'+bytes_to_Size(torrents[i]['next_upload_speed'])+'/s</td>'
                     + '<td class="has-text-right seeders">'+torrents[i]['seeders']+'</td>'
                     + '<td class="has-text-right leechers">'+torrents[i]['leechers']+'</td>'
                     + '<td class="has-text-centered"></td>'
                     + '<td><!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
-                        + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
+                    + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
         tbody.append(tr);
       }
     }
