@@ -7,10 +7,6 @@
 <link rel="stylesheet" href="css/bulma-dark.min.css"/>
 <link rel="stylesheet" href="css/materialdesignicons.min.css"/>
 <style>
-.c1{width:5em;}
-.c2{width:7em;}
-.c3{width:8em;}
-.vb {margin-top: auto;}
 #dropoverlay {
   position: absolute;
   display: none;
@@ -20,10 +16,15 @@
   overflow: hidden;
   border: 5px dashed darkorange;
 }
+.box{padding:1.75rem;}
+.column{margin:0px;padding:0px;}
 </style>
 </head><body><div id="dropoverlay"></div>
-<nav class="navbar is-dark">
-  <div class="navbar-brand"><a class="navbar-item is-fixed-top" href="https://github.com/slundi/RatioUp">RatioUp</a></div>
+<nav class="navbar is-fixed-top is-dark">
+  <div class="navbar-brand"><span  class="navbar-item" style="display: inline-block;">
+    <strong>RatioUp</strong><br/>
+    <a href="https://github.com/slundi/RatioUp" target="_blank" title="View sources on GitHub"><i class="mdi mdi-github"></i></a>
+  </span></div>
   <div class="navbar-end">
     <div class="navbar-item file" id="upload_torrent">
       <label class="file-label">
@@ -47,16 +48,7 @@
     <a class="navbar-item" href="javascript:start_stop()" title="Start/stop the service"><i class="mdi mdi-play-circle mdi-36px has-text-success" id="server-status"></i></a>
   </div>
 </nav>
-<div>
-  <table class="table is-striped is-hoverable is-fullwidth"><thead><tr>
-    <th class="vb"><i class="mdi mdi-label"></i> Title</th>
-    <th class="c2 vb"><i class="mdi mdi-harddisk"></i> Size</th>
-    <th class="c3"></th>
-    <th class="vb c1" title="Seeders"><i class="mdi mdi-cloud-upload"></i></th>
-    <th class="vb c1" title="Leechers"><i class="mdi mdi-cloud-download"></i></th>
-    <th class="c2 has-text-centered"></th>
-  </tr></thead><tbody id="content">
-  </tbody></table>
+<div class="container is-fullhd mt-6 pt-6" id="content">
   <div class="modal" id="retracker"><div class="modal-background"></div>
     <div class="modal-content">
       <h5>Retracker</h5>
@@ -84,7 +76,6 @@
   </div>
 
 <!--Icons to display on the torrent file browser (future feature): mdi-folder-multiple mdi-folder mdi-folder-open mdi-grid (chunks) mdi-information-->
-  <div style="font-size: small; text-align: center;"><a href="https://github.com/slundi/RatioUp" target="_blank"><i class="mdi mdi-github"></i> RatioUp on GitHub</a></div>
 </div>
 <script>
 var torrents = [];
@@ -96,11 +87,14 @@ function start_stop() {
       s.classList.remove("mdi-play-circle", "mdi-pause-circle", "has-text-success", "has-text-danger");
       if(r.responseText === "true") {
         s.classList.add("mdi-play-circle", "has-text-success");
-        bulmaToast.toast({ message: '<i class="mdi mdi-check"></i> Server started', type: 'is-success', duration: 3000, position: 'bottom-right' })
+        bulmaToast.toast({ message: '<i class="mdi mdi-check"></i> Server started', type: 'is-success', duration: 3000, position: 'bottom-right' });
+        load_torrents();
       }
       else {
         s.classList.add("mdi-pause-circle", "has-text-danger");
-        bulmaToast.toast({ message: '<i class="mdi mdi-alert"></i> Server stopped', type: 'is-warning', duration: 3000, position: 'bottom-right' })
+        bulmaToast.toast({ message: '<i class="mdi mdi-alert"></i> Server stopped', type: 'is-warning', duration: 3000, position: 'bottom-right' });
+        //TODO: set speeds, seeders/leechers to 0
+        load_torrents(false);
       }
     }
   }
@@ -212,34 +206,34 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   rc.open('GET', '/config');
   rc.send();
-  setInterval(load_torrents, 5000);
+  load_torrents();
+  setInterval(load_torrents, 120000);
 });
-function load_torrents(){
+function load_torrents(a=true){
   let r = new XMLHttpRequest();
   r.onreadystatechange = function() {
     if (r.readyState == 4 && r.status === 200) {
       let msg = JSON.parse(r.responseText);
-      tbody = document.getElementById("content");
-      tbody.innerHTML = "";
+      let list = document.getElementById("content");
+      list.innerHTML = '';
       torrents = msg['torrents'].sort(function(t1, t2) { //sort torrents by name
         if(t1['name'].toLowerCase() < t2['name'].toLowerCase()) return -1;
         if(t1['name'].toLowerCase() > t2['name'].toLowerCase()) return 1;
       });
       let uspeed=0, dspeed=0;
       for(let i=0; i<torrents.length; i++) {
-        uspeed+=torrents[i]['next_upload_speed'];
-        dspeed+=torrents[i]['next_download_speed'];
-        //console.log(torrents[i]);
-        tr=document.createElement('tr');
-        tr.setAttribute('id', torrents[i]['info_hash']);
-        tr.innerHTML = '<td>' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-folder"></i></a> ') +torrents[i]['name']+ '</td>'
-                    + '<td class="has-text-right">' +bytes_to_Size(torrents[i]['length'])+ '</td>'
-                    + '<td class="has-text-right uploading">'+bytes_to_Size(torrents[i]['next_upload_speed'])+'/s</td>'
-                    + '<td class="has-text-right seeders">'+torrents[i]['seeders']+'</td>'
-                    + '<td class="has-text-right leechers">'+torrents[i]['leechers']+'</td>'
-                    + '<td><!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
-                    + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
-        tbody.append(tr);
+        uspeed+=a?torrents[i]['next_upload_speed']:0;
+        dspeed+=a?torrents[i]['next_download_speed']:0;
+        d=document.createElement('div');
+        d.setAttribute('id', torrents[i]['info_hash']);
+        d.setAttribute('class','box');
+        d.innerHTML = '<div class="columns"><div class="column"><h3 class="title is-6">' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-folder"></i></a> ') +torrents[i]['name']+ '</h3></div>'
+                    + '<div class="column is-1 has-text-right"><!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
+                    + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></div></div>'
+                    + '<small class="columns"><div class="column is-3"><i class="mdi mdi-harddisk"></i> ' +bytes_to_Size(torrents[i]['length'])+ '</div>'
+                    + '<div class="column is-2 has-text-info"><i class="mdi mdi-download-network"></i> '+(a?bytes_to_Size(torrents[i]['next_download_speed'])+'/s':'-')+'&nbsp;<span class="tag" title="Leechers"><i class="mdi mdi-cloud-download"></i>&nbsp;'+(a?torrents[i]['leechers']:'-')+'</span></div>'
+                    + '<div class="column is-2 has-text-success"><i class="mdi mdi-upload-network"></i> '+(a?bytes_to_Size(torrents[i]['next_upload_speed'])+'/s':'-')+'&nbsp;<span class="tag" title="Seeders"><i class="mdi mdi-cloud-upload"></i>&nbsp;'+(a?torrents[i]['seeders']:'-')+'</span></div></small>';
+        list.append(d);
       }
       document.getElementById("upload_speed").innerText=uspeed>0?bytes_to_Size(uspeed):'-';dspeed>0?document.getElementById("download_speed").innerText=bytes_to_Size(dspeed):'-';
     }

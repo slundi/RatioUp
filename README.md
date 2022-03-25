@@ -68,7 +68,6 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
 - [ ] Torrents with multiple trackers?
 - [ ] Drop torrent files from the web UI
-- [ ] Improve UI
 - [ ] Retracker torrents
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
 - [ ] Publish on [DockerHub](https://hub.docker.com/)
