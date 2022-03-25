@@ -80,10 +80,6 @@ pub struct Config {
     /// There are currently no guidelines for generating this peer ID. However, one may rightly presume that it must at least be unique for your local machine, 
     /// thus should probably incorporate things like process ID and perhaps a timestamp recorded at startup. See peer_id below for common client encodings of this field.
     #[serde(skip_serializing)] pub peer_id: String,
-    /// Use to sum all torrent download speeds and to stay between min_download_rate and max_download_rate
-    #[serde(skip)] pub current_dowload_speed: usize,
-    /// Use to sum all torrent upload speeds and to stay between min_upload_rate and max_upload_rate
-    #[serde(skip)] pub current_upload_speed: usize,
 }
 
 impl Config {
@@ -123,7 +119,6 @@ impl Config {
         connection: Some(String::from("Close")),
         key: String::new(),
         peer_id: String::new(),
-        current_dowload_speed: 0, current_upload_speed: 0,
     }}
 
     /// Generate the client key, and encode it for HTTP request

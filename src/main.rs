@@ -50,16 +50,31 @@ impl Scheduler {
     fn announce(&self, ctx: &mut Context<Self>, event: &str) {
         let c=&*CONFIG.read().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+        let mut available_download_speed: u32 = c.max_download_rate;
+        let mut available_upload_speed: u32 = c.max_upload_rate;
+        let now = std::time::Instant::now();
+        // send queries to trackers
         for t in list {
             let url = &t.build_urls(event, c.key.clone())[0];
             let req = c.get_http_request(&url);
             let interval = t.announce(event, req);
+            //compute the download and upload speed
+            //TODO: FIXME: do not process torrent where the interval is not finished
+            let mut process = true;
+            //if (t.last_announce.elapsed().as_secs() + t.interval) < now {process = false;}
+            if available_upload_speed>0 && t.leechers > 0 && t.seeders >0 {
+                if process {t.next_upload_speed   = rand::thread_rng().gen_range(c.min_upload_rate..available_upload_speed);}
+                available_upload_speed -= t.next_upload_speed;
+            }
+            if available_download_speed>0 && t.leechers > 0 && t.seeders >0 {
+                if process {t.next_download_speed = rand::thread_rng().gen_range(c.min_download_rate..available_download_speed);}
+                available_download_speed -= t.next_download_speed;
+            }
+            if !process {continue;}
             t.uploaded += (interval as usize) * (t.next_upload_speed as usize);
-            t.next_upload_speed   = rand::thread_rng().gen_range(c.min_upload_rate..c.max_upload_rate);
-            if c.min_download_rate>0 && c.max_download_rate>0 {t.next_download_speed = rand::thread_rng().gen_range(c.min_download_rate..c.max_download_rate);}
             if t.length < t.downloaded + (t.next_download_speed as usize * interval as usize) { //compute next interval to for an EVENT_COMPLETED
                 let t: u64 = (t.length - t.downloaded).div_euclid(t.next_download_speed as usize) as u64;
-                ctx.run_later(Duration::from_secs(t + 5), move |this, ctx| { this.announce(ctx, torrent::EVENT_NONE); });
+                ctx.run_later(Duration::from_secs(t + 5), move |this, ctx| { this.announce(ctx, torrent::EVENT_COMPLETED); });
             } else {ctx.run_later(Duration::from_secs(interval as u64), move |this, ctx| { this.announce(ctx, torrent::EVENT_NONE); });}
         }
     }
@@ -212,6 +227,7 @@ async fn main() -> std::io::Result<()> {
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed
 fn add_torrent(path: String) {
     if path.to_lowercase().ends_with(".torrent") {
+        info!("add_torrent.paths");
         let c=&*CONFIG.read().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         info!("Loading torrent: \t{}", path);

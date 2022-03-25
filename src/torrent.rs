@@ -16,7 +16,7 @@ use sha1::{Digest, Sha1};
 use hex::ToHex;
 
 pub const EVENT_NONE: &str = "";
-//pub const EVENT_COMPLETED: &str = "completed"; //not used because we do not download for now
+pub const EVENT_COMPLETED: &str = "completed"; //not used because we do not download for now
 pub const EVENT_STARTED: &str = "started";
 pub const EVENT_STOPPED: &str = "stopped";
 
@@ -212,6 +212,8 @@ pub struct BasicTorrent {
     pub next_upload_speed: u32,
     /// It is the next download speed that will be announced. It allows to end a complete event earlier than the normal interval, It is also used for UI display.
     pub next_download_speed: u32,
+    /// Current interval after the last annouce
+    #[serde(skip)] pub interval: u64,
     /// Tracker announce URLs built from the config and the torrent. Some variables are still there (key, left, downloaded, uploaded, event)
     #[serde(skip)] pub urls: Vec<String>,
 }
@@ -252,7 +254,6 @@ impl BasicTorrent {
     }
 
     pub fn announce(&mut self, event: &str, request: ureq::Request) -> u64 {
-        let mut interval: u64 = 0;
         match request.call() {
             Ok(resp) => {
                 let code = resp.status();
@@ -272,15 +273,15 @@ impl BasicTorrent {
                 let x = RE_INCOMPLETE.captures(&rawdata);
                 self.leechers = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {0};
                 let x = RE_INTERVAL.captures(&rawdata);
-                interval = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {120};
-                info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s", self.seeders, self.leechers, interval);
+                self.interval = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {TORRENT_INFO_INTERVAL};
+                info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s", self.seeders, self.leechers, self.interval);
                 if code != actix_web::http::StatusCode::OK {info!("\tResponse: code={}\tdata={:?}", code, response);}
                 if event != EVENT_STOPPED {return TORRENT_INFO_INTERVAL;}
             }
             Err(ureq::Error::Status(code, response)) => {warn!("\tUnexpected server response status: {}\t{:?}", code, response); } //the server returned an unexpected status code (such as 400, 500 etc)
             Err(_) => {if event != EVENT_STOPPED {error!("I/O error while announcing");}}
         }
-        return interval;
+        return self.interval;
     }
 }
 
@@ -294,7 +295,7 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
     let mut t= BasicTorrent {path: path, name: torrent.info.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
         comment: String::new(), length: size, created_by: String::new(), last_announce: std::time::Instant::now(), urls: Vec::new(),
         info_hash: hash, piece_length: torrent.info.piece_length as usize, private: private, files: None, downloaded: size, uploaded: 0,
-        seeders: 0, leechers: 0, next_upload_speed: 0, next_download_speed: 0};
+        seeders: 0, leechers: 0, next_upload_speed: 0, next_download_speed: 0, interval: TORRENT_INFO_INTERVAL};
     t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
     if torrent.info.files.is_some() {
         let files = torrent.info.files.unwrap();
