@@ -22,29 +22,39 @@
 }
 </style>
 </head><body><div id="dropoverlay"></div>
+<nav class="navbar is-dark">
+  <div class="navbar-brand"><a class="navbar-item is-fixed-top" href="https://github.com/slundi/RatioUp">RatioUp</a></div>
+  <div class="navbar-end">
+    <div class="navbar-item file" id="upload_torrent">
+      <label class="file-label">
+        <input class="file-input" type="file" name="resume" accept=".torrent" multiple />
+        <span class="file-cta">
+          <span class="file-icon"><i class="mdi mdi-file-plus mdi-24px"></i></span>
+          <span class="file-label">Choose a torrent file…</span>
+        </span>
+      </label>
+    </div>
+    <div class="navbar-item has-text-info" title="Overall download speed">
+      <i class="mdi mdi-download-network mdi-36px"></i>
+      <span style="display: inline-block;"><small id="download_speed" title="Current download speed">-</small><br/><span class="tag" id="download_speeds"></span>
+    </div>
+    <div class="navbar-item has-text-success" title="Overall upload speed">
+      <i class="mdi mdi-upload-network mdi-36px"></i>
+      <span style="display: inline-block;"><small id="upload_speed" title="Current upload speed">-</small><br/><span class="tag" id="upload_speeds"></span>
+      
+    </div>
+    <div class="navbar-item has-text-primary" title="Client software"><i class="mdi mdi-desktop-tower-monitor mdi-24px"></i>&nbsp;<i id="client"></i></div>
+    <a class="navbar-item" href="javascript:start_stop()" title="Start/stop the service"><i class="mdi mdi-play-circle mdi-36px has-text-success" id="server-status"></i></a>
+  </div>
+</nav>
 <div>
   <table class="table is-striped is-hoverable is-fullwidth"><thead><tr>
-    <th class="vb">
-      <div class="file is-right is-small is-dark" id="upload_torrent">
-        <label class="file-label">
-          <input class="file-input" type="file" name="resume" accept=".torrent" multiple />
-          <span class="file-cta">
-            <span class="file-icon"><i class="mdi mdi-file-multiple"></i></span>
-            <span class="file-label">Choose a torrent file…</span>
-          </span>
-        </label>
-      </div>
-      <i class="mdi mdi-label"></i> Title
-    </th>
-    <th class="c2 vb"><br/><i class="mdi mdi-harddisk"></i> Size</th>
-    <th class="c3" title="Current upload speed">
-      <i class="mdi mdi-upload-network" title="Overall upload speed"></i> <strong id="Overall upload speed">123 kB/s</strong>
-      <div style="font-size: small; text-align: center; font-weight: normal;"><i id="min_upload">0 KB</i> - <i id="max_upload">1 KB</i></div>
-    </th>
-    <th class="vb c1" title="Seeders"><br/><i class="mdi mdi-cloud-upload"></i></th>
-    <th class="vb c1" title="Leechers"><br/><i class="mdi mdi-cloud-download"></i></th>
-    <th class="c3"><div style="font-size: small; text-align: center; font-weight: normal;"><i id="client" title="Client software"></i></div><i class="mdi mdi-update"></i> Refresh in</th>
-    <th class="c2 has-text-centered"><a href="javascript:start_stop()" title="Start/stop the service"><i class="mdi mdi-play-circle mdi-24px has-text-success" id="server-status"></i></a></th>
+    <th class="vb"><i class="mdi mdi-label"></i> Title</th>
+    <th class="c2 vb"><i class="mdi mdi-harddisk"></i> Size</th>
+    <th class="c3"></th>
+    <th class="vb c1" title="Seeders"><i class="mdi mdi-cloud-upload"></i></th>
+    <th class="vb c1" title="Leechers"><i class="mdi mdi-cloud-download"></i></th>
+    <th class="c2 has-text-centered"></th>
   </tr></thead><tbody id="content">
   </tbody></table>
   <div class="modal" id="retracker"><div class="modal-background"></div>
@@ -195,8 +205,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (rc.readyState == 4 && rc.status === 200) {
       let msg = JSON.parse(rc.responseText);
       document.getElementById("client").innerText=msg['config']['client'];
-      document.getElementById("min_upload").innerText=bytes_to_Size(msg['config']['min_upload_rate']);
-      document.getElementById("max_upload").innerText=bytes_to_Size(msg['config']['max_upload_rate']);
+      document.getElementById("upload_speeds").innerText=bytes_to_Size(msg['config']['min_upload_rate'])+' - '+bytes_to_Size(msg['config']['max_upload_rate']);
+      if(msg['config']['min_download_rate']===0 && msg['config']['max_download_rate']===0){document.getElementById("download_speeds").innerText='DISABLED';}
+      else{document.getElementById("download_speeds").innerText=bytes_to_Size(msg['config']['min_download_rate'])+' - '+bytes_to_Size(msg['config']['max_download_rate']);}
     }
   }
   rc.open('GET', '/config');
@@ -214,7 +225,10 @@ function load_torrents(){
         if(t1['name'].toLowerCase() < t2['name'].toLowerCase()) return -1;
         if(t1['name'].toLowerCase() > t2['name'].toLowerCase()) return 1;
       });
+      let uspeed=0, dspeed=0;
       for(let i=0; i<torrents.length; i++) {
+        uspeed+=torrents[i]['next_upload_speed'];
+        dspeed+=torrents[i]['next_download_speed'];
         //console.log(torrents[i]);
         tr=document.createElement('tr');
         tr.setAttribute('id', torrents[i]['info_hash']);
@@ -223,11 +237,11 @@ function load_torrents(){
                     + '<td class="has-text-right uploading">'+bytes_to_Size(torrents[i]['next_upload_speed'])+'/s</td>'
                     + '<td class="has-text-right seeders">'+torrents[i]['seeders']+'</td>'
                     + '<td class="has-text-right leechers">'+torrents[i]['leechers']+'</td>'
-                    + '<td class="has-text-centered"></td>'
                     + '<td><!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
                     + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></td>';
         tbody.append(tr);
       }
+      document.getElementById("upload_speed").innerText=uspeed>0?bytes_to_Size(uspeed):'-';dspeed>0?document.getElementById("download_speed").innerText=bytes_to_Size(dspeed):'-';
     }
   }
   r.open('GET', '/torrents');
