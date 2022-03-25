@@ -3,7 +3,12 @@ extern crate serde;
 extern crate serde_bencode;
 extern crate serde_bytes;
 extern crate sha1;
+extern crate lazy_static;
+use std::{io::Read};
+
+use regex::Regex;
 use serde_bytes::ByteBuf;
+use tracing::{info, error, warn};
 use url::form_urlencoded::byte_serialize;
 use serde::Serialize;
 use serde_bencode::ser;
@@ -14,6 +19,16 @@ pub const EVENT_NONE: &str = "";
 //pub const EVENT_COMPLETED: &str = "completed"; //not used because we do not download for now
 pub const EVENT_STARTED: &str = "started";
 pub const EVENT_STOPPED: &str = "stopped";
+
+const TORRENT_INFO_INTERVAL: u64 =1800; //1800s = 30min
+
+lazy_static::lazy_static! {
+    static ref RE_COMPLETE:   Regex = Regex::new("8:completei(\\d+)e").unwrap();
+    static ref RE_INCOMPLETE: Regex = Regex::new("10:incompletei(\\d+)e").unwrap();
+    static ref RE_INTERVAL:   Regex = Regex::new("8:intervali(\\d+)e").unwrap();
+    //static ref RE_MIN_INTERVAL:   Regex = Regex::new("12:min intervali(\\d+)e").unwrap();
+    //TODO: get torrent_id?
+}
 
 /// The tracker responds with "text/plain" document consisting of a bencoded dictionary
 #[derive(Debug, Deserialize, PartialEq, Clone)]
@@ -197,11 +212,26 @@ pub struct BasicTorrent {
     pub next_upload_speed: u32,
     /// It is the next download speed that will be announced. It allows to end a complete event earlier than the normal interval, It is also used for UI display.
     pub next_download_speed: u32,
+    /// Tracker announce URLs built from the config and the torrent. Some variables are still there (key, left, downloaded, uploaded, event)
+    #[serde(skip)] pub urls: Vec<String>,
 }
 
 impl BasicTorrent {
+    /// Called after a torrent is added to RatioUp or when RatioUp started (load torrents)
+    /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
+    pub fn prepare_urls(&mut self, query: String, port: u16, peer_id: String, numwant: u16) {
+        let mut url= String::new();
+        if self.announce.as_ref().is_some() {
+            url = self.announce.clone().unwrap();
+            url.push('?');
+            url.push_str(&query);
+        }
+        url = url.replace("{peerid}", &peer_id).replace("{infohash}", &self.info_hash_urlencoded)
+                 .replace("{numwant}", numwant.to_string().as_str()).replace("{port}", port.to_string().as_str());
+        let _ = &self.urls.push(url);
+    }
     /// Build the announce URLs for the listed trackers in the torrent file. FOR NOW IT DOES NOT HANDLE MULTIPLE URLS!
-    pub fn build_urls(&mut self, query: String, event: &str, peer_id: String, key: String, port: u16, numwant: u16) -> Vec<String> {
+    pub fn build_urls(&mut self, event: &str, key: String) -> Vec<String> {
         tracing::info!("Torrent: {}", self.name);
         //compute downloads and uploads
         let elapsed: usize = if event == EVENT_STARTED {0} else {self.last_announce.elapsed().as_secs() as usize};
@@ -211,20 +241,46 @@ impl BasicTorrent {
         self.downloaded += downloaded;
 
         //build URL list
-        let mut urls = Vec::new();
-        let mut url= String::new();
-        if self.announce.as_ref().is_some() {
-            url = self.announce.clone().unwrap();
-            url.push('?');
-            url.push_str(&query);
-        }
-        url = url.replace("{peerid}", &peer_id).replace("{infohash}", &self.info_hash_urlencoded).replace("{key}", &key)
+        let mut urls: Vec<String> = Vec::new();
+        let url = self.urls[0].replace("{infohash}", &self.info_hash_urlencoded).replace("{key}", &key)
                  .replace("{uploaded}", uploaded.to_string().as_str())
                  .replace("{downloaded}", downloaded.to_string().as_str()).replace("{left}", (self.length - self.downloaded).to_string().as_str())
-                 .replace("{event}", event).replace("{numwant}", numwant.to_string().as_str()).replace("{port}", port.to_string().as_str());
+                 .replace("{event}", event);
         tracing::info!("\tDownloaded: {} \t Uploaded: {} \t Annonce at: {}", byte_unit::Byte::from_bytes(downloaded as u128).get_appropriate_unit(true).to_string(), byte_unit::Byte::from_bytes(uploaded as u128).get_appropriate_unit(true).to_string(), url);
         urls.push(url);
         return urls;
+    }
+
+    pub fn announce(&mut self, event: &str, request: ureq::Request) -> u64 {
+        let mut interval: u64 = 0;
+        match request.call() {
+            Ok(resp) => {
+                let code = resp.status();
+                let mut bytes: Vec<u8> = Vec::with_capacity(2048);
+                resp.into_reader().take(1024).read_to_end(&mut bytes).expect("Cannot read response");
+                //we start to check if the tracker has returned an error message, if yes, we will reannounce later
+                let response = serde_bencode::de::from_bytes::<FailureTrackerResponse>(&bytes.clone());
+                if response.is_ok() {
+                    tracing::warn!("Announce error from the tracker: {}", response.unwrap().reason);
+                    return TORRENT_INFO_INTERVAL;
+                }
+                let rawdata = String::from_utf8_lossy(&bytes);
+                info!("RESPONSE: {:?}", rawdata);
+                //dirty map with regex, because binary on response prevent the parsing
+                let x = RE_COMPLETE.captures(&rawdata);
+                self.seeders = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {0};
+                let x = RE_INCOMPLETE.captures(&rawdata);
+                self.leechers = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {0};
+                let x = RE_INTERVAL.captures(&rawdata);
+                interval = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {120};
+                info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s", self.seeders, self.leechers, interval);
+                if code != actix_web::http::StatusCode::OK {info!("\tResponse: code={}\tdata={:?}", code, response);}
+                if event != EVENT_STOPPED {return TORRENT_INFO_INTERVAL;}
+            }
+            Err(ureq::Error::Status(code, response)) => {warn!("\tUnexpected server response status: {}\t{:?}", code, response); } //the server returned an unexpected status code (such as 400, 500 etc)
+            Err(_) => {if event != EVENT_STOPPED {error!("I/O error while announcing");}}
+        }
+        return interval;
     }
 }
 
@@ -236,7 +292,7 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
     let private = if torrent.info.private.is_some() && torrent.info.private == Some(1) {true} else {false};
     let size = torrent.total_size();
     let mut t= BasicTorrent {path: path, name: torrent.info.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
-        comment: String::new(), length: size, created_by: String::new(), last_announce: std::time::Instant::now(),
+        comment: String::new(), length: size, created_by: String::new(), last_announce: std::time::Instant::now(), urls: Vec::new(),
         info_hash: hash, piece_length: torrent.info.piece_length as usize, private: private, files: None, downloaded: size, uploaded: 0,
         seeders: 0, leechers: 0, next_upload_speed: 0, next_download_speed: 0};
     t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
