@@ -57,12 +57,9 @@ Here is an example of the config.json:
 Download and upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes).
 To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
-## Todo
-
-- [x] Docker image, seems OK, further testing required
-
 ## Roadmap
 
+- [ ] Docker Hub multi architectures
 - [ ] Display session upload (global & per torrent)
 - [ ] Torrents with multiple trackers?
 - [ ] Drop torrent files from the web UI
