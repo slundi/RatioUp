@@ -21,15 +21,12 @@ RUN cargo build --release
 
 # second stage.
 FROM alpine
-WORKDIR /app
+WORKDIR /data
 # copy server binary from build stage
-#COPY --from=builder /usr/local/cargo/bin/* /usr/local/bin
 COPY --from=builder /code/target/release/RatioUp /app/RatioUp
 
 LABEL author="Slundi"
-RUN mkdir /app /config
-WORKDIR /config
 # set user to non-root unless root is required for your app
 USER 1001
-EXPOSE 7070
-ENTRYPOINT [ "/app/RatioUp" ]
+EXPOSE 8070
+ENTRYPOINT [ "/app/RatioUp"]
