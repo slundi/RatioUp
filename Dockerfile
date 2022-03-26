@@ -1,4 +1,4 @@
-FROM rust:alpine as builder
+FROM rust:latest as builder
 
 WORKDIR /code
 
