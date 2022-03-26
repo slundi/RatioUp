@@ -2,9 +2,6 @@ FROM rust:latest as builder
 
 WORKDIR /code
 
-#RUN apk add --no-cache build-base
-RUN apk add musl-dev
-
 # Download crates-io index and fetch dependency code.
 # This step avoids needing to spend time on every build downloading the index
 # which can take a long time within the docker context. Docker will cache it.
