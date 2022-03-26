@@ -26,6 +26,8 @@ WORKDIR /data
 COPY --from=builder /code/target/release/RatioUp /app/RatioUp
 
 LABEL author="Slundi"
+LABEL url="https://github.com/slundi/RatioUp"
+LABEL vcs-url="https://github.com/slundi/RatioUp"
 # set user to non-root unless root is required for your app
 USER 1001
 EXPOSE 8070
