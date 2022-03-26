@@ -52,16 +52,17 @@ impl Scheduler {
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         let mut available_download_speed: u32 = c.max_download_rate;
         let mut available_upload_speed: u32 = c.max_upload_rate;
-        let now = std::time::Instant::now();
         // send queries to trackers
         for t in list {
-            let url = &t.build_urls(event, c.key.clone())[0];
-            let req = c.get_http_request(&url);
-            let interval = t.announce(event, req);
+            let mut process = false;
+            let mut interval: u64 = torrent::TORRENT_INFO_INTERVAL;
+            if (t.last_announce.elapsed().as_secs() > t.interval && event == torrent::EVENT_NONE) || event != torrent::EVENT_NONE {
+                let url = &t.build_urls(event, c.key.clone())[0];
+                let req = c.get_http_request(&url);
+                interval = t.announce(event, req);
+                process = true;
+            }
             //compute the download and upload speed
-            //TODO: FIXME: do not process torrent where the interval is not finished
-            let mut process = true;
-            //if (t.last_announce.elapsed().as_secs() + t.interval) < now {process = false;}
             if available_upload_speed>0 && t.leechers > 0 && t.seeders >0 {
                 if process {t.next_upload_speed   = rand::thread_rng().gen_range(c.min_upload_rate..available_upload_speed);}
                 available_upload_speed -= t.next_upload_speed;
@@ -227,7 +228,6 @@ async fn main() -> std::io::Result<()> {
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed
 fn add_torrent(path: String) {
     if path.to_lowercase().ends_with(".torrent") {
-        info!("add_torrent.paths");
         let c=&*CONFIG.read().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         info!("Loading torrent: \t{}", path);
@@ -236,10 +236,9 @@ fn add_torrent(path: String) {
         if t.is_ok() {
             let mut t = torrent::from_torrent(t.unwrap(), path);
             t.prepare_urls(c.query.clone(), c.port, c.peer_id.clone(), c.num_want); //build the static part of the annouce query
-            //enable seeding on public torrents depending on the config value of seed_public_torrent
             //download torrent if download speeds are set
             if c.min_download_rate > 0 && c.max_download_rate > 0 {t.downloaded = 0;} else {t.downloaded = t.length;}
-            for bt in list.clone() { if bt.info_hash == t.info_hash {
+            for i in 0..list.len() {if list[i].info_hash == t.info_hash {
                 info!("Torrent is already in list");
                 return;
             }}

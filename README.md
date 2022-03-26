@@ -59,11 +59,11 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
 ## Todo
 
-- [ ] Docker image, seems OK, further testing required
-- [ ] Display session upload (global & per torrent)
+- [x] Docker image, seems OK, further testing required
 
 ## Roadmap
 
+- [ ] Display session upload (global & per torrent)
 - [ ] Torrents with multiple trackers?
 - [ ] Drop torrent files from the web UI
 - [ ] Retracker torrents
