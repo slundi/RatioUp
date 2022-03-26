@@ -24,12 +24,11 @@ FROM alpine
 WORKDIR /app
 # copy server binary from build stage
 #COPY --from=builder /usr/local/cargo/bin/* /usr/local/bin
-COPY --from=builder /code/target/release/RatioUp RatioUp
+COPY --from=builder /code/target/release/RatioUp /app/RatioUp
 
 LABEL author="Slundi"
 RUN mkdir /app /config
 WORKDIR /config
-COPY --from=builder /usr/local/cargo/bin/RatioUp /app/RatioUp
 # set user to non-root unless root is required for your app
 USER 1001
 EXPOSE 7070
