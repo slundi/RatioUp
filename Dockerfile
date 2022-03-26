@@ -7,7 +7,7 @@ WORKDIR /code
 # which can take a long time within the docker context. Docker will cache it.
 RUN USER=root cargo init
 COPY Cargo.toml Cargo.toml
-RUN cargo fetch
+#RUN cargo fetch
 
 # build dependencies, when my source code changes, this build can be cached, we don't need to compile dependency again.
 COPY src src
