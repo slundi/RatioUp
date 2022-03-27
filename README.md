@@ -13,7 +13,36 @@ RatioUp is not designed to help or encourage you downloading illegal materials !
 
 I am not responsible if you get banned using this tool. However, you can reduce risk by using popular torrents (with many seeders and leechers).
 
-For now, I'm not planning add a security layer because I'll use it on my home lan network. If you want to secure it, use a reverse proxy with **nginx** (and any other web server you ar familiar with) and add a SSL layer and a basic authentication.
+
+## Security
+
+For now, I'm not planning add a security layer because I'll use it on my home lan network. If you want to secure it, you can use a reverse proxy with **nginx** (and any other web server you ar familiar with) and add a SSL layer and a basic authentication. You can also contribute by adding a basic auth.
+
+### Nginx reverse proxy
+
+1. Edit `/etc/nginx/sites-available/ratioup` and set your configuration:
+
+```nginx
+  location / {  #if you change "/" with another path, you must set the web root on the CLI
+    #if you want a basic auth, remove the # of the following 2 lines
+    #auth_basic “Restricted Area”;
+    #auth_basic_user_file /path/to/the/password/file/.my_password_file;
+
+    proxy_pass http://127.0.0.1:8070;
+  }
+```
+
+2. Enable the new site: `sudo ln -s /etc/nginx/sites-available/ratioup /etc/nginx/sites-enabled/ratioup`
+3. Check nginx configuration: `sudo nginx -t`
+4. Reaload nginx with the new configuration: `sudo nginx -s reload` or `sudo systemctl reload nginx` or `sudo service nginx reload` (Debian/Ubuntu) or `sudo /etc/init.d/nginx reload` (CentOS,Fedora/...)
+
+### Basic auth
+
+1. `sudo apt install apache2-utils` or `sudo apt install httpd-tools`
+2. Create a user with and **new file** with `sudo htpasswd -c /path/to/the/password/file/.my_password_file user1`, if the file already exists you just need to remove the `-c`: `sudo htpasswd /path/to/the/password/file/.my_password_file user1`
+3. Check nginx configuration: `sudo nginx -t`
+4. Reaload nginx with the new configuration: `sudo nginx -s reload` or `sudo systemctl reload nginx` or `sudo service nginx reload` (Debian/Ubuntu) or `sudo /etc/init.d/nginx reload` (CentOS,Fedora/...)
+`
 
 ## Deployment
 
@@ -59,6 +88,7 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
 ## Roadmap
 
+- [ ] Handle web root in Docker
 - [ ] Docker Hub multi architectures
 - [ ] Display session upload (global & per torrent)
 - [ ] Torrents with multiple trackers?

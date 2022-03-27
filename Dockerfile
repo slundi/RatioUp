@@ -1,7 +1,7 @@
 FROM rust:latest as builder
 
-RUN apt-get update
-RUN apt-get install -y musl-tools
+#RUN apt-get update
+#RUN apt-get install -y musl-tools
 
 RUN rustc --version &&  rustup --version && cargo --version
 
@@ -10,7 +10,7 @@ WORKDIR /code
 # Download crates-io index and fetch dependency code.
 # This step avoids needing to spend time on every build downloading the index
 # which can take a long time within the docker context. Docker will cache it.
-RUN USER=root cargo init
+#RUN USER=root cargo init
 COPY Cargo.toml Cargo.toml
 #RUN cargo fetch
 
