@@ -1,6 +1,6 @@
 FROM rust:latest as builder
 
-RUN rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl armv7-unknown-linux-musleabi
+RUN rustup target add x86_64-unknown-linux-musl
 
 RUN apt-get update && apt-get install -y musl-tools musl-dev
 
