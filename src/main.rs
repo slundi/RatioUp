@@ -28,6 +28,11 @@ mod algorithm;
 mod config;
 mod torrent;
 
+// Use Jemalloc only for musl-64 bits platforms (https://kerkour.com/rust-small-docker-image)
+#[cfg(all(target_env = "musl", target_pointer_width = "64"))]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 lazy_static! {
     static ref CONFIG: RwLock<config::Config> = RwLock::new(config::get_config("config.json"));
     static ref ACTIVE: RwLock<bool> = RwLock::new(true);

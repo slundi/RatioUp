@@ -88,7 +88,6 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
 ## Roadmap
 
-- [ ] Handle web root in Docker
 - [ ] Docker Hub multi architectures
 - [ ] Display session upload (global & per torrent)
 - [ ] Torrents with multiple trackers?
