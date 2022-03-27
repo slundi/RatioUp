@@ -1,6 +1,6 @@
 FROM rust:latest as builder
 
-RUN rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl armv7-unknown-linux-musleabi
+RUN rustup target add armv7-unknown-linux-musleabi
 
 RUN apt-get update && apt-get install -y musl-tools musl-dev
 
@@ -15,7 +15,7 @@ WORKDIR /code
 COPY ./ .
 
 # build dependencies, when my source code changes, this build can be cached, we don't need to compile dependency again.
-RUN cargo clean && cargo build --target x86_64-unknown-linux-musl --release
+RUN cargo clean && cargo build --target armv7-unknown-linux-musleabi --release
 
 
 # second stage.
