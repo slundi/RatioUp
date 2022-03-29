@@ -1,6 +1,8 @@
 FROM rust:latest as builder
 
-RUN apt-get update && apt-get install -y musl-tools musl-dev
+ARG TARGETPLATFORM
+
+RUN apk add --no-cache musl-tools musl-dev
 
 #RUN rustc --version &&  rustup --version && cargo --version
 
@@ -13,7 +15,19 @@ WORKDIR /code
 COPY ./ /code
 
 # build dependencies, when my source code changes, this build can be cached, we don't need to compile dependency again.
-RUN cargo clean && cargo build --release
+#RUN cargo clean && cargo build --release
+RUN case $TARGETPLATFORM in\
+      linux/amd64)  rust_target="x86_64-unknown-linux-musl";\
+                    tini_static_arch="amd64";;\
+      linux/arm64)  rust_target="aarch64-unknown-linux-musl";\
+                    tini_static_arch="arm64";;\
+      linux/arm/v7) rust_target="armv7-unknown-linux-musleabihf";\
+                    tini_static_arch="armel";;\
+      linux/arm/v6) rust_target="arm-unknown-linux-musleabi";\
+                    tini_static_arch="armel";;\
+      *)            exit 1;;\
+    esac &&\
+    cargo build --target ${rust_target} --release
 
 
 # second stage.
