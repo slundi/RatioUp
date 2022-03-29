@@ -1,7 +1,5 @@
 FROM rust:latest as builder
 
-RUN rustup target add x86_64-unknown-linux-musl
-
 RUN apt-get update && apt-get install -y musl-tools musl-dev
 
 #RUN rustc --version &&  rustup --version && cargo --version
@@ -15,7 +13,7 @@ WORKDIR /code
 COPY ./ /code
 
 # build dependencies, when my source code changes, this build can be cached, we don't need to compile dependency again.
-RUN cargo clean && cargo build --target x86_64-unknown-linux-musl --release
+RUN cargo clean && cargo build --release
 
 
 # second stage.

@@ -52,28 +52,6 @@ jobs:
       uses: docker/build-push-action@v2
       with:
         context: .
-        file: ./Dockerfile
-        #image: ${{ env.IMAGE }}
-        #platforms: ${{ env.PLATFORMS }}
-        platforms: linux/amd64
-        push: ${{ github.event_name != 'pull_request' }}
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-    - name: Build and push
-      uses: docker/build-push-action@v2
-      with:
-        context: .
-        file: ./Dockerfile.aarch64
-        #image: ${{ env.IMAGE }}
-        #platforms: ${{ env.PLATFORMS }}
-        platforms: linux/arm64
-        push: ${{ github.event_name != 'pull_request' }}
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-    - name: Build and push
-      uses: docker/build-push-action@v2
-      with:
-        context: .
         #image: ${{ env.IMAGE }}
         platforms: ${{ env.PLATFORMS }}
         push: ${{ steps.create-docker-image-names.outputs.docker-push }}
