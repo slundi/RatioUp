@@ -2,7 +2,8 @@ FROM --platform=linux/amd64 rust:latest as builder
 
 ARG TARGETPLATFORM
 
-RUN apt update && apt install -y musl-tools musl-dev
+RUN apt update && apt install -y musl-tools
+#RUN rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl armv7-unknown-linux-musleabi armv7-unknown-linux-musleabihf
 
 RUN rustc --version &&  rustup --version && cargo --version
 
@@ -23,6 +24,7 @@ RUN case $TARGETPLATFORM in\
       linux/arm/v6) rust_target="arm-unknown-linux-musleabi";;\
       *)            exit 1;;\
     esac &&\
+    rustup target add ${rust_target} &&\
     cargo build --target ${rust_target} --release
 
 
