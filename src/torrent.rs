@@ -90,9 +90,7 @@ pub enum TrackerResponse {
     }
 }
 
-pub fn _from_response(data: Vec<u8>, _encoding: &str) -> Result<TrackerResponse, serde_bencode::Error> {
-    return serde_bencode::de::from_bytes::<TrackerResponse>(&data);
-}
+pub fn _from_response(data: Vec<u8>, _encoding: &str) -> Result<TrackerResponse, serde_bencode::Error> {serde_bencode::de::from_bytes::<TrackerResponse>(&data)}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Node(String, i64);
@@ -157,7 +155,7 @@ impl Torrent {
     pub fn info_hash(&self) -> Option<Vec<u8>> {
         let info = ser::to_bytes(&self.info);
         if info.is_err() {return None;}
-        return Some(Sha1::digest(&info.unwrap()).to_vec());
+        Some(Sha1::digest(&info.unwrap()).to_vec())
     }
 }
 
@@ -250,7 +248,7 @@ impl BasicTorrent {
         tracing::info!("\tDownloaded: {} \t Uploaded: {}", byte_unit::Byte::from_bytes(downloaded as u128).get_appropriate_unit(true).to_string(), byte_unit::Byte::from_bytes(uploaded as u128).get_appropriate_unit(true).to_string());
         tracing::info!("\tAnnonce at: {}", url);
         urls.push(url);
-        return urls;
+        urls
     }
 
     pub fn announce(&mut self, event: &str, request: ureq::Request) -> u64 {
@@ -285,7 +283,7 @@ impl BasicTorrent {
             }
             Err(_) => {if event != EVENT_STOPPED {tracing::error!("I/O error while announcing");}}
         }
-        return self.interval;
+        self.interval
     }
 }
 
@@ -294,11 +292,11 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
     let hash_bytes = torrent.info_hash().expect("Cannot get torrent info hash");
     let hash = hash_bytes.encode_hex::<String>();
     //let hash = hash_bytes.???;
-    let private = if torrent.info.private.is_some() && torrent.info.private == Some(1) {true} else {false};
+    let private = torrent.info.private.is_some() && torrent.info.private == Some(1);
     let size = torrent.total_size();
-    let mut t= BasicTorrent {path: path, name: torrent.info.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
+    let mut t= BasicTorrent {path, name: torrent.info.name, announce: torrent.announce.clone(), announce_list: torrent.announce_list.clone(), info_hash_urlencoded: String::with_capacity(64),
         comment: String::new(), length: size, created_by: String::new(), last_announce: std::time::Instant::now(), urls: Vec::new(),
-        info_hash: hash, piece_length: torrent.info.piece_length as usize, private: private, files: None, downloaded: size, uploaded: 0,
+        info_hash: hash, piece_length: torrent.info.piece_length as usize, private, files: None, downloaded: size, uploaded: 0,
         seeders: 0, leechers: 0, next_upload_speed: 0, next_download_speed: 0, interval: TORRENT_INFO_INTERVAL};
     t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
     if torrent.info.files.is_some() {
@@ -309,10 +307,10 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         }
         t.files = Some(list);
     }
-    return t;
+    t
 }
 
 pub fn from_file(path: String) -> Result<Torrent, serde_bencode::Error> {
     let data=std::fs::read(path).expect("Cannot read torrent file");
-    return serde_bencode::de::from_bytes::<Torrent>(&data);
+    serde_bencode::de::from_bytes::<Torrent>(&data)
 }

@@ -145,12 +145,12 @@ impl Config {
     /// Get the HTTP request with the bittorrent client headers (user-agent, accept, accept-encoding, accept-language)
     pub fn get_http_request(&self, url: &str) -> ureq::Request {
         let mut agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(60));
-        if self.user_agent != "" {agent = agent.user_agent(&self.user_agent);}
-        let mut req = agent.build().get(&url);
-        if self.accept != "" {req = req.set("accept", &self.accept);}
-        if self.accept_encoding != "" {req = req.set("accept-encoding", &self.accept_encoding);}
-        if self.accept_language != "" {req = req.set("accept-language", &self.accept_language);}
-        return req.timeout(std::time::Duration::from_secs(90));
+        if !self.user_agent.is_empty() {agent = agent.user_agent(&self.user_agent);}
+        let mut req = agent.build().get(url);
+        if !self.accept.is_empty() {req = req.set("accept", &self.accept);}
+        if !self.accept_encoding.is_empty() {req = req.set("accept-encoding", &self.accept_encoding);}
+        if !self.accept_language.is_empty() {req = req.set("accept-language", &self.accept_language);}
+        req.timeout(std::time::Duration::from_secs(90))
     }
 }
 
@@ -228,9 +228,7 @@ pub fn get_config(path: &str) -> Config {
         }
         if v["peerIdGenerator"]["algorithm"].get("prefix").is_some() {cfg.prefix = v["peerIdGenerator"]["algorithm"]["prefix"].as_str().unwrap().to_owned();}
         if v["peerIdGenerator"]["algorithm"].get("pattern").is_some() {cfg.peer_pattern = v["peerIdGenerator"]["algorithm"]["pattern"].as_str().unwrap().to_owned();}
-        if v["peerIdGenerator"]["refreshOn"].is_string() {
-            if v["peerIdGenerator"]["refreshOn"].as_str().unwrap() == "NEVER" {cfg.peer_refresh_on = NEVER;}
-        }
+        if v["peerIdGenerator"]["refreshOn"].is_string() && v["peerIdGenerator"]["refreshOn"].as_str().unwrap() == "NEVER" {cfg.peer_refresh_on = NEVER;}
         if v["peerIdGenerator"]["shouldUrlEncode"].is_boolean() {cfg.should_url_encode = v["peerIdGenerator"]["shouldUrlEncode"].as_bool().unwrap();}
     }
     //URL encoder
@@ -241,7 +239,7 @@ pub fn get_config(path: &str) -> Config {
     //build keys
     cfg.generate_key();
     cfg.generate_peer_id();
-    return cfg;
+    cfg
 }
 
 /// Write a default configuration file from the given path. This fonction is call at the program stratup to generate the first config file if missing.
@@ -259,11 +257,11 @@ mod tests {
     fn test_read_config() {
         let mut d = std::env::temp_dir(); d.push("ratioup.json");
         let path:String = String::from(d.to_str().unwrap());
-        if std::path::Path::new(&path).exists() {assert_eq!(true, std::fs::remove_file(d).is_ok());}
+        if std::path::Path::new(&path).exists() {assert!(std::fs::remove_file(d).is_ok());}
         //create the file for the test
         let mut f : File = std::fs::File::create(std::path::Path::new(&path)).expect("Unable to create file");
-        assert_eq!(true, f.write_all("{\"client\":\"qbittorrent-4.3.3\", \"min_upload_rate\": 8, \"max_upload_rate\": 2048, \"seed_if_zero_leecher\": true, \"simultaneous_seed\": 5}".as_bytes()).is_ok());
-        assert_eq!(true, f.flush().is_ok());
+        assert!(f.write_all("{\"client\":\"qbittorrent-4.3.3\", \"min_upload_rate\": 8, \"max_upload_rate\": 2048, \"seed_if_zero_leecher\": true, \"simultaneous_seed\": 5}".as_bytes()).is_ok());
+        assert!(f.flush().is_ok());
         let cfg = get_config(&path);
         assert_eq!(cfg.min_upload_rate, 8*1024);
         assert_eq!(cfg.max_upload_rate, 2048*2048);

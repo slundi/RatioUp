@@ -61,9 +61,9 @@ impl Scheduler {
         for t in list {
             let mut process = false;
             let mut interval: u64 = torrent::TORRENT_INFO_INTERVAL;
-            if (t.last_announce.elapsed().as_secs() > t.interval && event == torrent::EVENT_NONE) || event != torrent::EVENT_NONE {
+            if !t.last_announce.elapsed().as_secs() <= t.interval {
                 let url = &t.build_urls(event, c.key.clone())[0];
-                let req = c.get_http_request(&url);
+                let req = c.get_http_request(url);
                 interval = t.announce(event, req);
                 process = true;
             }
@@ -143,7 +143,7 @@ struct CommandParams {
 #[post("/command")]
 async fn process_user_command(params: web::Form<CommandParams>) -> HttpResponse {
     info!("Processing user command: {}", params.command);
-    if params.command.to_lowercase() == "remove" && params.infohash != "" { //enable disable torrent
+    if params.command.to_lowercase() == "remove" && !params.infohash.is_empty() { //enable disable torrent
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         for i in 0..list.len() {
             if list[i].info_hash == params.infohash {

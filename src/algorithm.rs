@@ -13,15 +13,14 @@ pub fn hash(length: usize, no_leading_zero: bool, uppercase: Option<bool>) -> St
         if uppercase==None || uppercase.unwrap() {h.push(HASH_SYMBOLS.chars().nth(i+6).unwrap());}
         else {h.push(HASH_SYMBOLS.chars().nth(i).unwrap());}
     }
-    return h;
+    h
 }
 
 /// Generate a string from a regex pattern
 pub fn regex(pattern: String) -> String {
     let mut rng=rand::thread_rng();
     let gen = rand_regex::Regex::compile(&pattern, 64).unwrap();
-    let out = (&mut rng).sample_iter(&gen).nth(64).unwrap();
-    return out;
+    (&mut rng).sample_iter(&gen).nth(64).unwrap()
 }
 
 /// Return a hex string from a random integer between 1 and 2147483647
@@ -44,7 +43,7 @@ pub fn random_pool_with_checksum(length: usize, prefix: &str, characters_pool: &
 
     }
     //out.push_str(&format!("{:x}", ));
-    return out;
+    out
 }
 
 //******************************************* TESTS
@@ -57,26 +56,26 @@ mod tests {
         assert_eq!(hash(8, false, None).len(), 8usize);
         let h=hash(8, true,  None);
         assert_eq!(h.len(), 8usize);
-        assert_eq!(h.chars().nth(0).unwrap()=='0', false);
+        assert!(!h.starts_with('0'));
     }
     #[test]
     fn is_hash_case_ok() {
         let re_uc=Regex::new(r"[A-Z0-9]{64}").unwrap();
         let re_lc=Regex::new(r"[a-z0-9]{64}").unwrap();
-        assert_eq!(re_uc.is_match(&hash(64, false, None)), true);
-        assert_eq!(re_uc.is_match(&hash(64, false, Some(true))), true);
-        assert_eq!(re_lc.is_match(&hash(64, false, Some(false))), true);
+        assert!(re_uc.is_match(&hash(64, false, None)));
+        assert!(re_uc.is_match(&hash(64, false, Some(true))));
+        assert!(re_lc.is_match(&hash(64, false, Some(false))));
     }
     #[test]
     fn is_regex_ok() {
         let mut re=Regex::new("-lt0D60-[\u{0001}-\u{00ff}]{12}").unwrap();
-        assert_eq!(re.is_match(&regex("-lt0D60-[\u{0001}-\u{00ff}]{12}".to_owned())), true);
+        assert!(re.is_match(&regex("-lt0D60-[\u{0001}-\u{00ff}]{12}".to_owned())));
         re=Regex::new("-AZ5750-[a-zA-Z0-9]{12}").unwrap();
-        assert_eq!(re.is_match(&regex("-AZ5750-[a-zA-Z0-9]{12}".to_owned())), true)
+        assert!(re.is_match(&regex("-AZ5750-[a-zA-Z0-9]{12}".to_owned())))
     }
     #[test]
     fn is_digit_range_to_hex_ok() {
         let re=Regex::new(r"[A-Z0-9]+").unwrap();
-        assert_eq!(re.is_match(&digit_range_transformed_to_hex_without_leading_zero()), true);
+        assert!(re.is_match(&digit_range_transformed_to_hex_without_leading_zero()));
     }
 }
