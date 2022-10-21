@@ -88,6 +88,8 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
 ## Roadmap
 
+- [ ] Torrent clients in a separated library
+- [ ] Parse response instead of using REGEX
 - [ ] Docker Hub multi architectures
 - [ ] Display session upload (global & per torrent)
 - [ ] Torrents with multiple trackers?
@@ -95,4 +97,3 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 - [ ] Retracker torrents
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
 - [ ] Publish on [DockerHub](https://hub.docker.com/)
-- [ ] Parse response instead of using REGEX
