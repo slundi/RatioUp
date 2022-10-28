@@ -24,7 +24,6 @@ use lazy_static::lazy_static;
 use uuid::Uuid;
 use rand::Rng;
 
-mod algorithm;
 mod config;
 mod torrent;
 
