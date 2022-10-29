@@ -6,6 +6,7 @@ extern crate sha1;
 extern crate lazy_static;
 use std::{io::Read};
 
+use log::{info, error, warn, debug};
 use regex::Regex;
 use serde_bytes::ByteBuf;
 use url::form_urlencoded::byte_serialize;
@@ -231,7 +232,7 @@ impl BasicTorrent {
     }
     /// Build the announce URLs for the listed trackers in the torrent file. FOR NOW IT DOES NOT HANDLE MULTIPLE URLS!
     pub fn build_urls(&mut self, event: &str, key: String) -> Vec<String> {
-        tracing::info!("Torrent {}: {}", event, self.name);
+        info!("Torrent {}: {}", event, self.name);
         //compute downloads and uploads
         let elapsed: usize = if event == EVENT_STARTED {0} else {self.last_announce.elapsed().as_secs() as usize};
         let uploaded: usize = self.next_upload_speed as usize * elapsed;
@@ -245,8 +246,8 @@ impl BasicTorrent {
                  .replace("{uploaded}", uploaded.to_string().as_str())
                  .replace("{downloaded}", downloaded.to_string().as_str()).replace("{left}", (self.length - self.downloaded).to_string().as_str())
                  .replace("{event}", event);
-        tracing::info!("\tDownloaded: {} \t Uploaded: {}", byte_unit::Byte::from_bytes(downloaded as u128).get_appropriate_unit(true).to_string(), byte_unit::Byte::from_bytes(uploaded as u128).get_appropriate_unit(true).to_string());
-        tracing::info!("\tAnnonce at: {}", url);
+        info!("\tDownloaded: {} \t Uploaded: {}", byte_unit::Byte::from_bytes(downloaded as u128).get_appropriate_unit(true).to_string(), byte_unit::Byte::from_bytes(uploaded as u128).get_appropriate_unit(true).to_string());
+        info!("\tAnnonce at: {}", url);
         urls.push(url);
         urls
     }
@@ -255,17 +256,17 @@ impl BasicTorrent {
         match request.call() {
             Ok(resp) => {
                 let code = resp.status();
-                tracing::info!("\tTime since last announce: {}s \t interval: {}", self.last_announce.elapsed().as_secs(), self.interval);
+                info!("\tTime since last announce: {}s \t interval: {}", self.last_announce.elapsed().as_secs(), self.interval);
                 let mut bytes: Vec<u8> = Vec::with_capacity(2048);
                 resp.into_reader().take(1024).read_to_end(&mut bytes).expect("Cannot read response");
                 //we start to check if the tracker has returned an error message, if yes, we will reannounce later
                 let response = serde_bencode::de::from_bytes::<FailureTrackerResponse>(&bytes.clone());
                 if response.is_ok() {
-                    tracing::warn!("Announce error from the tracker: {}", response.unwrap().reason);
+                    warn!("Announce error from the tracker: {}", response.unwrap().reason);
                     return TORRENT_INFO_INTERVAL;
                 }
                 let rawdata = String::from_utf8_lossy(&bytes);
-                tracing::debug!("\tRESPONSE: {:?}", rawdata);
+                debug!("\tRESPONSE: {:?}", rawdata);
                 //dirty map with regex, because binary on response prevent the parsing
                 let x = RE_COMPLETE.captures(&rawdata);
                 self.seeders = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {0};
@@ -273,15 +274,15 @@ impl BasicTorrent {
                 self.leechers = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {0};
                 let x = RE_INTERVAL.captures(&rawdata);
                 self.interval = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {TORRENT_INFO_INTERVAL};
-                tracing::info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s", self.seeders, self.leechers, self.interval);
-                if code != actix_web::http::StatusCode::OK {tracing::info!("\tResponse: code={}\tdata={:?}", code, response);}
+                info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s", self.seeders, self.leechers, self.interval);
+                if code != actix_web::http::StatusCode::OK {info!("\tResponse: code={}\tdata={:?}", code, response);}
                 if event != EVENT_STOPPED {return TORRENT_INFO_INTERVAL;}
             }
             Err(ureq::Error::Status(code, response)) => { //the server returned an unexpected status code (such as 400, 500 etc)
-                if code == 400 {tracing::warn!("\tBad request (error 400), please check the URL");}
-                else {tracing::warn!("\tUnexpected server response status: {}\t{:?}", code, response);}
+                if code == 400 {warn!("\tBad request (error 400), please check the URL");}
+                else {warn!("\tUnexpected server response status: {}\t{:?}", code, response);}
             }
-            Err(_) => {if event != EVENT_STOPPED {tracing::error!("I/O error while announcing");}}
+            Err(_) => {if event != EVENT_STOPPED {error!("I/O error while announcing");}}
         }
         self.interval
     }

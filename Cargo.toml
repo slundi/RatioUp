@@ -13,6 +13,7 @@ regex = "1.6"
 rand = "0.8"
 lazy_static = "1.4"
 serde = {version = "1", features = ["derive"]}
+serde_json = "1"
 ureq = { version = "2", features = ["charset", "gzip", "brotli"]}
 tokio = {version = "1.21", features=["fs"]}
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
@@ -22,10 +23,10 @@ byte-unit = "4"
 url = "2"
 fake-torrent-client = "*"
 
-#logging
+config = { version = "0.13", features = ["default"] }
+dotenv = "0.15"
 log = "0.4"
-tracing = "*"
-tracing-subscriber = "*"
+simple_logger = "4"
 
 #bittorrent parsing
 serde_bytes = "0.11"

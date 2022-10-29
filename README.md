@@ -52,10 +52,37 @@ docker run -d --name RatioUp --restart unless-stopped -v PATH:/data slundi/ratio
 
 Change the **PATH** in order to keep your configuration.
 
-## Command line interface (CLI)
+## Usage
 
-```shell
-RatioUp -d ~/torrents -c ~/RatioUp.json -p 8070
+Everything is contained in a `.env` file.
+
+```ini
+# Log level (available options are: INFO, WARN, ERROR, DEBUG, TRACE). Default is `INFO`.
+LOG_LEVEL = INFO
+
+# Web serveur configuration
+# HTTP web port
+HTTP_PORT = 8070
+#Custom web root
+#WEB_ROOT = "/ratioup/"
+
+# Client configuration
+CLIENT = Transmission_3_00
+# Torrent port, otherwise it is randomized
+TORRENT_PORT = 56789
+
+# Speeds in bytes
+MIN_UPLOAD_RATE = 
+MAX_UPLOAD_RATE =
+MIN_DOWNLOAD_RATE = 
+MAX_DOWNLOAD_RATE = 
+
+#SIMULTANEOUS_SEEDS = 8
+
+# DIRECTORY WHERE TORRENTS ARE SAVED
+TORRENT_DIR = "./torrents"
+
+
 ```
 
 Arguments are:
