@@ -31,13 +31,13 @@ lazy_static::lazy_static! {
 }
 
 /// The tracker responds with "text/plain" document consisting of a bencoded dictionary
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct FailureTrackerResponse {
     /// If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
     #[serde(rename = "failure reason")] pub reason: String,
 }
 
-#[derive(Debug, PartialEq, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone)]
 pub struct Peer {
     /// A string of length 20 which this peer uses as its id. This field will be `None` for compact peer info.
     pub id: Option<String>,
@@ -47,7 +47,7 @@ pub struct Peer {
     pub port: i64,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct OkTrackerResponse {
     /// (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
     #[serde(default, rename = "warning message")] pub warning_message: Option<String>,
@@ -66,7 +66,7 @@ pub struct OkTrackerResponse {
     #[serde(default, skip_deserializing)] peers: Option<u8>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub enum TrackerResponse {
     Success {
         /// (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
@@ -96,7 +96,7 @@ pub fn _from_response(data: Vec<u8>, _encoding: &str) -> Result<TrackerResponse,
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Node(String, i64);
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct File {
     /// a list containing one or more string elements that together represent the path and filename. Each element in the list corresponds to 
     /// either a directory name or (in the case of the final element) the filename. For example, a the file "dir1/dir2/file.ext" would 
@@ -161,7 +161,7 @@ impl Torrent {
 }
 
 /// Store only essential information
-#[derive(Debug, Serialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, PartialEq, Eq, Clone)]
 pub struct BasicTorrent {
     /// the filename. This is purely advisory. (string)
     pub name: String,
@@ -269,11 +269,11 @@ impl BasicTorrent {
                 debug!("\tRESPONSE: {:?}", rawdata);
                 //dirty map with regex, because binary on response prevent the parsing
                 let x = RE_COMPLETE.captures(&rawdata);
-                self.seeders = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {0};
+                self.seeders =if let Some(result) = x {result.get(1).unwrap().as_str().parse().unwrap()} else {0};
                 let x = RE_INCOMPLETE.captures(&rawdata);
-                self.leechers = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {0};
+                self.leechers =if let Some(result) = x {result.get(1).unwrap().as_str().parse().unwrap()} else {0};
                 let x = RE_INTERVAL.captures(&rawdata);
-                self.interval = if x.is_some() {x.unwrap().get(1).unwrap().as_str().parse().unwrap()} else {TORRENT_INFO_INTERVAL};
+                self.interval =if let Some(result) = x {result.get(1).unwrap().as_str().parse().unwrap()} else {TORRENT_INFO_INTERVAL};
                 info!("\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s", self.seeders, self.leechers, self.interval);
                 if code != actix_web::http::StatusCode::OK {info!("\tResponse: code={}\tdata={:?}", code, response);}
                 if event != EVENT_STOPPED {return TORRENT_INFO_INTERVAL;}
