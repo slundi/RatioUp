@@ -14,6 +14,7 @@ use fake_torrent_client::Client;
 use lazy_static::lazy_static;
 use log::{self, error, info};
 use rand::Rng;
+use std::convert::TryFrom;
 use std::sync::RwLock;
 use std::time::Duration;
 
@@ -28,8 +29,6 @@ pub struct Config {
     #[serde(skip_serializing)] pub log_level: String,
     /// torrent port
     #[serde(skip_serializing)] pub port: u16,
-    /// HTTP web port
-    #[serde(skip_serializing)] pub http_port: u16,
     pub min_upload_rate: u32,   //in byte
     pub max_upload_rate: u32,   //in byte
     pub min_download_rate: u32, //in byte
@@ -54,7 +53,6 @@ impl Default for Config {
             max_upload_rate: 2097152, //2048*1024
             min_download_rate: 8192,
             max_download_rate: 16777216, //16*1024*1024
-            http_port: 8070,
             torrent_dir: String::from("./torrents"),
             web_root: String::from("/"),
             //client: fake_torrent_client::Client::from(fake_torrent_client::clients::ClientVersion::Qbittorrent_4_4_2),
@@ -83,9 +81,9 @@ impl Actor for Scheduler {
     fn started(&mut self, ctx: &mut Context<Self>) {
         let client = &*CLIENT.read().expect("Cannot read client");
         self.announce(ctx, torrent::EVENT_STARTED);
-        if client.key_refresh_every > 0 {
+        if let Some(refresh_every) = client.key_refresh_every {
             ctx.run_interval(
-                Duration::from_secs((client.key_refresh_every as u64) * 60),
+                Duration::from_secs(u64::try_from(refresh_every).unwrap() * 60),
                 move |this, ctx| this.refresh_key(ctx),
             );
         }
@@ -108,7 +106,10 @@ impl Scheduler {
             let mut interval: u64 = torrent::TORRENT_INFO_INTERVAL;
             if !t.last_announce.elapsed().as_secs() <= t.interval {
                 let url = &t.build_urls(event, client.key.clone())[0];
-                let req = client.get_http_request(url);
+                let query = client.get_query();
+                let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(60)).user_agent(&client.user_agent);
+                let mut req = agent.build().get(url).timeout(std::time::Duration::from_secs(90));
+                req = query.1.into_iter().fold(req, |req, header| {req.set(&header.0, &header.1)});
                 interval = t.announce(event, req);
                 process = true;
             }
@@ -181,12 +182,17 @@ impl Scheduler {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
-    let config_ = config::Config::builder()
-        .add_source(::config::Environment::default())
-        .build()
-        .expect("Cannot build config");
-    let config: Config = config_.try_deserialize().expect("Cannot get config");
-
+    let mut config = &mut *CONFIG.write().expect("Cannot read configuration");
+    for (key, value) in std::env::vars() {
+        if key == "SERVER_ADDR" {config.server_addr = value.clone();}
+        if key == "LOG_LEVEL" {config.log_level = value.clone();}
+        if key == "MIN_UPLOAD_RATE" {config.min_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");}
+        if key == "MAX_UPLOAD_RATE" {config.max_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");}
+        if key == "MIN_DOWNLOAD_RATE" {config.min_download_rate = value.clone().parse::<u32>().expect("Wrong download rate");}
+        if key == "MAX_DOWNLOAD_RATE" {config.max_download_rate = value.clone().parse::<u32>().expect("Wrong download rate");}
+        if key == "CLIENT" {config.client = value.clone();}
+        if key == "TORRENT_DIR" {config.torrent_dir = value.clone();}
+    }
     //configure logger
     simple_logger::init_with_level(match &config.log_level as &str {
         "WARN" => log::Level::Warn,
@@ -197,15 +203,13 @@ async fn main() -> std::io::Result<()> {
     })
     .unwrap();
 
-    // info!("Client: {}", config.client);
+    info!("Torrent client: {}", config.client);
     info!(
-        "Bandwidth: {} - {}",
-        Byte::from_bytes(config.min_upload_rate as u128)
-            .get_appropriate_unit(true)
-            .to_string(),
-        Byte::from_bytes(config.max_upload_rate as u128)
-            .get_appropriate_unit(true)
-            .to_string()
+        "Bandwidth: \u{2191} {} - {} \t \u{2193} {} - {}",
+        Byte::from_bytes(u128::try_from(config.min_upload_rate).unwrap()).get_appropriate_unit(true).to_string(),
+        Byte::from_bytes(u128::try_from(config.max_upload_rate).unwrap()).get_appropriate_unit(true).to_string(),
+        Byte::from_bytes(u128::try_from(config.min_download_rate).unwrap()).get_appropriate_unit(true).to_string(),
+        Byte::from_bytes(u128::try_from(config.max_download_rate).unwrap()).get_appropriate_unit(true).to_string(),
     );
 
     if !std::path::Path::new(&config.torrent_dir).is_dir() {
@@ -215,10 +219,10 @@ async fn main() -> std::io::Result<()> {
         info!("Torrent directory created: {}", config.torrent_dir);
     }
     //create torrent folder
-    let torrent_folder = std::path::Path::new("torrents");
+    let torrent_folder = std::path::Path::new(&config.torrent_dir);
     std::fs::create_dir_all(torrent_folder).expect("Cannot create torrent folder");
     //load torrents
-    let paths = std::fs::read_dir("./torrents/").expect("Cannot read torrent directory");
+    let paths = std::fs::read_dir(&config.torrent_dir).expect("Cannot read torrent directory");
     for p in paths {
         let f = p
             .expect("Cannot get torrent path")
@@ -229,6 +233,7 @@ async fn main() -> std::io::Result<()> {
         add_torrent(f);
     }
     Scheduler.start();
+    let web_root = config.web_root.clone();
     //start web server
     let server = HttpServer::new(move || {
         App::new()
@@ -238,12 +243,12 @@ async fn main() -> std::io::Result<()> {
             .service(routes::get_torrents)
             .service(routes::receive_files)
             .service(routes::process_user_command)
-            .service(Files::new(&config.web_root, "static/").index_file("index.html"))
+            .service(Files::new(&web_root, "static/").index_file("index.html"))
     })
-    .bind(format!("127.0.0.1:{}", config.port))?
+    .bind(config.server_addr.clone())?
     .system_exit()
     .run();
-    info!("starting HTTP server at http://{}/", &config.server_addr);
+    info!("Starting HTTP server at http://{}/", &config.server_addr);
     server.await
 }
 
