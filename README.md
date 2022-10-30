@@ -81,33 +81,6 @@ MAX_DOWNLOAD_RATE =
 
 # DIRECTORY WHERE TORRENTS ARE SAVED
 TORRENT_DIR = "./torrents"
-
-
-```
-
-Arguments are:
-
-| Argument        | Default value | Description                                                              |
-|-----------------|---------------|--------------------------------------------------------------------------|
-| `c` or `config` | `config.json` | Path to the JSON configuration file                                      |
-| `d` or `dir`    | `./torrents`  | Path to the directory where torrents are saved (without trailing slash)  |
-| `p` or `port`   | `8070`        | Web server port                                                          |
-| `root`          | `/`           | Web root (ie: <http://127.0.0.1:8070/ROOT/>)                             |
-
-## Configuration
-
-Here is an example of the config.json:
-
-```json
-{
-    "client":"qbittorrent-4.3.9",
-    "min_upload_rate":8192,
-    "max_upload_rate":104857600,
-    "min_download_rate": 0,
-    "max_download_rate": 0,
-    "numwant": 100,
-    "numwant_on_stop": 0
-}
 ```
 
 Download and upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes).
@@ -115,7 +88,7 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
 ## Roadmap
 
-- [ ] Torrent clients in a separated library
+- [x] Torrent clients in a separated library
 - [ ] Parse response instead of using REGEX
 - [ ] Docker Hub multi architectures
 - [ ] Display session upload (global & per torrent)
