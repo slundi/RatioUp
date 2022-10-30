@@ -182,17 +182,7 @@ impl Scheduler {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
-    let mut config = &mut *CONFIG.write().expect("Cannot read configuration");
-    for (key, value) in std::env::vars() {
-        if key == "SERVER_ADDR" {config.server_addr = value.clone();}
-        if key == "LOG_LEVEL" {config.log_level = value.clone();}
-        if key == "MIN_UPLOAD_RATE" {config.min_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");}
-        if key == "MAX_UPLOAD_RATE" {config.max_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");}
-        if key == "MIN_DOWNLOAD_RATE" {config.min_download_rate = value.clone().parse::<u32>().expect("Wrong download rate");}
-        if key == "MAX_DOWNLOAD_RATE" {config.max_download_rate = value.clone().parse::<u32>().expect("Wrong download rate");}
-        if key == "CLIENT" {config.client = value.clone();}
-        if key == "TORRENT_DIR" {config.torrent_dir = value.clone();}
-    }
+    let config = load_config();
     //configure logger
     simple_logger::init_with_level(match &config.log_level as &str {
         "WARN" => log::Level::Warn,
@@ -260,9 +250,8 @@ fn add_torrent(path: String) {
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         info!("Loading torrent: \t{}", path);
         let t = torrent::from_file(path.clone());
-        //let t = Torrent::read_from_file(&path);
-        if t.is_ok() {
-            let mut t = torrent::from_torrent(t.unwrap(), path);
+        if let Ok(torrent) = t {
+            let mut t = torrent::from_torrent(torrent, path);
             t.prepare_urls(client.query.clone(), config.port, client.peer_id.clone(), client.num_want); //build the static part of the annouce query
                                                                                     //download torrent if download speeds are set
             if config.min_download_rate > 0 && config.max_download_rate > 0 {
@@ -270,8 +259,8 @@ fn add_torrent(path: String) {
             } else {
                 t.downloaded = t.length;
             }
-            for i in 0..list.len() {
-                if list[i].info_hash == t.info_hash {
+            for existing in list.iter() {
+                if existing.info_hash == t.info_hash {
                     info!("Torrent is already in list");
                     return;
                 }
@@ -281,4 +270,19 @@ fn add_torrent(path: String) {
             error!("Cannot parse torrent: \t{}", path);
         }
     }
+}
+
+fn load_config() -> Config {
+    let mut config = &mut *CONFIG.write().expect("Cannot read configuration");
+    for (key, value) in std::env::vars() {
+        if key == "SERVER_ADDR" {config.server_addr = value.clone();}
+        if key == "LOG_LEVEL" {config.log_level = value.clone();}
+        if key == "MIN_UPLOAD_RATE" {config.min_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");}
+        if key == "MAX_UPLOAD_RATE" {config.max_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");}
+        if key == "MIN_DOWNLOAD_RATE" {config.min_download_rate = value.clone().parse::<u32>().expect("Wrong download rate");}
+        if key == "MAX_DOWNLOAD_RATE" {config.max_download_rate = value.clone().parse::<u32>().expect("Wrong download rate");}
+        if key == "CLIENT" {config.client = value.clone();}
+        if key == "TORRENT_DIR" {config.torrent_dir = value.clone();}
+    }
+    config.clone()
 }
