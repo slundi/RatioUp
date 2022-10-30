@@ -10,11 +10,12 @@ use actix_files::Files;
 use actix_web::{middleware, App, HttpServer};
 use byte_unit::Byte;
 use dotenv::dotenv;
-use fake_torrent_client::Client;
+use fake_torrent_client::{Client, clients};
 use lazy_static::lazy_static;
 use log::{self, error, info};
 use rand::Rng;
 use std::convert::TryFrom;
+use std::str::FromStr;
 use std::sync::RwLock;
 use std::time::Duration;
 
@@ -69,7 +70,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 lazy_static! {
     static ref CONFIG: RwLock<Config> = RwLock::new(Config::default());
-    static ref CLIENT: RwLock<Client> = RwLock::new(Client::default());
+    static ref CLIENT: RwLock<Client> = RwLock::new(Client::new());
     static ref ACTIVE: RwLock<bool> = RwLock::new(true);
     static ref TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 }
@@ -272,6 +273,7 @@ fn add_torrent(path: String) {
     }
 }
 
+/// Load configuration in environment. Also load client.
 fn load_config() -> Config {
     let mut config = &mut *CONFIG.write().expect("Cannot read configuration");
     for (key, value) in std::env::vars() {
@@ -284,5 +286,7 @@ fn load_config() -> Config {
         if key == "CLIENT" {config.client = value.clone();}
         if key == "TORRENT_DIR" {config.torrent_dir = value.clone();}
     }
+    let client = &mut *CLIENT.write().expect("Cannot get client");
+    client.build(clients::ClientVersion::from_str(&config.client).expect("Wrong client"));
     config.clone()
 }
