@@ -13,29 +13,6 @@ RatioUp is not designed to help or encourage you downloading illegal materials !
 
 I am not responsible if you get banned using this tool. However, you can reduce risk by using popular torrents (with many seeders and leechers).
 
-
-## Security
-
-For now, I'm not planning add a security layer because I'll use it on my home lan network. If you want to secure it, you can use a reverse proxy with **nginx** (and any other web server you ar familiar with) and add a SSL layer and a basic authentication. You can also contribute by adding a basic auth.
-
-### Nginx reverse proxy
-
-1. Edit `/etc/nginx/sites-available/ratioup` and set your configuration:
-
-```nginx
-  location / {  #if you change "/" with another path, you must set the web root on the CLI
-    #if you want a basic auth, remove the # of the following 2 lines
-    #auth_basic “Restricted Area”;
-    #auth_basic_user_file /path/to/the/password/file/.my_password_file;
-
-    proxy_pass http://127.0.0.1:8070;
-  }
-```
-
-2. Enable the new site: `sudo ln -s /etc/nginx/sites-available/ratioup /etc/nginx/sites-enabled/ratioup`
-3. Check nginx configuration: `sudo nginx -t`
-4. Reaload nginx with the new configuration: `sudo nginx -s reload` or `sudo systemctl reload nginx` or `sudo service nginx reload` (Debian/Ubuntu) or `sudo /etc/init.d/nginx reload` (CentOS,Fedora/...)
-
 ### Basic auth
 
 1. `sudo apt install apache2-utils` or `sudo apt install httpd-tools`
@@ -44,15 +21,31 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 4. Reaload nginx with the new configuration: `sudo nginx -s reload` or `sudo systemctl reload nginx` or `sudo service nginx reload` (Debian/Ubuntu) or `sudo /etc/init.d/nginx reload` (CentOS,Fedora/...)
 `
 
-## Deployment
+## Installation
 
 ```shell
-docker run -d --name RatioUp --restart unless-stopped -v PATH:/data slundi/ratioup
+# Install Rust toolchain if not installed
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# If installed, update it with
+rustup update
+
+# Go to the directory you want to install RatioUp (it will create the RatioUp folder)
+git clone https://github.com/slundi/RatioUp.git && cd RatioUp
+
+# Build the program for your arch
+cargo build --release
+ln -s target/release/RatioUp
+
+# Edit the .env file according to your needs (nano .env)
+
+# Run RatioUp everytime your machine reboot/startup
+echo "@reboot cd $(pwd) && $(pwd)/RatioUp" | crontab -
+
+# Uninstall rust if you do not need it
+rustup self uninstall
 ```
 
-Change the **PATH** in order to keep your configuration.
-
-## Usage
+## Configuration
 
 Everything is contained in a `.env` file.
 
@@ -77,8 +70,6 @@ MAX_UPLOAD_RATE =
 MIN_DOWNLOAD_RATE = 
 MAX_DOWNLOAD_RATE = 
 
-#SIMULTANEOUS_SEEDS = 8
-
 # DIRECTORY WHERE TORRENTS ARE SAVED
 TORRENT_DIR = "./torrents"
 ```
@@ -86,14 +77,34 @@ TORRENT_DIR = "./torrents"
 Download and upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes).
 To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
+## Security
+
+For now, I'm not planning add a security layer because I'll use it on my home lan network. If you want to secure it, you can use a reverse proxy with **nginx** (and any other web server you ar familiar with) and add a SSL layer and a basic authentication. You can also contribute by adding a basic auth.
+
+### Nginx reverse proxy
+
+1. Edit `/etc/nginx/sites-available/ratioup` and set your configuration:
+
+```nginx
+  location / {  #if you change "/" with another path, you must set the web root on the CLI
+    #if you want a basic auth, remove the # of the following 2 lines
+    #auth_basic “Restricted Area”;
+    #auth_basic_user_file /path/to/the/password/file/.my_password_file;
+
+    proxy_pass http://127.0.0.1:8070;
+  }
+```
+
+2. Enable the new site: `sudo ln -s /etc/nginx/sites-available/ratioup /etc/nginx/sites-enabled/ratioup`
+3. Check nginx configuration: `sudo nginx -t`
+4. Reaload nginx with the new configuration: `sudo nginx -s reload` or `sudo systemctl reload nginx` or `sudo service nginx reload` (Debian/Ubuntu) or `sudo /etc/init.d/nginx reload` (CentOS,Fedora/...)
+
 ## Roadmap
 
 - [x] Torrent clients in a separated library
 - [ ] Parse response instead of using REGEX
-- [ ] Docker Hub multi architectures
 - [ ] Display session upload (global & per torrent)
 - [ ] Torrents with multiple trackers?
 - [ ] Drop torrent files from the web UI
 - [ ] Retracker torrents
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
-- [ ] Publish on [DockerHub](https://hub.docker.com/)
