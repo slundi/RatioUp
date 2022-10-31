@@ -63,11 +63,6 @@ impl Default for Config {
     }
 }
 
-// Use Jemalloc only for musl-64 bits platforms (https://kerkour.com/rust-small-docker-image)
-#[cfg(all(target_env = "musl", target_pointer_width = "64"))]
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
 lazy_static! {
     static ref CONFIG: RwLock<Config> = RwLock::new(Config::default());
     static ref CLIENT: RwLock<Client> = RwLock::new(Client::new());
