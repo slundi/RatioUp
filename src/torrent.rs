@@ -263,8 +263,8 @@ impl BasicTorrent {
                 resp.into_reader().take(1024).read_to_end(&mut bytes).expect("Cannot read response");
                 //we start to check if the tracker has returned an error message, if yes, we will reannounce later
                 let response = serde_bencode::de::from_bytes::<FailureTrackerResponse>(&bytes.clone());
-                if response.is_ok() {
-                    warn!("Announce error from the tracker: {}", response.unwrap().reason);
+                if let Ok(resp) = response {
+                    warn!("Announce error from the tracker: {}", resp.reason);
                     return TORRENT_INFO_INTERVAL;
                 }
                 let rawdata = String::from_utf8_lossy(&bytes);
