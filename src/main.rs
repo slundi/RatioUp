@@ -136,7 +136,7 @@ impl Scheduler {
                     this.announce(ctx, torrent::EVENT_COMPLETED);
                 });
             } else {
-                ctx.run_later(Duration::from_secs(interval as u64), move |this, ctx| {
+                ctx.run_later(Duration::from_secs(interval), move |this, ctx| {
                     this.announce(ctx, torrent::EVENT_NONE);
                 });
             }

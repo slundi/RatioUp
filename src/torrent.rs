@@ -93,7 +93,7 @@ pub enum TrackerResponse {
 
 pub fn _from_response(data: Vec<u8>, _encoding: &str) -> Result<TrackerResponse, serde_bencode::Error> {serde_bencode::de::from_bytes::<TrackerResponse>(&data)}
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 struct Node(String, i64);
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -107,7 +107,7 @@ pub struct File {
     #[serde(default)] md5sum: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct Info {
     pub name: String,
     pieces: ByteBuf,
@@ -120,7 +120,7 @@ pub struct Info {
     #[serde(default, rename = "root hash")] pub root_hash: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Torrent {
     pub info: Info,
     #[serde(default)] pub announce: Option<String>,
@@ -154,9 +154,11 @@ impl Torrent {
     }
 
     pub fn info_hash(&self) -> Option<Vec<u8>> {
-        let info = ser::to_bytes(&self.info);
-        if info.is_err() {return None;}
-        Some(Sha1::digest(&info.unwrap()).to_vec())
+        let result = ser::to_bytes(&self.info);
+        if let Ok(info) = result {
+            return Some(Sha1::digest(info).to_vec());
+        }
+        None
     }
 }
 
