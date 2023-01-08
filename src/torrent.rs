@@ -223,8 +223,8 @@ impl BasicTorrent {
     /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
     pub fn prepare_urls(&mut self, query: String, port: u16, peer_id: String, numwant: u16) {
         let mut url= String::new();
-        if self.announce.as_ref().is_some() {
-            url = self.announce.clone().unwrap();
+        if let Some(a) = self.announce.clone() {
+            url = a;
             url.push('?');
             url.push_str(&query);
         }
@@ -302,8 +302,7 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         info_hash: hash, piece_length: torrent.info.piece_length as usize, private, files: None, downloaded: size, uploaded: 0,
         seeders: 0, leechers: 0, next_upload_speed: 0, next_download_speed: 0, interval: TORRENT_INFO_INTERVAL};
     t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
-    if torrent.info.files.is_some() {
-        let files = torrent.info.files.unwrap();
+    if let Some(files) = torrent.info.files {
         let mut list : Vec<File> = Vec::with_capacity(files.len());
         for f in files {
             list.push(File {length: f.length, path: f.path, md5sum: None});
