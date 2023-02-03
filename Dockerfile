@@ -1,54 +1,31 @@
-FROM --platform=linux/amd64 rust:latest as builder
+FROM --platform=linux/amd64 messense/rust-musl-cross:x86_64-musl as builder
 
-ARG TARGETPLATFORM
+# RUN rustc --version &&  rustup --version && cargo --version
 
-RUN apt update && apt install -y musl-tools
-#RUN rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl armv7-unknown-linux-musleabi armv7-unknown-linux-musleabihf
+# WORKDIR /code
 
-RUN rustc --version &&  rustup --version && cargo --version
+# COPY Cargo.toml Cargo.toml
+# RUN mkdir src/
+# RUN echo "fn main() {println!(\"if you see this, the build broke\")}" > src/main.rs
 
-WORKDIR /code
+# RUN cargo build --release > /log
+# RUN rm -f target/release/deps/RatioUp-*
 
-COPY Cargo.toml Cargo.toml
-RUN mkdir src/
-RUN echo "fn main() {println!(\"if you see this, the build broke\")}" > src/main.rs
-RUN case $TARGETPLATFORM in\
-      linux/amd64)  rust_target="x86_64-unknown-linux-musl";;\
-      linux/arm64)  rust_target="aarch64-unknown-linux-musl";;\
-      linux/arm/v7) rust_target="armv7-unknown-linux-musleabihf";;\
-      linux/arm/v6) rust_target="arm-unknown-linux-musleabi";;\
-      *)            exit 1;;\
-    esac &&\
-    rustup target add ${rust_target} &&\
-    RUSTFLAGS=-Clinker=musl-gcc cargo build --target ${rust_target} --release &&\
-    rm -f target/${rust_target}/release/deps/RatioUp
-
-# Download crates-io index and fetch dependency code.
-# This step avoids needing to spend time on every build downloading the index
-# which can take a long time within the docker context. Docker will cache it.
-#RUN USER=root cargo init
-COPY ./ /code
+# # Download crates-io index and fetch dependency code.
+# # This step avoids needing to spend time on every build downloading the index
+# # which can take a long time within the docker context. Docker will cache it.
+# COPY ./ /code
 
 # build dependencies, when my source code changes, this build can be cached, we don't need to compile dependency again.
-#RUN cargo clean && cargo build --release
-RUN case $TARGETPLATFORM in\
-      linux/amd64)  rust_target="x86_64-unknown-linux-musl";;\
-      linux/arm64)  rust_target="aarch64-unknown-linux-musl";;\
-      linux/arm/v7) rust_target="armv7-unknown-linux-musleabihf";;\
-      linux/arm/v6) rust_target="arm-unknown-linux-musleabi";;\
-      *)            exit 1;;\
-    esac &&\
-    rustup target add ${rust_target} &&\
-    RUSTFLAGS=-Clinker=musl-gcc cargo build --target ${rust_target} --release &&\
-    rm -f target/${rust_target}/release/deps/RatioUp
-
+# RUN cargo clean && cargo build --release
 
 # second stage.
 FROM scratch
-WORKDIR /data
+WORKDIR /app
 ENV WEBROOT=/
 # copy server binary from build stage
-COPY --from=builder /code/target/release/RatioUp /app/RatioUp
+#COPY --from=builder /code/target/release/RatioUp /app/RatioUp
+COPY static target/release/RatioUp ./
 
 LABEL author="Slundi"
 LABEL url="https://github.com/slundi/RatioUp"
