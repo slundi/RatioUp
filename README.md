@@ -15,6 +15,8 @@ I am not responsible if you get banned using this tool. However, you can reduce 
 
 ## Installation
 
+### Command line interface (CLI)
+
 ```shell
 # Install Rust toolchain if not installed
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -36,6 +38,19 @@ echo "@reboot cd $(pwd) && $(pwd)/RatioUp" | crontab -
 # Uninstall rust if you do not need it
 rustup self uninstall
 ```
+
+### With Docker
+
+In a terminal:
+
+```shell
+docker run --name RatioUp -p 0.0.0.0:8070:8070 slundi/ratioup
+```
+
+You can change `-p 0.0.0.0:8070:8070` to manage your access through your prefered port.
+
+You can add `-e WEBROOT=/my-path/` if you want to change your root URL. By default, it is `/`.
+
 
 ## Configuration
 
