@@ -21,11 +21,14 @@ FROM --platform=linux/amd64 messense/rust-musl-cross:x86_64-musl as builder
 
 # second stage.
 FROM scratch
-WORKDIR /app
-ENV WEBROOT=/
 # copy server binary from build stage
 #COPY --from=builder /code/target/release/RatioUp /app/RatioUp
-COPY static target/release/RatioUp ./
+COPY static /app/
+COPY target/release/RatioUp /app/RatioUp
+COPY .env /data/
+
+WORKDIR /data
+VOLUME /data
 
 LABEL author="Slundi"
 LABEL url="https://github.com/slundi/RatioUp"
@@ -33,4 +36,4 @@ LABEL vcs-url="https://github.com/slundi/RatioUp"
 # set user to non-root unless root is required for your app
 USER 1001
 EXPOSE 8070
-ENTRYPOINT [ "/app/RatioUp", "--root", ${WEBROOT}]
+ENTRYPOINT [ "/app/RatioUp" ]
