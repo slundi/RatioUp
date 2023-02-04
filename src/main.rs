@@ -232,6 +232,7 @@ async fn main() -> std::io::Result<()> {
             .service(Files::new(&web_root, "static/").index_file("index.html"))
     })
     .bind(config.server_addr.clone())?
+    .workers(2)
     .system_exit()
     .run();
     info!("Starting HTTP server at http://{}/", &config.server_addr);
