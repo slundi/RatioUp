@@ -99,5 +99,5 @@ async fn process_user_command(params: web::Form<CommandParams>) -> HttpResponse 
             }
         }
     }
-    HttpResponse::build(StatusCode::BAD_REQUEST).body("")
+    HttpResponse::build(StatusCode::BAD_REQUEST).finish()
 }
