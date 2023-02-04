@@ -1,8 +1,16 @@
+FROM messense/rust-musl-cross:armv7-musleabihf as builder
+
+WORKDIR /code
+
+COPY Cargo.toml Cargo.toml
+COPY ./ /code
+
+RUN cargo build --release > /log
+
 FROM scratch
 # copy server binary from build stage
-#COPY --from=builder /code/target/release/RatioUp /app/RatioUp
+COPY --from=builder /code/target/armv7-unknown-linux-musleabihf/release/RatioUp /app/RatioUp
 ADD static /app/static
-COPY RatioUp /app/
 COPY Docker.env /app/.env
 
 WORKDIR /app
