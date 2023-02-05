@@ -1,4 +1,4 @@
-FROM messense/rust-musl-cross:armv7-musleabi as builder
+FROM --platform=linux/arm/v7 messense/rust-musl-cross:armv7-musleabi as builder
 
 WORKDIR /code
 

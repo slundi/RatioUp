@@ -1,4 +1,4 @@
-FROM messense/rust-musl-cross:aarch64-musl as builder
+FROM --platform=linux/aarch64 messense/rust-musl-cross:aarch64-musl as builder
 
 WORKDIR /code
 

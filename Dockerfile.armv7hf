@@ -1,4 +1,4 @@
-FROM messense/rust-musl-cross:armv7-musleabihf as builder
+FROM --platform=linux/arm/v7hf messense/rust-musl-cross:armv7-musleabihf as builder
 
 WORKDIR /code
 
