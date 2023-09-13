@@ -110,3 +110,4 @@ dkms.conf
 # Local History for Visual Studio Code
 .history/
 
+builds/
