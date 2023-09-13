@@ -271,7 +271,7 @@ fn add_torrent(path: String) {
 
 /// Load configuration in environment. Also load client.
 fn load_config() -> Config {
-    let mut config = &mut *CONFIG.write().expect("Cannot read configuration");
+    let config = &mut *CONFIG.write().expect("Cannot read configuration");
     for (key, value) in std::env::vars() {
         if key == "SERVER_ADDR" {config.server_addr = value.clone();}
         if key == "LOG_LEVEL" {config.log_level = value.clone();}
