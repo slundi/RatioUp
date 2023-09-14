@@ -32,7 +32,7 @@ simple_logger = "4"
 serde_bytes = "0.11"
 serde_bencode = "0.2"
 serde_derive = "1"
-sha1 = "*"
+hmac-sha1-compact = "1"
 hex = "0.4"
 
 # actix
