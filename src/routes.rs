@@ -21,7 +21,8 @@ async fn receive_files(mut payload: Multipart) -> Result<HttpResponse> {
         let filename = content_disposition
             .get_filename()
             .map_or_else(|| Uuid::new_v4().to_string(), sanitize_filename::sanitize);
-        let filepath = format!("./torrents/{}", filename);
+        let config = &*CONFIG.read().expect("Cannot read configuration");
+        let filepath = format!("{}/{}", config.torrent_dir, filename);
         let filepath2 = filepath.clone();
         let mut f = web::block(|| std::fs::File::create(filepath)).await??; // File::create is blocking operation, use threadpool
         while let Some(chunk) = field.try_next().await? {
