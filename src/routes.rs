@@ -21,7 +21,7 @@ async fn receive_files(mut payload: Multipart) -> Result<HttpResponse> {
         let filename = content_disposition
             .get_filename()
             .map_or_else(|| Uuid::new_v4().to_string(), sanitize_filename::sanitize);
-        let config = &*CONFIG.read().expect("Cannot read configuration");
+        let config = CONFIG.get().expect("Cannot read configuration");
         let filepath = format!("{}/{}", config.torrent_dir, filename);
         let filepath2 = filepath.clone();
         let mut f = web::block(|| std::fs::File::create(filepath)).await??; // File::create is blocking operation, use threadpool
@@ -41,7 +41,7 @@ async fn receive_files(mut payload: Multipart) -> Result<HttpResponse> {
 /// Returns the configuration as a JSON string
 #[get("/config")]
 async fn get_config() -> Result<HttpResponse> {
-    let c = &*CONFIG.read().expect("Cannot read configuration");
+    let c = CONFIG.get().expect("Cannot read configuration");
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type(ContentType::json())
         .body(format!("{{\"config\":{}}}", json!(c))))

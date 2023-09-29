@@ -16,7 +16,7 @@ use log::{self, error, info, debug};
 use rand::Rng;
 use std::convert::TryFrom;
 use std::str::FromStr;
-use std::sync::RwLock;
+use std::sync::{RwLock, OnceLock};
 use std::time::Duration;
 
 use crate::config::Config;
@@ -26,9 +26,10 @@ mod routes;
 mod torrent;
 
 
+static CONFIG: OnceLock<Config> = OnceLock::new();
 
 lazy_static! {
-    static ref CONFIG: RwLock<Config> = RwLock::new(Config::default());
+    // static ref CONFIG: OnceLock<Config> = RwLock::new(OnceLock::default());
     static ref CLIENT: RwLock<Client> = RwLock::new(Client::new());
     static ref ACTIVE: RwLock<bool> = RwLock::new(true);
     static ref TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
@@ -58,7 +59,7 @@ impl Scheduler {
     fn announce(&self, ctx: &mut Context<Self>, event: &str) {
         debug!("Announcing");
         let client = &*CLIENT.read().expect("Cannot read client");
-        let config = &*CONFIG.read().expect("Cannot read configuration");
+        let config = CONFIG.get().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         let mut available_download_speed: u32 = config.max_download_rate;
         let mut available_upload_speed: u32 = config.max_upload_rate;
@@ -210,7 +211,7 @@ async fn main() -> std::io::Result<()> {
 fn add_torrent(path: String) {
     if path.to_lowercase().ends_with(".torrent") {
         let client = &*CLIENT.read().expect("Cannot read client");
-        let config = &*CONFIG.read().expect("Cannot read configuration");
+        let config = CONFIG.get().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         info!("Loading torrent: \t{}", path);
         let t = torrent::from_file(path.clone());
@@ -238,7 +239,7 @@ fn add_torrent(path: String) {
 
 /// Load configuration in environment. Also load client.
 fn load_config() -> Config {
-    let config = &mut *CONFIG.write().expect("Cannot read configuration");
+    let mut config: Config = Config::default();
     for (key, value) in std::env::vars() {
         if key == "SERVER_ADDR" {config.server_addr = value.clone();}
         if key == "LOG_LEVEL" {config.log_level = value.clone();}
@@ -249,6 +250,7 @@ fn load_config() -> Config {
         if key == "CLIENT" {config.client = value.clone();}
         if key == "TORRENT_DIR" {config.torrent_dir = value.clone();}
     }
+    CONFIG.get_or_init(|| config.clone());
     let client = &mut *CLIENT.write().expect("Cannot get client");
     client.build(clients::ClientVersion::from_str(&config.client).expect("Wrong client"));
     config.clone()
