@@ -16,6 +16,7 @@ use log::{self, error, info, debug};
 use rand::Rng;
 use std::convert::TryFrom;
 use std::str::FromStr;
+use std::sync::atomic::AtomicBool;
 use std::sync::{RwLock, OnceLock};
 use std::time::Duration;
 
@@ -27,11 +28,10 @@ mod torrent;
 
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
+static ACTIVE: AtomicBool = AtomicBool::new(true);
 
 lazy_static! {
-    // static ref CONFIG: OnceLock<Config> = RwLock::new(OnceLock::default());
     static ref CLIENT: RwLock<Client> = RwLock::new(Client::new());
-    static ref ACTIVE: RwLock<bool> = RwLock::new(true);
     static ref TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 }
 

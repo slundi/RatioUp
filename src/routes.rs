@@ -4,7 +4,7 @@ use actix_multipart::Multipart;
 use actix_web::{
     get,
     http::{header::ContentType, StatusCode},
-    post, web, HttpResponse, Result
+    post, web, HttpResponse, Result,
 };
 use futures_util::TryStreamExt;
 use log::info;
@@ -59,14 +59,17 @@ async fn get_torrents() -> Result<HttpResponse> {
 /// Stort or stop the seeding depending on the current state, you should stop the app instead
 #[get("/toggle")]
 async fn toggle_active() -> Result<HttpResponse> {
-    let mut w = ACTIVE.write().expect("Cannot change application state");
-    *w = !*w;
-    if *w {
+    let w = ACTIVE.load(std::sync::atomic::Ordering::Relaxed);
+    if !w {
+        // resume seeding
+        ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
         info!("Seedding resumed");
         return Ok(HttpResponse::build(StatusCode::OK)
             .content_type(ContentType::json())
             .body("true"));
     } else {
+        // stop seeding
+        ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
         info!("Seedding stopped");
         return Ok(HttpResponse::build(StatusCode::OK)
             .content_type(ContentType::json())
