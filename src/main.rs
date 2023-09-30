@@ -2,7 +2,6 @@
 
 #[macro_use]
 extern crate serde_derive;
-extern crate lazy_static;
 extern crate rand;
 
 use actix::prelude::*;
@@ -11,7 +10,6 @@ use actix_web::{middleware, App, HttpServer};
 use byte_unit::Byte;
 use dotenv::dotenv;
 use fake_torrent_client::Client;
-use lazy_static::lazy_static;
 use log::{self, debug, error, info};
 use rand::Rng;
 use std::convert::TryFrom;
@@ -29,11 +27,7 @@ mod torrent;
 static CONFIG: OnceLock<Config> = OnceLock::new();
 static ACTIVE: AtomicBool = AtomicBool::new(true);
 static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
-
-lazy_static! {
-    // static ref CLIENT: RwLock<Client> = RwLock::new(Client::new());
-    static ref TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
-}
+static TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 
 /// A cron that check every minutes if it needs to announce, stop or start a torrent
 pub struct Scheduler;
