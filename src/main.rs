@@ -23,6 +23,7 @@ use crate::config::Config;
 mod config;
 mod routes;
 mod torrent;
+mod tracker;
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
 static ACTIVE: AtomicBool = AtomicBool::new(true);

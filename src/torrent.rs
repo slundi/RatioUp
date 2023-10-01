@@ -11,7 +11,6 @@ use log::{error, info, warn, debug};
 use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
-use url::form_urlencoded::byte_serialize;
 
 pub const EVENT_NONE: &str = "";
 pub const EVENT_COMPLETED: &str = "completed"; //not used because we do not download for now
@@ -321,9 +320,9 @@ impl BasicTorrent {
                     );
                 }
             }
-            Err(_) => {
+            Err(err) => {
                 if event != EVENT_STOPPED {
-                    error!("I/O error while announcing");
+                    error!("I/O error while announcing: {:?}", err);
                 }
             }
         }
@@ -361,7 +360,7 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         next_download_speed: 0,
         interval: TORRENT_INFO_INTERVAL,
     };
-    t.info_hash_urlencoded = byte_serialize(&hash_bytes).collect();
+    t.info_hash_urlencoded = percent_encoding::percent_encode(&hash_bytes, crate::tracker::URL_ENCODE_RESERVED).to_string();
     if let Some(files) = torrent.info.files {
         let mut list: Vec<File> = Vec::with_capacity(files.len());
         for f in files {
