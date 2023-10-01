@@ -214,6 +214,7 @@ async fn main() -> std::io::Result<()> {
             .service(routes::get_config)
             .service(routes::get_torrents)
             .service(routes::receive_files)
+            .service(routes::delete_torrent)
             .service(routes::process_user_command)
             .service(Files::new(&config.web_root.clone(), "static/").index_file("index.html"))
     })
