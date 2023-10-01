@@ -121,5 +121,6 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 - [ ] Display session upload (global & per torrent)
 - [ ] Torrents with multiple trackers?
 - [ ] Drop torrent files from the web UI
+- [ ] A more REST API (GET, POST, DELETE on a /torrents endpoint)
 - [ ] Retracker torrents
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)

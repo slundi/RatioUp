@@ -2,7 +2,7 @@ use std::io::Write;
 
 use actix_multipart::Multipart;
 use actix_web::{
-    get,
+    delete, get,
     http::{header::ContentType, StatusCode},
     post, web, HttpResponse, Result,
 };
@@ -36,6 +36,25 @@ async fn receive_files(mut payload: Multipart) -> Result<HttpResponse> {
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type(ContentType::json())
         .body(format!("{{\"torrents\":{}}}", json!(list))))
+}
+
+/// Remove one or more torrents from a list of info hash.
+#[delete("/delete_torrent")]
+async fn delete_torrent(info: web::Json<Vec<String>>) -> Result<HttpResponse> {
+    if !info.is_empty() {
+        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+        let mut i = 0usize;
+        while i < list.len() {
+            for j in 0..info.len() {
+                if list[i].info_hash == info[j] {
+                    list.swap_remove(i);
+                    continue;
+                }
+                i+=1;
+            }
+        }
+    }
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// Returns the configuration as a JSON string
