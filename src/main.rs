@@ -58,11 +58,14 @@ impl Scheduler {
             let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
             let mut available_download_speed: u32 = config.max_download_rate;
             let mut available_upload_speed: u32 = config.max_upload_rate;
+            info!("Torrent count: {}", list.len());
             // send queries to trackers
             for t in list {
                 let mut process = false;
                 let mut interval: u64 = torrent::TORRENT_INFO_INTERVAL;
+                info!("Check announcing {}", t.name);
                 if !t.last_announce.elapsed().as_secs() <= t.interval {
+                    info!("We need to announce {}", t.name);
                     let url = &t.build_urls(event, client.key.clone())[0];
                     let query = client.get_query();
                     let agent = ureq::AgentBuilder::new()
@@ -78,6 +81,7 @@ impl Scheduler {
                         .fold(req, |req, header| req.set(&header.0, &header.1));
                     interval = t.announce(event, req);
                     process = true;
+                    info!("Anounced: interval={}, event={}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", t.interval, event, t.downloaded, t.uploaded, t.seeders, t.leechers, t.name);
                 }
                 //compute the download and upload speed
                 if available_upload_speed > 0 && t.leechers > 0 && t.seeders > 0 {
@@ -110,7 +114,6 @@ impl Scheduler {
                         this.announce(ctx, torrent::EVENT_NONE);
                     });
                 }
-                info!("Anounced: interval={}, event={}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", t.interval, event, t.downloaded, t.uploaded, t.seeders, t.leechers, t.name);
             }
         }
     }
@@ -201,8 +204,8 @@ async fn main() -> std::io::Result<()> {
             .expect("Cannot get file name");
         add_torrent(f);
     }
+    
     Scheduler.start();
-    let web_root = config.web_root.clone();
     //start web server
     let server = HttpServer::new(move || {
         App::new()
@@ -212,7 +215,7 @@ async fn main() -> std::io::Result<()> {
             .service(routes::get_torrents)
             .service(routes::receive_files)
             .service(routes::process_user_command)
-            .service(Files::new(&web_root, "static/").index_file("index.html"))
+            .service(Files::new(&config.web_root.clone(), "static/").index_file("index.html"))
     })
     .bind(config.server_addr.clone())?
     .workers(2)

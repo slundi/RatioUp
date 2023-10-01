@@ -59,6 +59,7 @@ pub struct OkTrackerResponse {
     peers: Option<u8>,
 }
 
+/// https://wiki.theory.org/BitTorrent_Tracker_Protocol
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub enum TrackerResponse {
     Success {
