@@ -1,5 +1,4 @@
 // https://wiki.theory.org/BitTorrentSpecification#Metainfo_File_Structure
-extern crate lazy_static;
 extern crate serde;
 extern crate serde_bencode;
 extern crate serde_bytes;
@@ -7,8 +6,7 @@ use std::io::Read;
 
 use hex::ToHex;
 use hmac_sha1_compact::Hash;
-use log::{debug, error, info, warn};
-use regex::Regex;
+use log::{error, info, warn};
 use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
@@ -20,14 +18,6 @@ pub const EVENT_STARTED: &str = "started";
 pub const EVENT_STOPPED: &str = "stopped";
 
 pub const TORRENT_INFO_INTERVAL: u64 = 1800; //1800s = 30min
-
-lazy_static::lazy_static! {
-    static ref RE_COMPLETE:   Regex = Regex::new("8:completei(\\d+)e").unwrap();
-    static ref RE_INCOMPLETE: Regex = Regex::new("10:incompletei(\\d+)e").unwrap();
-    static ref RE_INTERVAL:   Regex = Regex::new("8:intervali(\\d+)e").unwrap();
-    //static ref RE_MIN_INTERVAL:   Regex = Regex::new("12:min intervali(\\d+)e").unwrap();
-    //TODO: get torrent_id?
-}
 
 /// The tracker responds with "text/plain" document consisting of a bencoded dictionary
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
@@ -69,6 +59,7 @@ pub struct OkTrackerResponse {
     peers: Option<u8>,
 }
 
+/// https://wiki.theory.org/BitTorrent_Tracker_Protocol
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub enum TrackerResponse {
     Success {
@@ -102,7 +93,7 @@ pub fn _from_response(
     data: Vec<u8>,
     _encoding: &str,
 ) -> Result<TrackerResponse, serde_bencode::Error> {
-    serde_bencode::de::from_bytes::<TrackerResponse>(&data)
+    serde_bencode::from_bytes::<TrackerResponse>(&data)
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -328,39 +319,32 @@ impl BasicTorrent {
                     .read_to_end(&mut bytes)
                     .expect("Cannot read response");
                 //we start to check if the tracker has returned an error message, if yes, we will reannounce later
-                let response =
-                    serde_bencode::de::from_bytes::<FailureTrackerResponse>(&bytes.clone());
-                if let Ok(resp) = response {
-                    warn!("Announce error from the tracker: {}", resp.reason);
-                    return TORRENT_INFO_INTERVAL;
+                match serde_bencode::from_bytes::<TrackerResponse>(&bytes.clone()) {
+                    Ok(tr) => match tr {
+                        TrackerResponse::Success {
+                            warning_message,
+                            interval,
+                            min_interval,
+                            tracker_id,
+                            complete,
+                            incomplete,
+                            peers,
+                        } => {
+                            self.seeders = u16::try_from(complete).unwrap();
+                            self.leechers = u16::try_from(incomplete).unwrap();
+                            self.interval =
+                                u64::try_from(interval).unwrap_or(TORRENT_INFO_INTERVAL);
+                            info!(
+                                "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
+                                incomplete, complete, interval
+                            );
+                        }
+                        TrackerResponse::Failure { reason } => warn!("Cannot annouce: {}", reason),
+                    },
+                    Err(e) => warn!("Cannot decode tracker response: {:?}", e),
                 }
-                let rawdata = String::from_utf8_lossy(&bytes);
-                debug!("\tRESPONSE: {:?}", rawdata);
-                //dirty map with regex, because binary on response prevent the parsing
-                let x = RE_COMPLETE.captures(&rawdata);
-                self.seeders = if let Some(result) = x {
-                    result.get(1).unwrap().as_str().parse().unwrap()
-                } else {
-                    0
-                };
-                let x = RE_INCOMPLETE.captures(&rawdata);
-                self.leechers = if let Some(result) = x {
-                    result.get(1).unwrap().as_str().parse().unwrap()
-                } else {
-                    0
-                };
-                let x = RE_INTERVAL.captures(&rawdata);
-                self.interval = if let Some(result) = x {
-                    result.get(1).unwrap().as_str().parse().unwrap()
-                } else {
-                    TORRENT_INFO_INTERVAL
-                };
-                info!(
-                    "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
-                    self.seeders, self.leechers, self.interval
-                );
                 if code != actix_web::http::StatusCode::OK {
-                    info!("\tResponse: code={}\tdata={:?}", code, response);
+                    info!("\tResponse: code={}\tdata={:?}", code, bytes);
                 }
                 if event != EVENT_STOPPED {
                     return TORRENT_INFO_INTERVAL;

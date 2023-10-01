@@ -4,7 +4,7 @@ use actix_multipart::Multipart;
 use actix_web::{
     get,
     http::{header::ContentType, StatusCode},
-    post, web, HttpResponse, Result
+    post, web, HttpResponse, Result,
 };
 use futures_util::TryStreamExt;
 use log::info;
@@ -21,7 +21,7 @@ async fn receive_files(mut payload: Multipart) -> Result<HttpResponse> {
         let filename = content_disposition
             .get_filename()
             .map_or_else(|| Uuid::new_v4().to_string(), sanitize_filename::sanitize);
-        let config = &*CONFIG.read().expect("Cannot read configuration");
+        let config = CONFIG.get().expect("Cannot read configuration");
         let filepath = format!("{}/{}", config.torrent_dir, filename);
         let filepath2 = filepath.clone();
         let mut f = web::block(|| std::fs::File::create(filepath)).await??; // File::create is blocking operation, use threadpool
@@ -41,7 +41,7 @@ async fn receive_files(mut payload: Multipart) -> Result<HttpResponse> {
 /// Returns the configuration as a JSON string
 #[get("/config")]
 async fn get_config() -> Result<HttpResponse> {
-    let c = &*CONFIG.read().expect("Cannot read configuration");
+    let c = CONFIG.get().expect("Cannot read configuration");
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type(ContentType::json())
         .body(format!("{{\"config\":{}}}", json!(c))))
@@ -59,14 +59,17 @@ async fn get_torrents() -> Result<HttpResponse> {
 /// Stort or stop the seeding depending on the current state, you should stop the app instead
 #[get("/toggle")]
 async fn toggle_active() -> Result<HttpResponse> {
-    let mut w = ACTIVE.write().expect("Cannot change application state");
-    *w = !*w;
-    if *w {
+    let w = ACTIVE.load(std::sync::atomic::Ordering::Relaxed);
+    if !w {
+        // resume seeding
+        ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
         info!("Seedding resumed");
         return Ok(HttpResponse::build(StatusCode::OK)
             .content_type(ContentType::json())
             .body("true"));
     } else {
+        // stop seeding
+        ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
         info!("Seedding stopped");
         return Ok(HttpResponse::build(StatusCode::OK)
             .content_type(ContentType::json())
