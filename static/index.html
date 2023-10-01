@@ -137,16 +137,8 @@ document.addEventListener(event_name,function(e){
   let files = e.dataTransfer.files;
   console.log(files);
   let size=0;
-  for(let i=0;i<files.length; i++) {if(files[i]['name'].endsWith('.torrent')) size+=files[i]['size'];}
-  var reader = new FileReader();
   for(let i=0;i<files.length; i++) {if(files[i]['name'].endsWith('.torrent')) {
-    reader.onload = function(e) {
-      socket.send("{\"upload_size\":"+e.target.result.byteLength+",hash:\""+"\"}");
-      for(let s=0; s<e.target.result.byteLength; s+=32768) socket.send(e.target.result.slice(s,s+Math.min(32768, e.target.result.byteLength-s)));
-      socket.send("upload_end");
-      //socket.send(e.target.result);
-    };
-    reader.readAsArrayBuffer(files[i]);
+    upload_file(files[i], "add_torrents", bulmaToast.toast({ message: '<i class="mdi mdi-check"></i> Torrent file uploaded', type: 'is-success', duration: 3000, position: 'bottom-right' }));
   }}
   }, false));
 //upload torrent files
@@ -179,6 +171,7 @@ function upload_file(file, url, success, progress){
 	if (success) ajax.addEventListener('load', success, false);
 	ajax.open('POST', url, true);
 	ajax.send(data);
+  load_torrents();
 }
 document.addEventListener('DOMContentLoaded', () => {
   function closeModal($el) {$el.classList.remove('is-active');}
