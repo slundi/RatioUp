@@ -2,7 +2,6 @@
 
 #[macro_use]
 extern crate serde_derive;
-extern crate lazy_static;
 extern crate rand;
 
 use actix::prelude::*;
@@ -10,78 +9,40 @@ use actix_files::Files;
 use actix_web::{middleware, App, HttpServer};
 use byte_unit::Byte;
 use dotenv::dotenv;
-use fake_torrent_client::{Client, clients};
-use lazy_static::lazy_static;
-use log::{self, error, info};
+use fake_torrent_client::Client;
+use log::{self, debug, error, info};
 use rand::Rng;
 use std::convert::TryFrom;
 use std::str::FromStr;
-use std::sync::RwLock;
+use std::sync::atomic::AtomicBool;
+use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
 
+use crate::config::Config;
+
+mod config;
 mod routes;
 mod torrent;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Config {
-    /// Server `<IP or hostaname>:<port>`. Default is `127.0.0.1:8070`
-    #[serde(skip_serializing)] pub server_addr: String,
-    /// Log level (available options are: INFO, WARN, ERROR, DEBUG, TRACE). Default is `INFO`.
-    #[serde(skip_serializing)] pub log_level: String,
-    /// torrent port
-    #[serde(skip_serializing)] pub port: u16,
-    pub min_upload_rate: u32,   //in byte
-    pub max_upload_rate: u32,   //in byte
-    pub min_download_rate: u32, //in byte
-    pub max_download_rate: u32, //in byte
-    //pub simultaneous_seed: u16, //useful ?
-    pub client: String,
-    /// Directory where torrents are saved
-    #[serde(skip_serializing)] pub torrent_dir: String,
-    /// Set a custom web root (ex: / or /ratio-up/)
-    #[serde(skip_serializing)] pub web_root: String,
-    #[serde(skip_serializing)] pub key_refresh_every: u16,
-}
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            server_addr: "127.0.0.1:8330".to_owned(),
-            log_level: "INFO".to_owned(),
-            /// The port number that the client is listening on. Ports reserved for BitTorrent are typically 6881-6889. Clients may choose to give up if it cannot establish
-            /// a port within this range. Here ports are random between 49152 and 65534
-            port: rand::thread_rng().gen_range(49152..65534),
-            min_upload_rate: 8192,    //8*1024
-            max_upload_rate: 2097152, //2048*1024
-            min_download_rate: 8192,
-            max_download_rate: 16777216, //16*1024*1024
-            torrent_dir: String::from("./torrents"),
-            web_root: String::from("/"),
-            //client: fake_torrent_client::Client::from(fake_torrent_client::clients::ClientVersion::Qbittorrent_4_4_2),
-            key_refresh_every: 0,
-            client: String::from("INVALID"),
-        }
-    }
-}
-
-lazy_static! {
-    static ref CONFIG: RwLock<Config> = RwLock::new(Config::default());
-    static ref CLIENT: RwLock<Client> = RwLock::new(Client::new());
-    static ref ACTIVE: RwLock<bool> = RwLock::new(true);
-    static ref TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
-}
+static CONFIG: OnceLock<Config> = OnceLock::new();
+static ACTIVE: AtomicBool = AtomicBool::new(true);
+static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
+static TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 
 /// A cron that check every minutes if it needs to announce, stop or start a torrent
 pub struct Scheduler;
 impl Actor for Scheduler {
     type Context = Context<Self>;
     fn started(&mut self, ctx: &mut Context<Self>) {
-        let client = &*CLIENT.read().expect("Cannot read client");
+        debug!("Scheduler started");
         self.announce(ctx, torrent::EVENT_STARTED);
-        if let Some(refresh_every) = client.key_refresh_every {
-            ctx.run_interval(
-                Duration::from_secs(u64::try_from(refresh_every).unwrap() * 60),
-                move |this, ctx| this.refresh_key(ctx),
-            );
+        if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
+            if let Some(refresh_every) = client.key_refresh_every {
+                ctx.run_interval(
+                    Duration::from_secs(u64::try_from(refresh_every).unwrap() * 60),
+                    move |this, ctx| this.refresh_key(ctx),
+                );
+            }
         }
     }
     fn stopped(&mut self, ctx: &mut Context<Self>) {
@@ -91,62 +52,77 @@ impl Actor for Scheduler {
 impl Scheduler {
     /// Build the announce query and perform it in another thread
     fn announce(&self, ctx: &mut Context<Self>, event: &str) {
-        let client = &*CLIENT.read().expect("Cannot read client");
-        let config = &*CONFIG.read().expect("Cannot read configuration");
-        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-        let mut available_download_speed: u32 = config.max_download_rate;
-        let mut available_upload_speed: u32 = config.max_upload_rate;
-        // send queries to trackers
-        for t in list {
-            let mut process = false;
-            let mut interval: u64 = torrent::TORRENT_INFO_INTERVAL;
-            if !t.last_announce.elapsed().as_secs() <= t.interval {
-                let url = &t.build_urls(event, client.key.clone())[0];
-                let query = client.get_query();
-                let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(60)).user_agent(&client.user_agent);
-                let mut req = agent.build().get(url).timeout(std::time::Duration::from_secs(90));
-                req = query.1.into_iter().fold(req, |req, header| {req.set(&header.0, &header.1)});
-                interval = t.announce(event, req);
-                process = true;
-            }
-            //compute the download and upload speed
-            if available_upload_speed > 0 && t.leechers > 0 && t.seeders > 0 {
-                if process {
-                    t.next_upload_speed =
-                        rand::thread_rng().gen_range(config.min_upload_rate..available_upload_speed);
+        debug!("Announcing");
+        if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
+            let config = CONFIG.get().expect("Cannot read configuration");
+            let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+            let mut available_download_speed: u32 = config.max_download_rate;
+            let mut available_upload_speed: u32 = config.max_upload_rate;
+            info!("Torrent count: {}", list.len());
+            // send queries to trackers
+            for t in list {
+                let mut process = false;
+                let mut interval: u64 = torrent::TORRENT_INFO_INTERVAL;
+                info!("Check announcing {}", t.name);
+                if !t.last_announce.elapsed().as_secs() <= t.interval {
+                    info!("We need to announce {}", t.name);
+                    let url = &t.build_urls(event, client.key.clone())[0];
+                    let query = client.get_query();
+                    let agent = ureq::AgentBuilder::new()
+                        .timeout(std::time::Duration::from_secs(60))
+                        .user_agent(&client.user_agent);
+                    let mut req = agent
+                        .build()
+                        .get(url)
+                        .timeout(std::time::Duration::from_secs(90));
+                    req = query
+                        .1
+                        .into_iter()
+                        .fold(req, |req, header| req.set(&header.0, &header.1));
+                    interval = t.announce(event, req);
+                    process = true;
+                    info!("Anounced: interval={}, event={}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", t.interval, event, t.downloaded, t.uploaded, t.seeders, t.leechers, t.name);
                 }
-                available_upload_speed -= t.next_upload_speed;
-            }
-            if available_download_speed > 0 && t.leechers > 0 && t.seeders > 0 {
-                if process {
-                    t.next_download_speed =
-                        rand::thread_rng().gen_range(config.min_download_rate..available_download_speed);
+                //compute the download and upload speed
+                if available_upload_speed > 0 && t.leechers > 0 && t.seeders > 0 {
+                    if process {
+                        t.next_upload_speed = rand::thread_rng()
+                            .gen_range(config.min_upload_rate..available_upload_speed);
+                    }
+                    available_upload_speed -= t.next_upload_speed;
                 }
-                available_download_speed -= t.next_download_speed;
-            }
-            if !process {
-                continue;
-            }
-            t.uploaded += (interval as usize) * (t.next_upload_speed as usize);
-            if t.length < t.downloaded + (t.next_download_speed as usize * interval as usize) {
-                //compute next interval to for an EVENT_COMPLETED
-                let t: u64 =
-                    (t.length - t.downloaded).div_euclid(t.next_download_speed as usize) as u64;
-                ctx.run_later(Duration::from_secs(t + 5), move |this, ctx| {
-                    this.announce(ctx, torrent::EVENT_COMPLETED);
-                });
-            } else {
-                ctx.run_later(Duration::from_secs(interval), move |this, ctx| {
-                    this.announce(ctx, torrent::EVENT_NONE);
-                });
+                if available_download_speed > 0 && t.leechers > 0 && t.seeders > 0 {
+                    if process {
+                        t.next_download_speed = rand::thread_rng()
+                            .gen_range(config.min_download_rate..available_download_speed);
+                    }
+                    available_download_speed -= t.next_download_speed;
+                }
+                if !process {
+                    continue;
+                }
+                t.uploaded += (interval as usize) * (t.next_upload_speed as usize);
+                if t.length < t.downloaded + (t.next_download_speed as usize * interval as usize) {
+                    //compute next interval to for an EVENT_COMPLETED
+                    let t: u64 =
+                        (t.length - t.downloaded).div_euclid(t.next_download_speed as usize) as u64;
+                    ctx.run_later(Duration::from_secs(t + 5), move |this, ctx| {
+                        this.announce(ctx, torrent::EVENT_COMPLETED);
+                    });
+                } else {
+                    ctx.run_later(Duration::from_secs(interval), move |this, ctx| {
+                        this.announce(ctx, torrent::EVENT_NONE);
+                    });
+                }
             }
         }
     }
 
     fn refresh_key(&self, _ctx: &mut Context<Self>) {
         info!("Refreshing key");
-        let client = &mut *CLIENT.write().expect("Cannot read client");
-        client.generate_key();
+        if let Some(client) = &mut *CLIENT.write().expect("Cannot read client") {
+            client.generate_key();
+        }
     }
 }
 
@@ -178,7 +154,8 @@ impl Scheduler {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
-    let config = load_config();
+    let config = Config::load_config();
+    CONFIG.get_or_init(|| config.clone());
     //configure logger
     simple_logger::init_with_level(match &config.log_level as &str {
         "WARN" => log::Level::Warn,
@@ -190,12 +167,21 @@ async fn main() -> std::io::Result<()> {
     .unwrap();
 
     info!("Torrent client: {}", config.client);
+    init_client(&config);
     info!(
         "Bandwidth: \u{2191} {} - {} \t \u{2193} {} - {}",
-        Byte::from_bytes(u128::try_from(config.min_upload_rate).unwrap()).get_appropriate_unit(true).to_string(),
-        Byte::from_bytes(u128::try_from(config.max_upload_rate).unwrap()).get_appropriate_unit(true).to_string(),
-        Byte::from_bytes(u128::try_from(config.min_download_rate).unwrap()).get_appropriate_unit(true).to_string(),
-        Byte::from_bytes(u128::try_from(config.max_download_rate).unwrap()).get_appropriate_unit(true).to_string(),
+        Byte::from_bytes(u128::try_from(config.min_upload_rate).unwrap())
+            .get_appropriate_unit(true)
+            .to_string(),
+        Byte::from_bytes(u128::try_from(config.max_upload_rate).unwrap())
+            .get_appropriate_unit(true)
+            .to_string(),
+        Byte::from_bytes(u128::try_from(config.min_download_rate).unwrap())
+            .get_appropriate_unit(true)
+            .to_string(),
+        Byte::from_bytes(u128::try_from(config.max_download_rate).unwrap())
+            .get_appropriate_unit(true)
+            .to_string(),
     );
 
     if !std::path::Path::new(&config.torrent_dir).is_dir() {
@@ -218,8 +204,8 @@ async fn main() -> std::io::Result<()> {
             .expect("Cannot get file name");
         add_torrent(f);
     }
+    
     Scheduler.start();
-    let web_root = config.web_root.clone();
     //start web server
     let server = HttpServer::new(move || {
         App::new()
@@ -229,7 +215,7 @@ async fn main() -> std::io::Result<()> {
             .service(routes::get_torrents)
             .service(routes::receive_files)
             .service(routes::process_user_command)
-            .service(Files::new(&web_root, "static/").index_file("index.html"))
+            .service(Files::new(&config.web_root.clone(), "static/").index_file("index.html"))
     })
     .bind(config.server_addr.clone())?
     .workers(2)
@@ -242,47 +228,46 @@ async fn main() -> std::io::Result<()> {
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed
 fn add_torrent(path: String) {
     if path.to_lowercase().ends_with(".torrent") {
-        let client = &*CLIENT.read().expect("Cannot read client");
-        let config = &*CONFIG.read().expect("Cannot read configuration");
-        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-        info!("Loading torrent: \t{}", path);
-        let t = torrent::from_file(path.clone());
-        if let Ok(torrent) = t {
-            let mut t = torrent::from_torrent(torrent, path);
-            t.prepare_urls(client.query.clone(), config.port, client.peer_id.clone(), client.num_want); //build the static part of the annouce query
-                                                                                    //download torrent if download speeds are set
-            if config.min_download_rate > 0 && config.max_download_rate > 0 {
-                t.downloaded = 0;
-            } else {
-                t.downloaded = t.length;
-            }
-            for existing in list.iter() {
-                if existing.info_hash == t.info_hash {
-                    info!("Torrent is already in list");
-                    return;
+        if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
+            let config = CONFIG.get().expect("Cannot read configuration");
+            let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+            info!("Loading torrent: \t{}", path);
+            let t = torrent::from_file(path.clone());
+            if let Ok(torrent) = t {
+                let mut t = torrent::from_torrent(torrent, path);
+                t.prepare_urls(
+                    client.query.clone(),
+                    config.port,
+                    client.peer_id.clone(),
+                    client.num_want,
+                ); //build the static part of the annouce query
+                   //download torrent if download speeds are set
+                if config.min_download_rate > 0 && config.max_download_rate > 0 {
+                    t.downloaded = 0;
+                } else {
+                    t.downloaded = t.length;
                 }
+                for existing in list.iter() {
+                    if existing.info_hash == t.info_hash {
+                        info!("Torrent is already in list");
+                        return;
+                    }
+                }
+                list.push(t);
             }
-            list.push(t);
         } else {
             error!("Cannot parse torrent: \t{}", path);
         }
     }
 }
 
-/// Load configuration in environment. Also load client.
-fn load_config() -> Config {
-    let mut config = &mut *CONFIG.write().expect("Cannot read configuration");
-    for (key, value) in std::env::vars() {
-        if key == "SERVER_ADDR" {config.server_addr = value.clone();}
-        if key == "LOG_LEVEL" {config.log_level = value.clone();}
-        if key == "MIN_UPLOAD_RATE" {config.min_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");}
-        if key == "MAX_UPLOAD_RATE" {config.max_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");}
-        if key == "MIN_DOWNLOAD_RATE" {config.min_download_rate = value.clone().parse::<u32>().expect("Wrong download rate");}
-        if key == "MAX_DOWNLOAD_RATE" {config.max_download_rate = value.clone().parse::<u32>().expect("Wrong download rate");}
-        if key == "CLIENT" {config.client = value.clone();}
-        if key == "TORRENT_DIR" {config.torrent_dir = value.clone();}
-    }
-    let client = &mut *CLIENT.write().expect("Cannot get client");
-    client.build(clients::ClientVersion::from_str(&config.client).expect("Wrong client"));
-    config.clone()
+fn init_client(config: &Config) {
+    let mut client = Client::default();
+    client.build(
+        fake_torrent_client::clients::ClientVersion::from_str(&config.client)
+            .expect("Wrong client"),
+    );
+    info!("Client information (key: {}, peer ID:{})", client.key, client.peer_id);
+    let mut guard = CLIENT.write().unwrap();
+    *guard = Some(client);
 }

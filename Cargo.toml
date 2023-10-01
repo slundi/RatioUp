@@ -1,7 +1,7 @@
 [package]
 name = "RatioUp"
 author = "slundi"
-version = "1.1.2"
+version = "1.1.4"
 edition = "2021"
 homepage = "https://github.com/slundi/RatioUp"
 
@@ -9,21 +9,19 @@ homepage = "https://github.com/slundi/RatioUp"
 directory = "vendor"
 
 [dependencies]
-regex = "1.7"
 rand = "0.8"
-lazy_static = "1.4"
 serde = {version = "1", features = ["derive"]}
 serde_json = "1"
 ureq = { version = "2", features = ["charset", "gzip"]}
-tokio = {version = "1.24", features=["fs"]}
+tokio = {version = "1.32", features=["rt", "fs"]}
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
-sanitize-filename = "0.4"
+sanitize-filename = "0.5"
 uuid = { version = "1", features = ["v4"] }
 byte-unit = "4"
 url = "2"
 fake-torrent-client = "0.9"
 
-rust-ini = "0.18"
+rust-ini = "0.19"
 dotenv = "0.15"
 log = "0.4"
 simple_logger = "4"
@@ -32,12 +30,12 @@ simple_logger = "4"
 serde_bytes = "0.11"
 serde_bencode = "0.2"
 serde_derive = "1"
-sha1 = "*"
+hmac-sha1-compact = "1"
 hex = "0.4"
 
 # actix
 actix = "0.13"
 actix-web = "4"
 actix-files = "0.6"
-actix-multipart = "0.5"
+actix-multipart = "0.6"
 actix-rt = "2"
