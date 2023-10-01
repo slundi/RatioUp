@@ -58,14 +58,11 @@ impl Scheduler {
             let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
             let mut available_download_speed: u32 = config.max_download_rate;
             let mut available_upload_speed: u32 = config.max_upload_rate;
-            info!("Torrent count: {}", list.len());
             // send queries to trackers
             for t in list {
                 let mut process = false;
                 let mut interval: u64 = torrent::TORRENT_INFO_INTERVAL;
-                info!("Check announcing {}", t.name);
-                if !t.last_announce.elapsed().as_secs() <= t.interval {
-                    info!("We need to announce {}", t.name);
+                if !t.last_announce.elapsed().as_secs() <= t.interval || event == torrent::EVENT_STARTED || event == torrent::EVENT_STOPPED {
                     let url = &t.build_urls(event, client.key.clone())[0];
                     let query = client.get_query();
                     let agent = ureq::AgentBuilder::new()
@@ -125,31 +122,6 @@ impl Scheduler {
         }
     }
 }
-
-/*  /// Function to send periodically torrent informations: up/download speeds, seeders, leechers, butes completed, ...
-    fn create_job_send_info_at_interval(&self, ctx: &mut <Self as Actor>::Context) {
-        ctx.run_interval(TORRENT_INFO_INTERVAL, |act, ctx| {
-            let list = &*TORRENTS.read().expect("Cannot get torrent list");
-            let mut msg = String::from("{\"infos\":[");
-            for i in 0..list.len() {
-                msg.push_str("{\"info_hash\":\"");
-                msg.push_str(&list[i].info_hash);
-                msg.push_str("\",\"downloaded\":");
-                msg.push_str(list[i].downloaded.to_string().as_str());
-                msg.push_str(",\"seeders\":");
-                msg.push_str(list[i].seeders.to_string().as_str());
-                msg.push_str(",\"leechers\":");
-                msg.push_str(list[i].leechers.to_string().as_str());
-                msg.push_str(",\"download_speed\":");
-                msg.push_str(list[i].next_download_speed.to_string().as_str());
-                msg.push_str(",\"upload_speed\":");
-                msg.push_str(list[i].next_upload_speed.to_string().as_str());
-                if i < list.len() - 1 {msg.push_str("},");}else{msg.push_str("}]}");}
-            }
-            ctx.text(msg);
-        });
-    }
-}*/
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {

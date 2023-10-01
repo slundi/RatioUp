@@ -1,4 +1,5 @@
 // https://wiki.theory.org/BitTorrentSpecification#Metainfo_File_Structure
+// https://wiki.theory.org/BitTorrent_Tracker_Protocol
 extern crate serde;
 extern crate serde_bencode;
 extern crate serde_bytes;
@@ -6,7 +7,7 @@ use std::io::Read;
 
 use hex::ToHex;
 use hmac_sha1_compact::Hash;
-use log::{error, info, warn};
+use log::{error, info, warn, debug};
 use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
@@ -57,43 +58,6 @@ pub struct OkTrackerResponse {
     /// peers: (binary model) Instead of using the dictionary model described above, the peers value may be a string consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number. All in network (big endian) notation.
     #[serde(default, skip_deserializing)]
     peers: Option<u8>,
-}
-
-/// https://wiki.theory.org/BitTorrent_Tracker_Protocol
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub enum TrackerResponse {
-    Success {
-        /// (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
-        #[serde(default, rename = "warning message")]
-        warning_message: Option<String>,
-        /// Interval in seconds that the client should wait between sending regular requests to the tracker
-        interval: i64,
-        /// (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
-        #[serde(default, rename = "min interval")]
-        min_interval: Option<i64>,
-        /// A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
-        tracker_id: Option<String>,
-        /// number of peers with the entire file, i.e. seeders
-        complete: i64,
-        /// number of non-seeder peers, aka "leechers"
-        incomplete: i64,
-        /// (dictionary model) The value is a list of dictionaries, each with the following keys.
-        /// peers: (binary model) Instead of using the dictionary model described above, the peers value may be a string consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number. All in network (big endian) notation.
-        #[serde(default, skip_serializing)]
-        peers: Option<u8>,
-    },
-    Failure {
-        /// If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
-        #[serde(rename = "failure reason")]
-        reason: String,
-    },
-}
-
-pub fn _from_response(
-    data: Vec<u8>,
-    _encoding: &str,
-) -> Result<TrackerResponse, serde_bencode::Error> {
-    serde_bencode::from_bytes::<TrackerResponse>(&data)
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -257,6 +221,7 @@ impl BasicTorrent {
         }
         url = url
             .replace("{peerid}", &peer_id)
+            .replace("&ipv6={ipv6}", "")
             .replace("{infohash}", &self.info_hash_urlencoded)
             .replace("{numwant}", numwant.to_string().as_str())
             .replace("{port}", port.to_string().as_str());
@@ -319,29 +284,24 @@ impl BasicTorrent {
                     .read_to_end(&mut bytes)
                     .expect("Cannot read response");
                 //we start to check if the tracker has returned an error message, if yes, we will reannounce later
-                match serde_bencode::from_bytes::<TrackerResponse>(&bytes.clone()) {
-                    Ok(tr) => match tr {
-                        TrackerResponse::Success {
-                            warning_message,
-                            interval,
-                            min_interval,
-                            tracker_id,
-                            complete,
-                            incomplete,
-                            peers,
-                        } => {
-                            self.seeders = u16::try_from(complete).unwrap();
-                            self.leechers = u16::try_from(incomplete).unwrap();
-                            self.interval =
-                                u64::try_from(interval).unwrap_or(TORRENT_INFO_INTERVAL);
-                            info!(
-                                "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
-                                incomplete, complete, interval
-                            );
-                        }
-                        TrackerResponse::Failure { reason } => warn!("Cannot annouce: {}", reason),
+                debug!("Tracker response: {:?}", String::from_utf8_lossy(&bytes.clone()));
+                match  serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
+                    Ok(tr) => {
+                        self.seeders = u16::try_from(tr.complete).unwrap();
+                        self.leechers = u16::try_from(tr.incomplete).unwrap();
+                        self.interval =
+                            u64::try_from(tr.interval).unwrap_or(TORRENT_INFO_INTERVAL);
+                        info!(
+                            "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
+                            tr.incomplete, tr.complete, tr.interval
+                        );
                     },
-                    Err(e) => warn!("Cannot decode tracker response: {:?}", e),
+                    Err(e1) => {
+                        match  serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
+                            Ok(tr) => warn!("Cannot announce: {}", tr.reason),
+                            Err(e2) => error!("Cannot process tracker response: {:?}, {:?}", e1, e2),
+                        }
+                    },
                 }
                 if code != actix_web::http::StatusCode::OK {
                     info!("\tResponse: code={}\tdata={:?}", code, bytes);
@@ -420,3 +380,5 @@ pub fn from_file(path: String) -> Result<Torrent, serde_bencode::Error> {
     let data = std::fs::read(path).expect("Cannot read torrent file");
     serde_bencode::de::from_bytes::<Torrent>(&data)
 }
+
+// TODO: test tracker response "with d8:completei0e10:downloadedi0e10:incompletei1e8:intervali1922e12:min intervali961e5:peers6:���m��e"

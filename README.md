@@ -123,3 +123,4 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 - [x] Drop torrent files from the web UI
 - [ ] Retracker torrents
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
+- [ ] UDP announce URL support
