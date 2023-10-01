@@ -120,7 +120,6 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 - [x] Parse response instead of using REGEX
 - [ ] Display session upload (global & per torrent)
 - [ ] Torrents with multiple trackers?
-- [ ] Drop torrent files from the web UI
-- [ ] A more REST API (GET, POST, DELETE on a /torrents endpoint)
+- [x] Drop torrent files from the web UI
 - [ ] Retracker torrents
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
