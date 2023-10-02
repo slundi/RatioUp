@@ -12,6 +12,7 @@ use dotenv::dotenv;
 use fake_torrent_client::Client;
 use log::{self, debug, error, info};
 use rand::Rng;
+use tracker::Event;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
@@ -36,7 +37,7 @@ impl Actor for Scheduler {
     type Context = Context<Self>;
     fn started(&mut self, ctx: &mut Context<Self>) {
         debug!("Scheduler started");
-        self.announce(ctx, torrent::EVENT_STARTED);
+        self.announce(ctx, Some(Event::Started));
         if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
             if let Some(refresh_every) = client.key_refresh_every {
                 ctx.run_interval(
@@ -47,12 +48,12 @@ impl Actor for Scheduler {
         }
     }
     fn stopped(&mut self, ctx: &mut Context<Self>) {
-        self.announce(ctx, torrent::EVENT_STOPPED);
+        self.announce(ctx, Some(Event::Stopped));
     }
 }
 impl Scheduler {
     /// Build the announce query and perform it in another thread
-    fn announce(&self, ctx: &mut Context<Self>, event: &str) {
+    fn announce(&self, ctx: &mut Context<Self>, event: Option<Event>) {
         debug!("Announcing");
         if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
             let config = CONFIG.get().expect("Cannot read configuration");
@@ -61,10 +62,11 @@ impl Scheduler {
             let mut available_upload_speed: u32 = config.max_upload_rate;
             // send queries to trackers
             for t in list {
+                // TODO: client.annouce(t, client);
                 let mut process = false;
                 let mut interval: u64 = torrent::TORRENT_INFO_INTERVAL;
-                if !t.last_announce.elapsed().as_secs() <= t.interval || event == torrent::EVENT_STARTED || event == torrent::EVENT_STOPPED {
-                    let url = &t.build_urls(event, client.key.clone())[0];
+                if !t.last_announce.elapsed().as_secs() <= t.interval || event == Some(Event::Started) || event == Some(Event::Stopped) {
+                    let url = &t.build_urls(event.clone(), client.key.clone())[0];
                     let query = client.get_query();
                     let agent = ureq::AgentBuilder::new()
                         .timeout(std::time::Duration::from_secs(60))
@@ -79,7 +81,7 @@ impl Scheduler {
                         .fold(req, |req, header| req.set(&header.0, &header.1));
                     interval = t.announce(event, req);
                     process = true;
-                    info!("Anounced: interval={}, event={}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", t.interval, event, t.downloaded, t.uploaded, t.seeders, t.leechers, t.name);
+                    info!("Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", t.interval, event, t.downloaded, t.uploaded, t.seeders, t.leechers, t.name);
                 }
                 //compute the download and upload speed
                 if available_upload_speed > 0 && t.leechers > 0 && t.seeders > 0 {
@@ -105,11 +107,11 @@ impl Scheduler {
                     let t: u64 =
                         (t.length - t.downloaded).div_euclid(t.next_download_speed as usize) as u64;
                     ctx.run_later(Duration::from_secs(t + 5), move |this, ctx| {
-                        this.announce(ctx, torrent::EVENT_COMPLETED);
+                        this.announce(ctx, Some(Event::Completed));
                     });
                 } else {
                     ctx.run_later(Duration::from_secs(interval), move |this, ctx| {
-                        this.announce(ctx, torrent::EVENT_NONE);
+                        this.announce(ctx, None);
                     });
                 }
             }
@@ -177,8 +179,13 @@ async fn main() -> std::io::Result<()> {
             .expect("Cannot get file name");
         add_torrent(f);
     }
-    
-    Scheduler.start();
+
+    tokio::spawn(async move {
+        announce_started().await;
+        Scheduler.start();
+        tokio::signal::ctrl_c().await.unwrap();
+        announce_stopped().await;
+    });
     //start web server
     let server = HttpServer::new(move || {
         App::new()
@@ -243,4 +250,12 @@ fn init_client(config: &Config) {
     info!("Client information (key: {}, peer ID:{})", client.key, client.peer_id);
     let mut guard = CLIENT.write().unwrap();
     *guard = Some(client);
+}
+
+async fn announce_started() {
+    // TODO: spawn all torrent with timeout
+}
+
+async fn announce_stopped() {
+    // TODO: compute uploaded and downloaded then announce
 }

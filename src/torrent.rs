@@ -12,10 +12,7 @@ use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
 
-pub const EVENT_NONE: &str = "";
-pub const EVENT_COMPLETED: &str = "completed"; //not used because we do not download for now
-pub const EVENT_STARTED: &str = "started";
-pub const EVENT_STOPPED: &str = "stopped";
+use crate::tracker::{Event, EVENT_STARTED, EVENT_COMPLETED, EVENT_STOPPED};
 
 pub const TORRENT_INFO_INTERVAL: u64 = 1800; //1800s = 30min
 
@@ -227,10 +224,10 @@ impl BasicTorrent {
         let _ = &self.urls.push(url);
     }
     /// Build the announce URLs for the listed trackers in the torrent file. FOR NOW IT DOES NOT HANDLE MULTIPLE URLS!
-    pub fn build_urls(&mut self, event: &str, key: String) -> Vec<String> {
-        info!("Torrent {}: {}", event, self.name);
+    pub fn build_urls(&mut self, event: Option<Event>, key: String) -> Vec<String> {
+        info!("Torrent {:?}: {}", event, self.name);
         //compute downloads and uploads
-        let elapsed: usize = if event == EVENT_STARTED {
+        let elapsed: usize = if event == Some(Event::Started) {
             0
         } else {
             self.last_announce.elapsed().as_secs() as usize
@@ -253,7 +250,14 @@ impl BasicTorrent {
                 "{left}",
                 (self.length - self.downloaded).to_string().as_str(),
             )
-            .replace("{event}", event);
+            .replace("{event}", match event {
+                Some(e) => match e {
+                    Event::Started => EVENT_STARTED,
+                    Event::Completed => EVENT_COMPLETED,
+                    Event::Stopped => EVENT_STOPPED,
+                },
+                None => "",
+            });
         info!(
             "\tDownloaded: {} \t Uploaded: {}",
             byte_unit::Byte::from_bytes(downloaded as u128)
@@ -268,7 +272,7 @@ impl BasicTorrent {
         urls
     }
 
-    pub fn announce(&mut self, event: &str, request: ureq::Request) -> u64 {
+    pub fn wannounce(&mut self, event: Option<Event>, request: ureq::Request) -> u64 {
         match request.call() {
             Ok(resp) => {
                 let code = resp.status();
@@ -305,7 +309,7 @@ impl BasicTorrent {
                 if code != actix_web::http::StatusCode::OK {
                     info!("\tResponse: code={}\tdata={:?}", code, bytes);
                 }
-                if event != EVENT_STOPPED {
+                if event != Some(Event::Stopped) {
                     return TORRENT_INFO_INTERVAL;
                 }
             }
@@ -321,7 +325,7 @@ impl BasicTorrent {
                 }
             }
             Err(err) => {
-                if event != EVENT_STOPPED {
+                if event != Some(Event::Stopped) {
                     error!("I/O error while announcing: {:?}", err);
                 }
             }

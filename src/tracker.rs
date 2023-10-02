@@ -9,18 +9,36 @@ use std::{
 
 use bytes::{BufMut, BytesMut};
 
+use log::error;
 use rand::prelude::*;
 
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
-use crate::torrent::{EVENT_COMPLETED, EVENT_STARTED, EVENT_STOPPED};
+use crate::torrent::BasicTorrent;
 
 pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
     .remove(b'-')
     .remove(b'_')
     .remove(b'~')
     .remove(b'.');
+
+pub const EVENT_NONE: &str = "";
+pub const EVENT_COMPLETED: &str = "completed"; //not used because we do not download for now
+pub const EVENT_STARTED: &str = "started";
+pub const EVENT_STOPPED: &str = "stopped";
+
+/// The optional announce event.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Event {
+    /// The first request to tracker must include this value.
+    Started,
+    /// Must be sent to the tracker when the client becomes a seeder. Must not be
+    /// present if the client started as a seeder.
+    Completed,
+    /// Must be sent to tracker if the client is shutting down gracefully.
+    Stopped,
+}
 
 /// Sends an announce request to the tracker with the specified parameters.
 ///
@@ -31,11 +49,11 @@ pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::
 ///
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
-pub fn announce(url: &String) {
+pub async fn announce(url: &String, torrent: &BasicTorrent, event: Option<Event>) {
     if url.to_lowercase().starts_with("udp://") {
-        tokio::spawn(announce_udp(url));
+        announce_udp(url, torrent, event);
     } else {
-        tokio::spawn(announce_http(url));
+        announce_http(url, torrent, event);
     }
 }
 
@@ -44,7 +62,7 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
     //Bind to a random port
     let port = rand::thread_rng().gen_range(1025..u16::MAX);
 
-    let mut sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
+    let sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
         .await
         .unwrap();
 
@@ -86,7 +104,7 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
     }
 }
 
-async fn announce_http(url: &String) {
+async fn announce_http(url: &String, torrent: &BasicTorrent, event: Option<Event>) {
     // announce parameters are built up in the query string, see:
     // https://www.bittorrent.org/beps/bep_0003.html trackers section
     // let mut query = vec![
@@ -145,7 +163,7 @@ async fn announce_http(url: &String) {
     let agent = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(60))
         .user_agent(&client.user_agent);
-    let mut req = ureq::agent
+    let mut req = agent
         .build()
         .get(url)
         .timeout(std::time::Duration::from_secs(90));
@@ -155,7 +173,7 @@ async fn announce_http(url: &String) {
         .fold(req, |req, header| req.set(&header.0, &header.1));
     match req.call() {
         Ok(resp) => todo!(),
-        Err(err) => todo!(),
+        Err(err) => error!("Cannot announce: {:?}", err),
     }
     // send request
     // let resp = self
@@ -171,7 +189,7 @@ async fn announce_http(url: &String) {
     // Ok(resp)
 }
 
-async fn announce_udp(url: &str, event: &String) {
+async fn announce_udp(url: &str, torrent: &BasicTorrent, event: Option<Event>) {
     let port = thread_rng().gen_range(1025..u16::MAX);
     let mut sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
         .await
@@ -207,11 +225,11 @@ async fn announce_udp(url: &str, event: &String) {
     bytes_to_send.put_i64(params.left.try_into().unwrap());
     bytes_to_send.put_i64(params.uploaded.try_into().unwrap());
 
-    bytes_to_send.put_i32(match params.event {
+    bytes_to_send.put_i32(match event {
         Some(val) => match val {
-            EVENT_COMPLETED => 1,
-            EVENT_STARTED => 2,
-            EVENT_STOPPED => 3,
+            Event::Completed => 1,
+            Event::Started => 2,
+            Event::Stopped => 3,
         },
         None => 0,
     });
