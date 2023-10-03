@@ -1,3 +1,5 @@
+use byte_unit::Byte;
+use log::info;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -81,6 +83,22 @@ impl Config {
         }
         // let client = &mut *CLIENT.write().expect("Cannot get client");
         // client.build(clients::ClientVersion::from_str(&config.client).expect("Wrong client"));
+        info!("Torrent client: {}", config.client);
+        info!(
+            "Bandwidth: \u{2191} {} - {} \t \u{2193} {} - {}",
+            Byte::from_bytes(u128::try_from(config.min_upload_rate).unwrap())
+                .get_appropriate_unit(true)
+                .to_string(),
+            Byte::from_bytes(u128::try_from(config.max_upload_rate).unwrap())
+                .get_appropriate_unit(true)
+                .to_string(),
+            Byte::from_bytes(u128::try_from(config.min_download_rate).unwrap())
+                .get_appropriate_unit(true)
+                .to_string(),
+            Byte::from_bytes(u128::try_from(config.max_download_rate).unwrap())
+                .get_appropriate_unit(true)
+                .to_string(),
+        );
         config.clone()
     }
 }

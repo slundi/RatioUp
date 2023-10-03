@@ -7,7 +7,6 @@ extern crate rand;
 use actix::prelude::*;
 use actix_files::Files;
 use actix_web::{middleware, App, HttpServer};
-use byte_unit::Byte;
 use dotenv::dotenv;
 use fake_torrent_client::Client;
 use log::{self, debug, error, info};
@@ -141,23 +140,7 @@ async fn main() -> std::io::Result<()> {
     })
     .unwrap();
 
-    info!("Torrent client: {}", config.client);
     init_client(&config);
-    info!(
-        "Bandwidth: \u{2191} {} - {} \t \u{2193} {} - {}",
-        Byte::from_bytes(u128::try_from(config.min_upload_rate).unwrap())
-            .get_appropriate_unit(true)
-            .to_string(),
-        Byte::from_bytes(u128::try_from(config.max_upload_rate).unwrap())
-            .get_appropriate_unit(true)
-            .to_string(),
-        Byte::from_bytes(u128::try_from(config.min_download_rate).unwrap())
-            .get_appropriate_unit(true)
-            .to_string(),
-        Byte::from_bytes(u128::try_from(config.max_download_rate).unwrap())
-            .get_appropriate_unit(true)
-            .to_string(),
-    );
 
     if !std::path::Path::new(&config.torrent_dir).is_dir() {
         std::fs::create_dir_all(&config.torrent_dir).unwrap_or_else(|_e| {
