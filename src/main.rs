@@ -40,7 +40,7 @@ impl Actor for Scheduler {
         if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
             if let Some(refresh_every) = client.key_refresh_every {
                 ctx.run_interval(
-                    Duration::from_secs(u64::try_from(refresh_every).unwrap() * 60),
+                    Duration::from_secs(u64::try_from(refresh_every).unwrap()),
                     move |this, ctx| this.refresh_key(ctx),
                 );
             }
