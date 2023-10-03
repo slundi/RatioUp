@@ -141,27 +141,7 @@ async fn main() -> std::io::Result<()> {
     .unwrap();
 
     init_client(&config);
-
-    if !std::path::Path::new(&config.torrent_dir).is_dir() {
-        std::fs::create_dir_all(&config.torrent_dir).unwrap_or_else(|_e| {
-            error!("Cannot create torrent folder directory(ies)");
-        });
-        info!("Torrent directory created: {}", config.torrent_dir);
-    }
-    //create torrent folder
-    let torrent_folder = std::path::Path::new(&config.torrent_dir);
-    std::fs::create_dir_all(torrent_folder).expect("Cannot create torrent folder");
-    //load torrents
-    let paths = std::fs::read_dir(&config.torrent_dir).expect("Cannot read torrent directory");
-    for p in paths {
-        let f = p
-            .expect("Cannot get torrent path")
-            .path()
-            .into_os_string()
-            .into_string()
-            .expect("Cannot get file name");
-        add_torrent(f);
-    }
+    prepare_torrent_directory(&config.torrent_dir);
 
     tokio::spawn(async move {
         announce_started().await;
@@ -186,6 +166,29 @@ async fn main() -> std::io::Result<()> {
     .run();
     info!("Starting HTTP server at http://{}/", &config.server_addr);
     server.await
+}
+
+fn prepare_torrent_directory(directory: &String) {
+    if !std::path::Path::new(directory).is_dir() {
+        std::fs::create_dir_all(directory).unwrap_or_else(|_e| {
+            error!("Cannot create torrent folder directory(ies)");
+        });
+        info!("Torrent directory created: {}", directory);
+    }
+    //create torrent folder
+    let torrent_folder = std::path::Path::new(directory);
+    std::fs::create_dir_all(torrent_folder).expect("Cannot create torrent folder");
+    //load torrents
+    let paths = std::fs::read_dir(directory).expect("Cannot read torrent directory");
+    for p in paths {
+        let f = p
+            .expect("Cannot get torrent path")
+            .path()
+            .into_os_string()
+            .into_string()
+            .expect("Cannot get file name");
+        add_torrent(f);
+    }
 }
 
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed
@@ -242,3 +245,23 @@ async fn announce_started() {
 async fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    /// Test if it creates the torrent directory and do not panic when it exists
+    #[test]
+    fn test_torrent_directory() {
+        let mut dir = env::temp_dir();
+        dir.push("ratioup-test-torrents-dir");
+        if dir.is_dir() {
+            std::fs::remove_dir(dir);
+        }
+        prepare_torrent_directory(&dir.display().to_string());
+        assert!(dir.is_dir());
+        prepare_torrent_directory(&dir.display().to_string());
+    }
+}
+
