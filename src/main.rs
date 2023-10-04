@@ -10,12 +10,11 @@ use actix_web::{middleware, App, HttpServer};
 use dotenv::dotenv;
 use fake_torrent_client::Client;
 use log::{self, debug, error, info};
-use rand::Rng;
-use tracker::Event;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
+use tracker::Event;
 
 use crate::config::Config;
 
@@ -44,7 +43,8 @@ impl Actor for Scheduler {
         }
     }
     fn stopped(&mut self, ctx: &mut Context<Self>) {
-        self.announce(ctx, Some(Event::Stopped));
+        debug!("Scheduler stopped");
+        //self.announce(ctx, Some(Event::Stopped));
     }
 }
 impl Scheduler {
@@ -59,45 +59,28 @@ impl Scheduler {
             // send queries to trackers
             for t in list {
                 // TODO: client.annouce(t, client);
-                let mut process = false;
                 let mut interval: u64 = torrent::TORRENT_INFO_INTERVAL;
-                if !t.last_announce.elapsed().as_secs() <= t.interval || event == Some(Event::Started) || event == Some(Event::Stopped) {
-                    let url = &t.build_urls(event.clone(), client.key.clone())[0];
-                    let query = client.get_query();
-                    let agent = ureq::AgentBuilder::new()
-                        .timeout(std::time::Duration::from_secs(60))
-                        .user_agent(&client.user_agent);
-                    let mut req = agent
-                        .build()
-                        .get(url)
-                        .timeout(std::time::Duration::from_secs(90));
-                    req = query
-                        .1
-                        .into_iter()
-                        .fold(req, |req, header| req.set(&header.0, &header.1));
-                    interval = tracker::announce(t, event);
-                    interval = t.announce(event, req);
-                    process = true;
-                    info!("Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", t.interval, event, t.downloaded, t.uploaded, t.seeders, t.leechers, t.name);
-                }
-                //compute the download and upload speed
-                if available_upload_speed > 0 && t.leechers > 0 && t.seeders > 0 {
-                    if process {
-                        t.next_upload_speed = rand::thread_rng()
-                            .gen_range(config.min_upload_rate..available_upload_speed);
-                    }
-                    available_upload_speed -= t.next_upload_speed;
-                }
-                if available_download_speed > 0 && t.leechers > 0 && t.seeders > 0 {
-                    if process {
-                        t.next_download_speed = rand::thread_rng()
-                            .gen_range(config.min_download_rate..available_download_speed);
-                    }
-                    available_download_speed -= t.next_download_speed;
-                }
-                if !process {
+                if !t.shound_announce() {
                     continue;
                 }
+                let url = &t.build_urls(event.clone(), client.key.clone())[0];
+                let query = client.get_query();
+                let agent = ureq::AgentBuilder::new()
+                    .timeout(std::time::Duration::from_secs(60))
+                    .user_agent(&client.user_agent);
+                let mut req = agent
+                    .build()
+                    .get(url)
+                    .timeout(std::time::Duration::from_secs(90));
+                req = query
+                    .1
+                    .into_iter()
+                    .fold(req, |req, header| req.set(&header.0, &header.1));
+                interval = tracker::announce(t, event);
+                interval = t.announce(event, req);
+                //compute the download and upload speed
+                available_upload_speed -= t.uploaded(config.min_upload_rate, available_upload_speed);
+                available_download_speed -= t.uploaded(config.min_upload_rate, available_download_speed);
                 t.uploaded += (interval as usize) * (t.next_upload_speed as usize);
                 if t.length < t.downloaded + (t.next_download_speed as usize * interval as usize) {
                     //compute next interval to for an EVENT_COMPLETED
@@ -142,7 +125,6 @@ async fn main() -> std::io::Result<()> {
     prepare_torrent_directory(&config.torrent_dir);
 
     tokio::spawn(async move {
-        announce_started().await;
         Scheduler.start();
         tokio::signal::ctrl_c().await.unwrap();
         announce_stopped().await;
@@ -231,7 +213,10 @@ fn init_client(config: &Config) {
         fake_torrent_client::clients::ClientVersion::from_str(&config.client)
             .expect("Wrong client"),
     );
-    info!("Client information (key: {}, peer ID:{})", client.key, client.peer_id);
+    info!(
+        "Client information (key: {}, peer ID:{})",
+        client.key, client.peer_id
+    );
     let mut guard = CLIENT.write().unwrap();
     *guard = Some(client);
 }
@@ -262,4 +247,3 @@ mod tests {
         prepare_torrent_directory(&dir.display().to_string());
     }
 }
-

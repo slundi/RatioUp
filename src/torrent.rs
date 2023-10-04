@@ -7,12 +7,13 @@ use std::io::Read;
 
 use hex::ToHex;
 use hmac_sha1_compact::Hash;
-use log::{error, info, warn, debug};
+use log::{debug, error, info, warn};
+use rand::Rng;
 use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
 
-use crate::tracker::{Event, EVENT_STARTED, EVENT_COMPLETED, EVENT_STOPPED};
+use crate::tracker::{Event, EVENT_COMPLETED, EVENT_STARTED, EVENT_STOPPED};
 
 pub const TORRENT_INFO_INTERVAL: u64 = 1800; //1800s = 30min
 
@@ -250,14 +251,17 @@ impl BasicTorrent {
                 "{left}",
                 (self.length - self.downloaded).to_string().as_str(),
             )
-            .replace("{event}", match event {
-                Some(e) => match e {
-                    Event::Started => EVENT_STARTED,
-                    Event::Completed => EVENT_COMPLETED,
-                    Event::Stopped => EVENT_STOPPED,
+            .replace(
+                "{event}",
+                match event {
+                    Some(e) => match e {
+                        Event::Started => EVENT_STARTED,
+                        Event::Completed => EVENT_COMPLETED,
+                        Event::Stopped => EVENT_STOPPED,
+                    },
+                    None => "",
                 },
-                None => "",
-            });
+            );
         info!(
             "\tDownloaded: {} \t Uploaded: {}",
             byte_unit::Byte::from_bytes(downloaded as u128)
@@ -270,6 +274,39 @@ impl BasicTorrent {
         info!("\tAnnonce at: {}", url);
         urls.push(url);
         urls
+    }
+
+    /// Tells if we can announce to tracker(s) depending on the last announce
+    pub fn shound_announce(&self) -> bool {
+        self.last_announce.elapsed().as_secs() >= self.interval
+    }
+
+    /// Tells if we can upload (need leechers)
+    pub fn can_upload(&self) -> bool {
+        self.leechers > 0 || self.leechers > 0
+    }
+
+    /// Tells if we can download (need leechers or seeders)
+    pub fn can_download(&self) -> bool {
+        self.seeders > 0
+    }
+
+    pub fn downloaded(&self, min_speed: u32, available_speed: u32) -> u32 {
+        if self.can_download() {
+            self.next_download_speed = rand::thread_rng().gen_range(min_speed..available_speed);
+            self.next_download_speed
+        } else {
+            0
+        }
+    }
+
+    pub fn uploaded(&self, min_speed: u32, available_speed: u32) -> u32 {
+        if self.can_upload() {
+            self.next_upload_speed = rand::thread_rng().gen_range(min_speed..available_speed);
+            self.next_upload_speed
+        } else {
+            0
+        }
     }
 
     pub fn announce(&mut self, event: Option<Event>, request: ureq::Request) -> u64 {
@@ -287,24 +324,28 @@ impl BasicTorrent {
                     .read_to_end(&mut bytes)
                     .expect("Cannot read response");
                 //we start to check if the tracker has returned an error message, if yes, we will reannounce later
-                debug!("Tracker response: {:?}", String::from_utf8_lossy(&bytes.clone()));
-                match  serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
+                debug!(
+                    "Tracker response: {:?}",
+                    String::from_utf8_lossy(&bytes.clone())
+                );
+                match serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
                     Ok(tr) => {
                         self.seeders = u16::try_from(tr.complete).unwrap();
                         self.leechers = u16::try_from(tr.incomplete).unwrap();
-                        self.interval =
-                            u64::try_from(tr.interval).unwrap_or(TORRENT_INFO_INTERVAL);
+                        self.interval = u64::try_from(tr.interval).unwrap_or(TORRENT_INFO_INTERVAL);
                         info!(
                             "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
                             tr.incomplete, tr.complete, tr.interval
                         );
-                    },
+                    }
                     Err(e1) => {
-                        match  serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
+                        match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
                             Ok(tr) => warn!("Cannot announce: {}", tr.reason),
-                            Err(e2) => error!("Cannot process tracker response: {:?}, {:?}", e1, e2),
+                            Err(e2) => {
+                                error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
+                            }
                         }
-                    },
+                    }
                 }
                 if code != actix_web::http::StatusCode::OK {
                     info!("\tResponse: code={}\tdata={:?}", code, bytes);
@@ -364,7 +405,9 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         next_download_speed: 0,
         interval: TORRENT_INFO_INTERVAL,
     };
-    t.info_hash_urlencoded = percent_encoding::percent_encode(&hash_bytes, crate::tracker::URL_ENCODE_RESERVED).to_string();
+    t.info_hash_urlencoded =
+        percent_encoding::percent_encode(&hash_bytes, crate::tracker::URL_ENCODE_RESERVED)
+            .to_string();
     if let Some(files) = torrent.info.files {
         let mut list: Vec<File> = Vec::with_capacity(files.len());
         for f in files {
