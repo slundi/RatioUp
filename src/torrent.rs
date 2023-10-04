@@ -459,19 +459,19 @@ mod tests {
             interval: 1800,
             urls: Vec::with_capacity(0),
         };
-        assert_ne!(t.can_download());
-        assert_ne!(t.can_upload());
+        assert!(!t.can_download());
+        assert!(!t.can_upload());
         t.leechers = 5;
-        assert_eq!(t.can_download());
-        assert_eq!(t.can_upload());
+        assert!(t.can_download());
+        assert!(t.can_upload());
         t.leechers = 0;
         t.seeders = 1;
-        assert_ne!(.can_download());
-        assert_ne!(t.can_upload());
+        assert!(!t.can_download());
+        assert!(!t.can_upload());
         t.seeders = 4;
         t.leechers = 8;
-        assert_eq!(t.can_download());
-        assert_eq!(t.can_upload());
+        assert!(t.can_download());
+        assert!(t.can_upload());
     }
 
     #[test]
