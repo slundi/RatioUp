@@ -14,7 +14,6 @@ use rand::Rng;
 use tracker::Event;
 use std::convert::TryFrom;
 use std::str::FromStr;
-use std::sync::atomic::AtomicBool;
 use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
 
@@ -26,8 +25,7 @@ mod torrent;
 mod tracker;
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
-static ACTIVE: AtomicBool = AtomicBool::new(true);
-static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
+static CLIENT: RwLock<Option<Client>> = RwLock::new(None); // TODO: remove, build it every time because it can be HTTP or UDP
 static TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 
 /// A cron that check every minutes if it needs to announce, stop or start a torrent
@@ -36,7 +34,6 @@ impl Actor for Scheduler {
     type Context = Context<Self>;
     fn started(&mut self, ctx: &mut Context<Self>) {
         debug!("Scheduler started");
-        self.announce(ctx, Some(Event::Started));
         if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
             if let Some(refresh_every) = client.key_refresh_every {
                 ctx.run_interval(
@@ -78,6 +75,7 @@ impl Scheduler {
                         .1
                         .into_iter()
                         .fold(req, |req, header| req.set(&header.0, &header.1));
+                    interval = tracker::announce(t, event);
                     interval = t.announce(event, req);
                     process = true;
                     info!("Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", t.interval, event, t.downloaded, t.uploaded, t.seeders, t.leechers, t.name);
@@ -153,7 +151,6 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .service(routes::toggle_active)
             .service(routes::get_config)
             .service(routes::get_torrents)
             .service(routes::receive_files)
@@ -219,6 +216,7 @@ fn add_torrent(path: String) {
                         return;
                     }
                 }
+                tracker::announce(&t, Some(Event::Started));
                 list.push(t);
             }
         } else {
@@ -238,12 +236,12 @@ fn init_client(config: &Config) {
     *guard = Some(client);
 }
 
-async fn announce_started() {
-    // TODO: spawn all torrent with timeout
-}
-
 async fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
+    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+    for t in list {
+        tracker::announce(t, Some(Event::Stopped));
+    }
 }
 
 #[cfg(test)]

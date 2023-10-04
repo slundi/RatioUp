@@ -45,7 +45,6 @@
       
     </div>
     <div class="navbar-item has-text-primary" title="Client software"><i class="mdi mdi-desktop-tower-monitor mdi-24px"></i>&nbsp;<i id="client"></i></div>
-    <a class="navbar-item" href="javascript:start_stop()" title="Start/stop the service"><i class="mdi mdi-play-circle mdi-36px has-text-success" id="server-status"></i></a>
   </div>
 </nav>
 <div class="container is-fullhd mt-6 pt-6" id="content">
@@ -79,28 +78,6 @@
 </div>
 <script>
 var torrents = [];
-function start_stop() {
-  let r = new XMLHttpRequest();
-  r.onreadystatechange = function() {
-    if (r.readyState == 4 && r.status === 200) {
-      s=document.getElementById("server-status");
-      s.classList.remove("mdi-play-circle", "mdi-pause-circle", "has-text-success", "has-text-danger");
-      if(r.responseText === "true") {
-        s.classList.add("mdi-play-circle", "has-text-success");
-        bulmaToast.toast({ message: '<i class="mdi mdi-check"></i> Server started', type: 'is-success', duration: 3000, position: 'bottom-right' });
-        load_torrents();
-      }
-      else {
-        s.classList.add("mdi-pause-circle", "has-text-danger");
-        bulmaToast.toast({ message: '<i class="mdi mdi-alert"></i> Server stopped', type: 'is-warning', duration: 3000, position: 'bottom-right' });
-        //TODO: set speeds, seeders/leechers to 0
-        load_torrents(false);
-      }
-    }
-  }
-  r.open('GET', '/toggle');
-  r.send();
-}
 function send_command(c, h){
   let r = new XMLHttpRequest();
   r.onreadystatechange = function() {
