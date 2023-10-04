@@ -49,12 +49,15 @@ pub(crate) enum Event {
 ///
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
-pub async fn announce(url: &String, torrent: &BasicTorrent, event: Option<Event>) {
-    if url.to_lowercase().starts_with("udp://") {
-        announce_udp(url, torrent, event);
-    } else {
-        announce_http(url, torrent, event);
+pub fn announce(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
+    for url in torrent.urls {
+        if url.to_lowercase().starts_with("udp://") {
+            announce_udp(torrent, event)
+        } else {
+            announce_http(torrent, event)
+        }
     }
+    1800 //TODO
 }
 
 ///https://www.bittorrent.org/beps/bep_0015.html
@@ -104,7 +107,7 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
     }
 }
 
-async fn announce_http(url: &String, torrent: &BasicTorrent, event: Option<Event>) {
+fn announce_http(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
     // announce parameters are built up in the query string, see:
     // https://www.bittorrent.org/beps/bep_0003.html trackers section
     // let mut query = vec![
@@ -187,9 +190,10 @@ async fn announce_http(url: &String, torrent: &BasicTorrent, event: Option<Event
     //     .await?;
     // let resp = serde_bencode::from_bytes(&resp)?;
     // Ok(resp)
+    1800
 }
 
-async fn announce_udp(url: &str, torrent: &BasicTorrent, event: Option<Event>) {
+async fn announce_udp(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
     let port = thread_rng().gen_range(1025..u16::MAX);
     let mut sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
         .await
@@ -322,6 +326,7 @@ async fn announce_udp(url: &str, torrent: &BasicTorrent, event: Option<Event>) {
     // };
 
     // Ok(response)
+    1800
 }
 
 #[cfg(test)]

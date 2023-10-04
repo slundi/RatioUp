@@ -272,7 +272,7 @@ impl BasicTorrent {
         urls
     }
 
-    pub fn wannounce(&mut self, event: Option<Event>, request: ureq::Request) -> u64 {
+    pub fn announce(&mut self, event: Option<Event>, request: ureq::Request) -> u64 {
         match request.call() {
             Ok(resp) => {
                 let code = resp.status();
