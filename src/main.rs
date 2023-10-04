@@ -56,10 +56,11 @@ impl Scheduler {
             let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
             let mut available_download_speed: u32 = config.max_download_rate;
             let mut available_upload_speed: u32 = config.max_upload_rate;
+            let mut next_announce = u32::MAX;
             // send queries to trackers
             for t in list {
                 // TODO: client.annouce(t, client);
-                let mut interval: u64 = torrent::TORRENT_INFO_INTERVAL;
+                let mut interval: u64 = u64::MAX;
                 if !t.shound_announce() {
                     continue;
                 }
@@ -95,6 +96,7 @@ impl Scheduler {
                     });
                 }
             }
+            // TODO: schedule next announce
         }
     }
 
@@ -225,7 +227,7 @@ async fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
     let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
     for t in list {
-        tracker::announce(t, Some(Event::Stopped));
+        t.interval = tracker::announce(t, Some(Event::Stopped));
     }
 }
 

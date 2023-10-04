@@ -15,8 +15,6 @@ use serde_bytes::ByteBuf;
 
 use crate::tracker::{Event, EVENT_COMPLETED, EVENT_STARTED, EVENT_STOPPED};
 
-pub const TORRENT_INFO_INTERVAL: u64 = 1800; //1800s = 30min
-
 /// The tracker responds with "text/plain" document consisting of a bencoded dictionary
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct FailureTrackerResponse {
@@ -332,7 +330,7 @@ impl BasicTorrent {
                     Ok(tr) => {
                         self.seeders = u16::try_from(tr.complete).unwrap();
                         self.leechers = u16::try_from(tr.incomplete).unwrap();
-                        self.interval = u64::try_from(tr.interval).unwrap_or(TORRENT_INFO_INTERVAL);
+                        self.interval = u64::try_from(tr.interval).unwrap();
                         info!(
                             "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
                             tr.incomplete, tr.complete, tr.interval
@@ -349,9 +347,6 @@ impl BasicTorrent {
                 }
                 if code != actix_web::http::StatusCode::OK {
                     info!("\tResponse: code={}\tdata={:?}", code, bytes);
-                }
-                if event != Some(Event::Stopped) {
-                    return TORRENT_INFO_INTERVAL;
                 }
             }
             Err(ureq::Error::Status(code, response)) => {
@@ -403,7 +398,7 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         leechers: 0,
         next_upload_speed: 0,
         next_download_speed: 0,
-        interval: TORRENT_INFO_INTERVAL,
+        interval: u64::MAX,
     };
     t.info_hash_urlencoded =
         percent_encoding::percent_encode(&hash_bytes, crate::tracker::URL_ENCODE_RESERVED)

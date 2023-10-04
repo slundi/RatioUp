@@ -9,7 +9,7 @@ use std::{
 
 use bytes::{BufMut, BytesMut};
 
-use log::error;
+use log::{error, info};
 use rand::prelude::*;
 
 use tokio::net::UdpSocket;
@@ -50,14 +50,16 @@ pub(crate) enum Event {
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
 pub fn announce(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
+    let mut interval = u64::MAX;
     for url in torrent.urls {
         if url.to_lowercase().starts_with("udp://") {
-            announce_udp(torrent, event)
+            interval = announce_udp(torrent, event);
         } else {
-            announce_http(torrent, event)
+            interval = announce_http(torrent, event);
         }
     }
-    1800 //TODO
+    info!("Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", torrent.interval, event, torrent.downloaded, torrent.uploaded, torrent.seeders, torrent.leechers, torrent.name);
+    interval
 }
 
 ///https://www.bittorrent.org/beps/bep_0015.html
