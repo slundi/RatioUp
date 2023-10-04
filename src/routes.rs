@@ -11,7 +11,7 @@ use log::info;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::{ACTIVE, CONFIG, TORRENTS};
+use crate::{CONFIG, TORRENTS};
 
 #[post("/add_torrents")]
 async fn receive_files(mut payload: Multipart) -> Result<HttpResponse> {
@@ -54,27 +54,6 @@ async fn get_torrents() -> Result<HttpResponse> {
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type(ContentType::json())
         .body(format!("{{\"torrents\":{}}}", json!(list))))
-}
-
-/// Stort or stop the seeding depending on the current state, you should stop the app instead
-#[get("/toggle")]
-async fn toggle_active() -> Result<HttpResponse> {
-    let w = ACTIVE.load(std::sync::atomic::Ordering::Relaxed);
-    if !w {
-        // resume seeding
-        ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
-        info!("Seedding resumed");
-        return Ok(HttpResponse::build(StatusCode::OK)
-            .content_type(ContentType::json())
-            .body("true"));
-    } else {
-        // stop seeding
-        ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
-        info!("Seedding stopped");
-        return Ok(HttpResponse::build(StatusCode::OK)
-            .content_type(ContentType::json())
-            .body("false"));
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]

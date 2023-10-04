@@ -14,7 +14,6 @@ use rand::Rng;
 use tracker::Event;
 use std::convert::TryFrom;
 use std::str::FromStr;
-use std::sync::atomic::AtomicBool;
 use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
 
@@ -26,7 +25,6 @@ mod torrent;
 mod tracker;
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
-static ACTIVE: AtomicBool = AtomicBool::new(true); // TODO: remove (useless)
 static CLIENT: RwLock<Option<Client>> = RwLock::new(None); // TODO: remove, build it every time because it can be HTTP or UDP
 static TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 
@@ -153,7 +151,6 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
-            .service(routes::toggle_active)
             .service(routes::get_config)
             .service(routes::get_torrents)
             .service(routes::receive_files)
