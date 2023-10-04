@@ -283,12 +283,12 @@ impl BasicTorrent {
 
     /// Tells if we can upload (need leechers)
     pub fn can_upload(&self) -> bool {
-        self.leechers > 0 || self.leechers > 0
+        (self.seeders > 0 && self.leechers > 0) || self.leechers > 1
     }
 
     /// Tells if we can download (need leechers or seeders)
     pub fn can_download(&self) -> bool {
-        self.seeders > 0
+        self.seeders > 0 || self.leechers > 1
     }
 
     pub fn downloaded(&self, min_speed: u32, available_speed: u32) -> u32 {
@@ -428,3 +428,86 @@ pub fn from_file(path: String) -> Result<Torrent, serde_bencode::Error> {
 }
 
 // TODO: test tracker response "with d8:completei0e10:downloadedi0e10:incompletei1e8:intervali1922e12:min intervali961e5:peers6:���m��e"
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test if it creates the torrent directory and do not panic when it exists
+    #[test]
+    fn test_can_download_or_upload() {
+        let mut t = BasicTorrent {
+            name: String::from("Test torrent"),
+            comment: String::with_capacity(0),
+            created_by: String::with_capacity(0),
+            announce: None,
+            announce_list: None,
+            info_hash: String::from("01234567"),
+            piece_length: 1024,
+            length: 262144,
+            files: None,
+            private: false,
+            path: String::from("torrents/linuxmint-21.2-mate-64bit.iso.torrent"),
+            downloaded: 262144,
+            uploaded: 0,
+            last_announce: std::time::Instant::now(),
+            info_hash_urlencoded: String::from("01234567"),
+            seeders: 0,
+            leechers: 1,
+            next_upload_speed: 0,
+            next_download_speed: 0,
+            interval: 1800,
+            urls: Vec::with_capacity(0),
+        };
+        assert_ne!(t.can_download());
+        assert_ne!(t.can_upload());
+        t.leechers = 5;
+        assert_eq!(t.can_download());
+        assert_eq!(t.can_upload());
+        t.leechers = 0;
+        t.seeders = 1;
+        assert_ne!(.can_download());
+        assert_ne!(t.can_upload());
+        t.seeders = 4;
+        t.leechers = 8;
+        assert_eq!(t.can_download());
+        assert_eq!(t.can_upload());
+    }
+
+    #[test]
+    fn test_get_average_speeds() {
+        let mut t = BasicTorrent {
+            name: String::from("Test torrent"),
+            comment: String::with_capacity(0),
+            created_by: String::with_capacity(0),
+            announce: None,
+            announce_list: None,
+            info_hash: String::from("01234567"),
+            piece_length: 1024,
+            length: 262144,
+            files: None,
+            private: false,
+            path: String::from("torrents/linuxmint-21.2-mate-64bit.iso.torrent"),
+            downloaded: 262144,
+            uploaded: 0,
+            last_announce: std::time::Instant::now(),
+            info_hash_urlencoded: String::from("01234567"),
+            seeders: 4,
+            leechers: 16,
+            next_upload_speed: 0,
+            next_download_speed: 0,
+            interval: 1800,
+            urls: Vec::with_capacity(0),
+        };
+        let speed = t.downloaded(16, 64);
+        assert!(speed == 0);
+        let speed = t.uploaded(16, 64);
+        assert!(speed == 0);
+        t.interval = 1;
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let speed = t.downloaded(16, 64);
+        assert!(speed >= 16 && speed <= 64);
+        let speed = t.uploaded(16, 64);
+        assert!(speed >= 16 && speed <= 64);
+    }
+}
