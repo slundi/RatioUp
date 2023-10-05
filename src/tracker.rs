@@ -53,9 +53,9 @@ pub fn announce(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
     let mut interval = u64::MAX;
     for url in torrent.urls {
         if url.to_lowercase().starts_with("udp://") {
-            interval = futures::executor::block_on(announce_udp(torrent, event));
+            interval = futures::executor::block_on(announce_udp(&url, torrent, event));
         } else {
-            interval = announce_http(torrent, event);
+            interval = announce_http(&url, torrent, event);
         }
     }
     info!("Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", torrent.interval, event, torrent.downloaded, torrent.uploaded, torrent.seeders, torrent.leechers, torrent.name);
@@ -109,7 +109,7 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
     }
 }
 
-fn announce_http(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
+fn announce_http(url: &String, torrent: &BasicTorrent, event: Option<Event>) -> u64 {
     // announce parameters are built up in the query string, see:
     // https://www.bittorrent.org/beps/bep_0003.html trackers section
     // let mut query = vec![
@@ -195,14 +195,15 @@ fn announce_http(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
     1800
 }
 
-async fn announce_udp(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
+async fn announce_udp(url: &String, torrent: &BasicTorrent, event: Option<Event>) -> u64 {
     let port = thread_rng().gen_range(1025..u16::MAX);
     let mut sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
         .await
         .unwrap();
 
     // All of the potential addressese of a URL
-    let mut addrs = self.url.socket_addrs(|| None).unwrap();
+    let url = reqwest::Url::parse(url).expect("Cannot parse tracker URL");
+    let mut addrs = url.socket_addrs(|| None).unwrap();
     // Shuffle the list
     addrs.shuffle(&mut thread_rng());
 
