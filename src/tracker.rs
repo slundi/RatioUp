@@ -3,7 +3,7 @@
 
 use std::{
     convert::TryInto,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     time::Duration,
 };
 
@@ -53,7 +53,7 @@ pub fn announce(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
     let mut interval = u64::MAX;
     for url in torrent.urls {
         if url.to_lowercase().starts_with("udp://") {
-            interval = announce_udp(torrent, event);
+            interval = futures::executor::block_on(announce_udp(torrent, event));
         } else {
             interval = announce_http(torrent, event);
         }
@@ -284,33 +284,36 @@ async fn announce_udp(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
     };
 
     let transaction_id_recv: i32 = i32::from_be_bytes((&response_buf[4..8]).try_into().unwrap());
+    let interval: i32 = i32::from_be_bytes((&response_buf[8..12]).try_into().unwrap());
 
     let leechers: i32 = i32::from_be_bytes((&response_buf[12..16]).try_into().unwrap());
     let seeders: i32 = i32::from_be_bytes((&response_buf[16..20]).try_into().unwrap());
+    torrent.leechers = u16::try_from(leechers).unwrap();
+    torrent.seeders = u16::try_from(seeders).unwrap();
 
-    let mut peer_vec: Vec<SocketAddr> = Vec::new();
+    // let mut peer_vec: Vec<SocketAddr> = Vec::new();
 
-    let mut index: usize = 20;
+    // let mut index: usize = 20;
 
-    while index <= response_buf.len() - 6 {
-        let peer_ip_bytes: [u8; 4] = response_buf[index..index + 4].try_into().unwrap();
-        let peer_port_bytes: [u8; 2] = response_buf[index + 4..index + 6].try_into().unwrap();
+    // while index <= response_buf.len() - 6 {
+    //     let peer_ip_bytes: [u8; 4] = response_buf[index..index + 4].try_into().unwrap();
+    //     let peer_port_bytes: [u8; 2] = response_buf[index + 4..index + 6].try_into().unwrap();
 
-        if peer_ip_bytes != [0; 4] && peer_port_bytes != [0; 2] {
-            let peer_ipv4 = Ipv4Addr::from(peer_ip_bytes);
-            let peer_string = peer_ipv4.to_string();
-            let peer_port_bytes: [u8; 2] = response_buf[index + 4..index + 6].try_into().unwrap();
-            let peer_port: u16 = u16::from_be_bytes(peer_port_bytes);
-            let peer_string = format!("{}:{}", peer_string, peer_port);
-            let peer_sock: SocketAddr = peer_string.parse().unwrap();
+    //     if peer_ip_bytes != [0; 4] && peer_port_bytes != [0; 2] {
+    //         let peer_ipv4 = Ipv4Addr::from(peer_ip_bytes);
+    //         let peer_string = peer_ipv4.to_string();
+    //         let peer_port_bytes: [u8; 2] = response_buf[index + 4..index + 6].try_into().unwrap();
+    //         let peer_port: u16 = u16::from_be_bytes(peer_port_bytes);
+    //         let peer_string = format!("{}:{}", peer_string, peer_port);
+    //         let peer_sock: SocketAddr = peer_string.parse().unwrap();
 
-            peer_vec.push(peer_sock);
+    //         peer_vec.push(peer_sock);
 
-            index += 6;
-        } else {
-            break;
-        }
-    }
+    //         index += 6;
+    //     } else {
+    //         break;
+    //     }
+    // }
 
     if transaction_id != transaction_id_recv {
         failure_reason = Some(String::from("Transaction ID's did not match"));
@@ -328,7 +331,7 @@ async fn announce_udp(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
     // };
 
     // Ok(response)
-    1800
+    u64::try_from(interval).unwrap()
 }
 
 #[cfg(test)]
