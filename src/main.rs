@@ -33,6 +33,7 @@ impl Actor for Scheduler {
     type Context = Context<Self>;
     fn started(&mut self, ctx: &mut Context<Self>) {
         debug!("Scheduler started");
+        announce_start();
         if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
             if let Some(refresh_every) = client.key_refresh_every {
                 ctx.run_interval(
@@ -200,7 +201,7 @@ fn add_torrent(path: String) {
                         return;
                     }
                 }
-                tracker::announce(&t, client.clone(), Some(Event::Started));
+                tracker::announce(&mut t, client.clone(), Some(Event::Started));
                 list.push(t);
             }
         } else {
@@ -223,6 +224,15 @@ fn init_client(config: &Config) {
     *guard = Some(client);
 }
 
+fn announce_start() {
+    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+    let client = CLIENT.read().expect("Cannot read client").clone().unwrap();
+    for t in list {
+        debug!("Start: announcing {}", t.name); 
+        t.interval = tracker::announce(t, client.clone(), Some(Event::Started));
+    }
+}
+
 async fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
     let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
@@ -243,7 +253,7 @@ mod tests {
         let mut dir = env::temp_dir();
         dir.push("ratioup-test-torrents-dir");
         if dir.is_dir() {
-            std::fs::remove_dir(dir);
+            std::fs::remove_dir(dir.clone());
         }
         prepare_torrent_directory(&dir.display().to_string());
         assert!(dir.is_dir());

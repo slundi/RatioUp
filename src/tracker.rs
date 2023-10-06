@@ -10,7 +10,7 @@ use std::{
 use bytes::{BufMut, BytesMut};
 
 use fake_torrent_client::Client;
-use log::{error, info};
+use log::{error, info, warn};
 use rand::prelude::*;
 
 use tokio::net::UdpSocket;
@@ -31,7 +31,7 @@ pub const EVENT_STOPPED: &str = "stopped";
 
 /// The optional announce event.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Event {
+pub enum Event {
     /// The first request to tracker must include this value.
     Started,
     /// Must be sent to the tracker when the client becomes a seeder. Must not be
@@ -50,9 +50,9 @@ pub(crate) enum Event {
 ///
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
-pub fn announce(torrent: &BasicTorrent, client: Client, event: Option<Event>) -> u64 {
+pub fn announce(torrent: &mut BasicTorrent, client: Client, event: Option<Event>) -> u64 {
     let mut interval = u64::MAX;
-    for url in torrent.urls {
+    for url in torrent.urls.clone() {
         if url.to_lowercase().starts_with("udp://") {
             interval = futures::executor::block_on(announce_udp(&url, torrent, &client, event));
         } else {
@@ -203,7 +203,7 @@ fn announce_http(
 
 async fn announce_udp(
     url: &String,
-    torrent: &BasicTorrent,
+    torrent: &mut BasicTorrent,
     client: &Client,
     event: Option<Event>,
 ) -> u64 {
@@ -237,8 +237,8 @@ async fn announce_udp(
     debug_assert_eq!(torrent.info_hash.len(), 20);
     debug_assert_eq!(client.peer_id.len(), 20);
 
-    bytes_to_send.put(&params.info_hash[..]);
-    bytes_to_send.put(&params.peer_id[..]);
+    bytes_to_send.put(torrent.info_hash.as_bytes());
+    bytes_to_send.put(client.peer_id.as_bytes());
     bytes_to_send.put_i64(torrent.downloaded.try_into().unwrap());
     bytes_to_send.put_i64((torrent.length - torrent.downloaded).try_into().unwrap());
     bytes_to_send.put_i64(torrent.uploaded.try_into().unwrap());
@@ -336,6 +336,7 @@ async fn announce_udp(
 
     if transaction_id != transaction_id_recv {
         failure_reason = Some(String::from("Transaction ID's did not match"));
+        warn!("Cannot announce: {:?}", failure_reason);
     }
 
     // let response = Response {

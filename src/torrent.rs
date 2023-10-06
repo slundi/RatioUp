@@ -289,7 +289,7 @@ impl BasicTorrent {
         self.seeders > 0 || self.leechers > 1
     }
 
-    pub fn downloaded(&self, min_speed: u32, available_speed: u32) -> u32 {
+    pub fn downloaded(&mut self, min_speed: u32, available_speed: u32) -> u32 {
         if self.can_download() {
             self.next_download_speed = rand::thread_rng().gen_range(min_speed..available_speed);
             self.next_download_speed
@@ -298,7 +298,7 @@ impl BasicTorrent {
         }
     }
 
-    pub fn uploaded(&self, min_speed: u32, available_speed: u32) -> u32 {
+    pub fn uploaded(&mut self, min_speed: u32, available_speed: u32) -> u32 {
         if self.can_upload() {
             self.next_upload_speed = rand::thread_rng().gen_range(min_speed..available_speed);
             self.next_upload_speed
