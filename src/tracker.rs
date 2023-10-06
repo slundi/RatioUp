@@ -3,12 +3,13 @@
 
 use std::{
     convert::TryInto,
-    net::{IpAddr, SocketAddr},
+    net::SocketAddr,
     time::Duration,
 };
 
 use bytes::{BufMut, BytesMut};
 
+use fake_torrent_client::Client;
 use log::{error, info};
 use rand::prelude::*;
 
@@ -49,13 +50,13 @@ pub(crate) enum Event {
 ///
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
-pub fn announce(torrent: &BasicTorrent, event: Option<Event>) -> u64 {
+pub fn announce(torrent: &BasicTorrent, client: Client, event: Option<Event>) -> u64 {
     let mut interval = u64::MAX;
     for url in torrent.urls {
         if url.to_lowercase().starts_with("udp://") {
-            interval = futures::executor::block_on(announce_udp(&url, torrent, event));
+            interval = futures::executor::block_on(announce_udp(&url, torrent, &client, event));
         } else {
-            interval = announce_http(&url, torrent, event);
+            interval = announce_http(&url, torrent, &client, event);
         }
     }
     info!("Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", torrent.interval, event, torrent.downloaded, torrent.uploaded, torrent.seeders, torrent.leechers, torrent.name);
@@ -109,7 +110,12 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
     }
 }
 
-fn announce_http(url: &String, torrent: &BasicTorrent, event: Option<Event>) -> u64 {
+fn announce_http(
+    url: &String,
+    torrent: &BasicTorrent,
+    client: &Client,
+    event: Option<Event>,
+) -> u64 {
     // announce parameters are built up in the query string, see:
     // https://www.bittorrent.org/beps/bep_0003.html trackers section
     // let mut query = vec![
@@ -195,7 +201,12 @@ fn announce_http(url: &String, torrent: &BasicTorrent, event: Option<Event>) -> 
     1800
 }
 
-async fn announce_udp(url: &String, torrent: &BasicTorrent, event: Option<Event>) -> u64 {
+async fn announce_udp(
+    url: &String,
+    torrent: &BasicTorrent,
+    client: &Client,
+    event: Option<Event>,
+) -> u64 {
     let port = thread_rng().gen_range(1025..u16::MAX);
     let mut sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
         .await
@@ -223,14 +234,14 @@ async fn announce_udp(url: &String, torrent: &BasicTorrent, event: Option<Event>
     bytes_to_send.put_i32(ACTION);
     bytes_to_send.put_i32(transaction_id);
 
-    debug_assert_eq!(params.info_hash.len(), 20);
-    debug_assert_eq!(params.peer_id.len(), 20);
+    debug_assert_eq!(torrent.info_hash.len(), 20);
+    debug_assert_eq!(client.peer_id.len(), 20);
 
     bytes_to_send.put(&params.info_hash[..]);
     bytes_to_send.put(&params.peer_id[..]);
-    bytes_to_send.put_i64(params.downloaded.try_into().unwrap());
-    bytes_to_send.put_i64(params.left.try_into().unwrap());
-    bytes_to_send.put_i64(params.uploaded.try_into().unwrap());
+    bytes_to_send.put_i64(torrent.downloaded.try_into().unwrap());
+    bytes_to_send.put_i64((torrent.length - torrent.downloaded).try_into().unwrap());
+    bytes_to_send.put_i64(torrent.uploaded.try_into().unwrap());
 
     bytes_to_send.put_i32(match event {
         Some(val) => match val {
@@ -240,30 +251,37 @@ async fn announce_udp(url: &String, torrent: &BasicTorrent, event: Option<Event>
         },
         None => 0,
     });
-    match params.ip {
-        Some(ip) => {
-            match ip {
-                IpAddr::V4(ip) => {
-                    bytes_to_send.put(&(ip.octets()[..]));
-                }
+    // match params.ip {
+    //     Some(ip) => {
+    //         match ip {
+    //             IpAddr::V4(ip) => {
+    //                 bytes_to_send.put(&(ip.octets()[..]));
+    //             }
 
-                //The IP address field must be 32 bits wide, so if the IP given is v6, the field must be set to 0
-                IpAddr::V6(_) => {
-                    bytes_to_send.put_i32(0);
-                }
-            }
-        }
-        None => {
-            bytes_to_send.put_i32(0);
-        }
-    };
+    //             //The IP address field must be 32 bits wide, so if the IP given is v6, the field must be set to 0
+    //             IpAddr::V6(_) => {
+    //                 bytes_to_send.put_i32(0);
+    //             }
+    //         }
+    //     }
+    //     None => {
+    //         bytes_to_send.put_i32(0);
+    //     }
+    // };
+    bytes_to_send.put_i32(0); // IP not supported/useless in our case
 
     bytes_to_send.put_u32(key);
-    bytes_to_send.put_i32(match params.peer_count {
-        Some(num) => num.try_into().unwrap(),
-        None => -1,
-    });
-    bytes_to_send.put_u16(params.port);
+    if client.num_want == 0 {
+        bytes_to_send.put_i32(-1);
+    } else {
+        bytes_to_send.put_i32(i32::try_from(client.num_want).unwrap());
+    }
+    // bytes_to_send.put_i32(match client.num_want {
+    //     Some(num) => num.try_into().unwrap(),
+    //     None => -1,
+    // });
+    let config = crate::CONFIG.get().expect("Cannot read configuration");
+    bytes_to_send.put_u16(config.port);
 
     let bytes_to_send = &bytes_to_send;
 

@@ -77,7 +77,7 @@ impl Scheduler {
                     .1
                     .into_iter()
                     .fold(req, |req, header| req.set(&header.0, &header.1));
-                interval = tracker::announce(t, event);
+                interval = tracker::announce(t, client.clone(), event);
                 interval = t.announce(event, req);
                 //compute the download and upload speed
                 available_upload_speed -= t.uploaded(config.min_upload_rate, available_upload_speed);
@@ -125,9 +125,9 @@ async fn main() -> std::io::Result<()> {
 
     init_client(&config);
     prepare_torrent_directory(&config.torrent_dir);
+    Scheduler.start();
 
     tokio::spawn(async move {
-        Scheduler.start();
         tokio::signal::ctrl_c().await.unwrap();
         announce_stopped().await;
     });
@@ -200,7 +200,7 @@ fn add_torrent(path: String) {
                         return;
                     }
                 }
-                tracker::announce(&t, Some(Event::Started));
+                tracker::announce(&t, client.clone(), Some(Event::Started));
                 list.push(t);
             }
         } else {
@@ -226,8 +226,9 @@ fn init_client(config: &Config) {
 async fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
     let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+    let client = CLIENT.read().expect("Cannot read client").clone().unwrap();
     for t in list {
-        t.interval = tracker::announce(t, Some(Event::Stopped));
+        t.interval = tracker::announce(t, client.clone(), Some(Event::Stopped));
     }
 }
 
