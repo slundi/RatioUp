@@ -10,12 +10,13 @@ use std::{
 use bytes::{BufMut, BytesMut};
 
 use fake_torrent_client::Client;
-use log::{error, info, warn};
+use log::{error, info, warn, debug};
 use rand::prelude::*;
 
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
+use crate::{TORRENTS, CLIENT};
 use crate::torrent::BasicTorrent;
 
 pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
@@ -34,6 +35,25 @@ pub enum Event {
     Completed,
     /// Must be sent to tracker if the client is shutting down gracefully.
     Stopped,
+}
+
+pub fn announce_start() {
+    debug!("Annouce start");
+    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+    let client = CLIENT.read().expect("Cannot read client").clone().unwrap();
+    for t in list {
+        debug!("Start: announcing {}", t.name); 
+        t.interval = announce(t, client.clone(), Some(Event::Started));
+    }
+}
+
+pub async fn announce_stopped() {
+    // TODO: compute uploaded and downloaded then announce
+    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+    let client = CLIENT.read().expect("Cannot read client").clone().unwrap();
+    for t in list {
+        t.interval = announce(t, client.clone(), Some(Event::Stopped));
+    }
 }
 
 /// Sends an announce request to the tracker with the specified parameters.
@@ -58,56 +78,9 @@ pub fn announce(torrent: &mut BasicTorrent, client: Client, event: Option<Event>
     interval
 }
 
-///https://www.bittorrent.org/beps/bep_0015.html
-async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
-    //Bind to a random port
-    let port = rand::thread_rng().gen_range(1025..u16::MAX);
-
-    let sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
-        .await
-        .unwrap();
-
-    //The magic protocol id number
-    const PROTOCOL_ID: i64 = 0x41727101980;
-    const ACTION: i32 = 0;
-    let transaction_id: i32 = random();
-
-    let mut bytes_to_send = BytesMut::with_capacity(16);
-    bytes_to_send.put_i64(PROTOCOL_ID);
-    bytes_to_send.put_i32(ACTION);
-    bytes_to_send.put_i32(transaction_id.try_into().unwrap());
-
-    let bytes_to_send = &bytes_to_send;
-
-    let mut response_buf: [u8; 16] = [0; 16];
-
-    sock.send_to(bytes_to_send, ip_addr).await.unwrap();
-
-    let wait_time = std::time::Duration::from_secs(3);
-    let mut attempts: u8 = 0;
-
-    let mut could_connect = false;
-
-    while response_buf == [0; 16] && attempts < 5 {
-        could_connect = match timeout(wait_time, sock.recv_from(&mut response_buf)).await {
-            Ok(_) => true,
-            Err(_) => false,
-        };
-
-        attempts += 1;
-    }
-
-    let transaction_id_recv: i32 = i32::from_be_bytes((&response_buf[4..8]).try_into().unwrap());
-
-    match could_connect && transaction_id == transaction_id_recv {
-        true => Some(i64::from_be_bytes((&response_buf[8..]).try_into().unwrap())),
-        false => None,
-    }
-}
-
 fn announce_http(
     url: &String,
-    torrent: &BasicTorrent,
+    torrent: &mut BasicTorrent,
     client: &Client,
     event: Option<Event>,
 ) -> u64 {
@@ -169,6 +142,7 @@ fn announce_http(
     let agent = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(60))
         .user_agent(&client.user_agent);
+    build_urls(torrent, event, client.key);
     let mut req = agent
         .build()
         .get(url)
@@ -196,14 +170,84 @@ fn announce_http(
     1800
 }
 
+/// Called after a torrent is added to RatioUp or when RatioUp started (load torrents)
+/// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
+fn prepare_urls(torrent: &mut BasicTorrent, query: String, port: u16, peer_id: String, numwant: u16) {
+    let mut url = String::new();
+    if let Some(a) = torrent.announce.clone() {
+        url = a;
+        url.push('?');
+        url.push_str(&query);
+    }
+    url = url
+        .replace("{peerid}", &peer_id)
+        .replace("&ipv6={ipv6}", "")
+        .replace("{infohash}", &torrent.info_hash_urlencoded)
+        .replace("{numwant}", numwant.to_string().as_str())
+        .replace("{port}", port.to_string().as_str());
+    let _ = &torrent.urls.push(url);
+}
+
+/// Build the announce URLs for the listed trackers in the torrent file. FOR NOW IT DOES NOT HANDLE MULTIPLE URLS!
+pub fn build_urls(torrent: &mut BasicTorrent, event: Option<Event>, key: String) -> Vec<String> {
+    info!("Torrent {:?}: {}", event, torrent.name);
+    //compute downloads and uploads
+    let elapsed: usize = if event == Some(Event::Started) {
+        0
+    } else {
+        torrent.last_announce.elapsed().as_secs() as usize
+    };
+    let uploaded: usize = torrent.next_upload_speed as usize * elapsed;
+    let mut downloaded: usize = torrent.next_download_speed as usize * elapsed;
+    if torrent.length <= torrent.downloaded + downloaded {
+        downloaded = torrent.length - torrent.downloaded;
+    } //do not download more thant the torrent size
+    torrent.downloaded += downloaded;
+
+    //build URL list
+    let mut urls: Vec<String> = Vec::new();
+    let url = torrent.urls[0]
+        .replace("{infohash}", &torrent.info_hash_urlencoded)
+        .replace("{key}", &key)
+        .replace("{uploaded}", uploaded.to_string().as_str())
+        .replace("{downloaded}", downloaded.to_string().as_str())
+        .replace(
+            "{left}",
+            (torrent.length - torrent.downloaded).to_string().as_str(),
+        )
+        .replace(
+            "{event}",
+            match event {
+                Some(e) => match e {
+                    Event::Started => "started",
+                    Event::Completed => "completed",
+                    Event::Stopped => "stopped",
+                },
+                None => "",
+            },
+        );
+    info!(
+        "\tDownloaded: {} \t Uploaded: {}",
+        byte_unit::Byte::from_bytes(downloaded as u128)
+            .get_appropriate_unit(true)
+            .to_string(),
+        byte_unit::Byte::from_bytes(uploaded as u128)
+            .get_appropriate_unit(true)
+            .to_string()
+    );
+    info!("\tAnnonce at: {}", url);
+    urls.push(url);
+    urls
+}
+
 async fn announce_udp(
-    url: &String,
+    url: &str,
     torrent: &mut BasicTorrent,
     client: &Client,
     event: Option<Event>,
 ) -> u64 {
     let port = thread_rng().gen_range(1025..u16::MAX);
-    let mut sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
+    let sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
         .await
         .unwrap();
 
@@ -347,6 +391,49 @@ async fn announce_udp(
 
     // Ok(response)
     u64::try_from(interval).unwrap()
+}
+
+///https://www.bittorrent.org/beps/bep_0015.html
+async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
+    //Bind to a random port
+    let port = rand::thread_rng().gen_range(1025..u16::MAX);
+
+    let sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
+        .await
+        .unwrap();
+
+    //The magic protocol id number
+    const PROTOCOL_ID: i64 = 0x41727101980;
+    const ACTION: i32 = 0;
+    let transaction_id: i32 = random();
+
+    let mut bytes_to_send = BytesMut::with_capacity(16);
+    bytes_to_send.put_i64(PROTOCOL_ID);
+    bytes_to_send.put_i32(ACTION);
+    bytes_to_send.put_i32(transaction_id);
+
+    let bytes_to_send = &bytes_to_send;
+
+    let mut response_buf: [u8; 16] = [0; 16];
+
+    sock.send_to(bytes_to_send, ip_addr).await.unwrap();
+
+    let wait_time = std::time::Duration::from_secs(3);
+    let mut attempts: u8 = 0;
+
+    let mut could_connect = false;
+
+    while response_buf == [0; 16] && attempts < 5 {
+        could_connect = timeout(wait_time, sock.recv_from(&mut response_buf)).await.is_ok();
+        attempts += 1;
+    }
+
+    let transaction_id_recv: i32 = i32::from_be_bytes((&response_buf[4..8]).try_into().unwrap());
+
+    match could_connect && transaction_id == transaction_id_recv {
+        true => Some(i64::from_be_bytes((&response_buf[8..]).try_into().unwrap())),
+        false => None,
+    }
 }
 
 #[cfg(test)]

@@ -13,6 +13,8 @@ use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
 
+use crate::tracker::Event;
+
 /// The tracker responds with "text/plain" document consisting of a bencoded dictionary
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct FailureTrackerResponse {
@@ -203,75 +205,6 @@ pub struct BasicTorrent {
 }
 
 impl BasicTorrent {
-    /// Called after a torrent is added to RatioUp or when RatioUp started (load torrents)
-    /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
-    pub fn prepare_urls(&mut self, query: String, port: u16, peer_id: String, numwant: u16) {
-        let mut url = String::new();
-        if let Some(a) = self.announce.clone() {
-            url = a;
-            url.push('?');
-            url.push_str(&query);
-        }
-        url = url
-            .replace("{peerid}", &peer_id)
-            .replace("&ipv6={ipv6}", "")
-            .replace("{infohash}", &self.info_hash_urlencoded)
-            .replace("{numwant}", numwant.to_string().as_str())
-            .replace("{port}", port.to_string().as_str());
-        let _ = &self.urls.push(url);
-    }
-    /// Build the announce URLs for the listed trackers in the torrent file. FOR NOW IT DOES NOT HANDLE MULTIPLE URLS!
-    pub fn build_urls(&mut self, event: Option<Event>, key: String) -> Vec<String> {
-        info!("Torrent {:?}: {}", event, self.name);
-        //compute downloads and uploads
-        let elapsed: usize = if event == Some(Event::Started) {
-            0
-        } else {
-            self.last_announce.elapsed().as_secs() as usize
-        };
-        let uploaded: usize = self.next_upload_speed as usize * elapsed;
-        let mut downloaded: usize = self.next_download_speed as usize * elapsed;
-        if self.length <= self.downloaded + downloaded {
-            downloaded = self.length - self.downloaded;
-        } //do not download more thant the torrent size
-        self.downloaded += downloaded;
-
-        //build URL list
-        let mut urls: Vec<String> = Vec::new();
-        let url = self.urls[0]
-            .replace("{infohash}", &self.info_hash_urlencoded)
-            .replace("{key}", &key)
-            .replace("{uploaded}", uploaded.to_string().as_str())
-            .replace("{downloaded}", downloaded.to_string().as_str())
-            .replace(
-                "{left}",
-                (self.length - self.downloaded).to_string().as_str(),
-            )
-            .replace(
-                "{event}",
-                match event {
-                    Some(e) => match e {
-                        Event::Started => "started",
-                        Event::Completed => "completed",
-                        Event::Stopped => "stopped",
-                    },
-                    None => "",
-                },
-            );
-        info!(
-            "\tDownloaded: {} \t Uploaded: {}",
-            byte_unit::Byte::from_bytes(downloaded as u128)
-                .get_appropriate_unit(true)
-                .to_string(),
-            byte_unit::Byte::from_bytes(uploaded as u128)
-                .get_appropriate_unit(true)
-                .to_string()
-        );
-        info!("\tAnnonce at: {}", url);
-        urls.push(url);
-        urls
-    }
-
     /// Tells if we can announce to tracker(s) depending on the last announce
     pub fn shound_announce(&self) -> bool {
         self.last_announce.elapsed().as_secs() >= self.interval
@@ -499,8 +432,8 @@ mod tests {
         t.interval = 1;
         std::thread::sleep(std::time::Duration::from_secs(2));
         let speed = t.downloaded(16, 64);
-        assert!(speed >= 16 && speed <= 64);
+        assert!((16..=64).contains(&speed));
         let speed = t.uploaded(16, 64);
-        assert!(speed >= 16 && speed <= 64);
+        assert!((16..=64).contains(&speed));
     }
 }
