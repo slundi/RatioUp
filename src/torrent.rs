@@ -13,8 +13,6 @@ use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
 
-use crate::tracker::{Event, EVENT_COMPLETED, EVENT_STARTED, EVENT_STOPPED};
-
 /// The tracker responds with "text/plain" document consisting of a bencoded dictionary
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
 pub struct FailureTrackerResponse {
@@ -253,9 +251,9 @@ impl BasicTorrent {
                 "{event}",
                 match event {
                     Some(e) => match e {
-                        Event::Started => EVENT_STARTED,
-                        Event::Completed => EVENT_COMPLETED,
-                        Event::Stopped => EVENT_STOPPED,
+                        Event::Started => "started",
+                        Event::Completed => "completed",
+                        Event::Stopped => "stopped",
                     },
                     None => "",
                 },

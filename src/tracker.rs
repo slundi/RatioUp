@@ -24,11 +24,6 @@ pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::
     .remove(b'~')
     .remove(b'.');
 
-pub const EVENT_NONE: &str = "";
-pub const EVENT_COMPLETED: &str = "completed"; //not used because we do not download for now
-pub const EVENT_STARTED: &str = "started";
-pub const EVENT_STOPPED: &str = "stopped";
-
 /// The optional announce event.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
