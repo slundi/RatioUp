@@ -40,11 +40,11 @@ impl Scheduler {
             let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
             let mut available_download_speed: u32 = config.max_download_rate;
             let mut available_upload_speed: u32 = config.max_upload_rate;
-            let mut next_announce = u32::MAX;
+            let mut next_announce = 4_294_967_295u32;
             // send queries to trackers
             for t in list {
                 // TODO: client.annouce(t, client);
-                let mut interval: u64 = u64::MAX;
+                let mut interval: u64 = 4_294_967_295;
                 if !t.shound_announce() {
                     next_announce = next_announce.min(t.interval.try_into().unwrap());
                     continue;

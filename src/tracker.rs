@@ -66,7 +66,7 @@ pub async fn announce_stopped() {
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
 pub fn announce(torrent: &mut BasicTorrent, client: Client, event: Option<Event>) -> u64 {
-    let mut interval = u64::MAX;
+    let mut interval = 4_294_967_295u64;
     for url in torrent.urls.clone() {
         if url.to_lowercase().starts_with("udp://") {
             interval = futures::executor::block_on(announce_udp(&url, torrent, &client, event));

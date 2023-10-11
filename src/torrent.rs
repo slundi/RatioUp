@@ -329,7 +329,7 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         leechers: 0,
         next_upload_speed: 0,
         next_download_speed: 0,
-        interval: u64::MAX,
+        interval: 4_294_967_295,
     };
     t.info_hash_urlencoded =
         percent_encoding::percent_encode(&hash_bytes, crate::tracker::URL_ENCODE_RESERVED)
