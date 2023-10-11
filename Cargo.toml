@@ -29,6 +29,7 @@ reqwest = { version = "0.11", features = [
 ] }
 percent-encoding = "2"
 fake-torrent-client = "0.9"
+scheduled-thread-pool = "0.2"
 
 rust-ini = "0.19"
 dotenv = "0.15"

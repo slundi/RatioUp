@@ -41,13 +41,30 @@ async fn main() -> std::io::Result<()> {
     })
     .unwrap();
 
-    init_client(&config);
     prepare_torrent_directory(&config.torrent_dir);
     load_torrents(&config.torrent_dir);
+
+    let tp = scheduled_thread_pool::ScheduledThreadPool::new(1);
+    // schedule client refresh key if applicable
+    let mut job_refresh_key: Option<scheduled_thread_pool::JobHandle> = None;
+    if let Some(refresh_every) = init_client(&config) {
+        job_refresh_key = Some(tp.execute_at_fixed_rate(
+            std::time::Duration::from_secs(u64::try_from(refresh_every).unwrap()),
+            std::time::Duration::from_secs(u64::try_from(refresh_every).unwrap()),
+            move || {
+                if let Some(client) = &mut *CLIENT.write().expect("Cannot read client") {
+                    client.generate_key();
+                }
+            },
+        ));
+    }
     tracker::announce_start();
-    tokio::spawn(async move {
-        let _addr = crate::scheduler::Scheduler.start(); // FIXME
+    tokio::spawn(async move { // graceful exit when Ctrl + C
+        //let _addr = crate::scheduler::Scheduler.start(); // FIXME
         tokio::signal::ctrl_c().await.unwrap();
+        if let Some(job) = job_refresh_key {
+            job.cancel();
+        }
         tracker::announce_stopped().await;
     });
     //start web server
@@ -61,7 +78,7 @@ async fn main() -> std::io::Result<()> {
             .service(Files::new(&config.web_root.clone(), "static/").index_file("index.html"))
     })
     .bind(config.server_addr.clone())?
-    .workers(2)
+    .workers(1)
     .system_exit()
     .run();
     info!("Starting HTTP server at http://{}/", &config.server_addr);
@@ -124,7 +141,8 @@ fn add_torrent(path: String) {
     }
 }
 
-fn init_client(config: &Config) {
+/// Init the client from the configuration and returns the interval to refresh client key if applicable
+fn init_client(config: &Config) -> Option<u16> {
     let mut client = Client::default();
     client.build(
         fake_torrent_client::clients::ClientVersion::from_str(&config.client)
@@ -134,8 +152,10 @@ fn init_client(config: &Config) {
         "Client information (key: {}, peer ID:{})",
         client.key, client.peer_id
     );
+    let key_interval = client.key_refresh_every;
     let mut guard = CLIENT.write().unwrap();
     *guard = Some(client);
+    key_interval
 }
 
 #[cfg(test)]
