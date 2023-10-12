@@ -119,24 +119,25 @@ fn add_torrent(path: String) {
             let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
             info!("Loading torrent: \t{}", path);
             let t = torrent::from_file(path.clone());
-            if let Ok(torrent) = t {
-                let mut t = torrent::from_torrent(torrent, path);
-                if config.min_download_rate > 0 && config.max_download_rate > 0 {
-                    t.downloaded = 0;
-                } else {
-                    t.downloaded = t.length;
-                }
-                for existing in list.iter() {
-                    if existing.info_hash == t.info_hash {
-                        info!("Torrent is already in list");
-                        return;
+            match t {
+                Ok(torrent) => {
+                    let mut t = torrent::from_torrent(torrent, path);
+                    if config.min_download_rate > 0 && config.max_download_rate > 0 {
+                        t.downloaded = 0;
+                    } else {
+                        t.downloaded = t.length;
                     }
-                }
-                tracker::announce(&mut t, client.clone(), Some(Event::Started));
-                list.push(t);
+                    for existing in list.iter() {
+                        if existing.info_hash == t.info_hash {
+                            info!("Torrent is already in list");
+                            return;
+                        }
+                    }
+                    tracker::announce(&mut t, client.clone(), Some(Event::Started));
+                    list.push(t);
+                },
+                Err(e) => error!("Cannot parse torrent: \t{} {:?}", path, e),
             }
-        } else {
-            error!("Cannot parse torrent: \t{}", path);
         }
     }
 }
