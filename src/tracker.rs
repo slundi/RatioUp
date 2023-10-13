@@ -1,29 +1,45 @@
 // https://xbtt.sourceforge.net/udp_tracker_protocol.html
 // based on https://github.com/billyb2/cratetorrent/blob/master/cratetorrent/src/tracker.rs
 
-use std::{
-    convert::TryInto,
-    net::SocketAddr,
-    time::Duration,
-};
+use std::{convert::TryInto, io::Read, net::SocketAddr, time::Duration};
 
 use bytes::{BufMut, BytesMut};
 
 use fake_torrent_client::Client;
-use log::{error, info, warn, debug};
+use log::{debug, error, info, warn};
 use rand::prelude::*;
 
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
-use crate::{TORRENTS, CLIENT};
 use crate::torrent::BasicTorrent;
+use crate::{CLIENT, TORRENTS};
 
 pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
     .remove(b'-')
     .remove(b'_')
     .remove(b'~')
     .remove(b'.');
+
+
+enum ErrorCode {
+    /// Client request was not a HTTP GET
+    InvalidRequestType = 100, 
+    MissingInfosash = 101,
+    MissingPeerId = 102,
+    MissingPort = 103,
+    /// infohash is not 20 bytes long.
+    InvalidInfohash = 150,
+    /// peerid is not 20 bytes long
+    InvalidPeerId = 151,
+    /// Client requested more peers than allowed by tracker
+    InvalidNumwant = 152,
+    /// info_hash not found in the database. Sent only by trackers that do not automatically include new hashes into the database.
+    InfohashNotFound = 200, 
+    /// Client sent an eventless request before the specified time.
+    ClientSentEventlessRequest = 500,
+    GenericError = 900,
+}
 
 /// The optional announce event.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -37,22 +53,50 @@ pub enum Event {
     Stopped,
 }
 
+/// The tracker responds with "text/plain" document consisting of a bencoded dictionary
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct FailureTrackerResponse {
+    /// If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
+    #[serde(rename = "failure reason")]
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+pub struct OkTrackerResponse {
+    /// (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
+    #[serde(default, rename = "warning message")]
+    pub warning_message: Option<String>,
+    /// Interval in seconds that the client should wait between sending regular requests to the tracker
+    pub interval: i64,
+    /// (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
+    #[serde(default, rename = "min interval")]
+    pub min_interval: Option<i64>,
+    /// A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
+    pub tracker_id: Option<String>,
+    /// number of peers with the entire file, i.e. seeders
+    pub complete: i64,
+    /// number of non-seeder peers, aka "leechers"
+    pub incomplete: i64,
+    /// (dictionary model) The value is a list of dictionaries, each with the following keys.
+    /// peers: (binary model) Instead of using the dictionary model described above, the peers value may be a string consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number. All in network (big endian) notation.
+    #[serde(default, skip_deserializing)]
+    peers: Option<u8>,
+}
+
 pub fn announce_start() {
     debug!("Annouce start");
     let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-    let client = CLIENT.read().expect("Cannot read client").clone().unwrap();
     for t in list {
-        debug!("Start: announcing {}", t.name); 
-        t.interval = announce(t, client.clone(), Some(Event::Started));
+        debug!("Start: announcing {}", t.name);
+        t.interval = announce(t, Some(Event::Started));
     }
 }
 
 pub async fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
     let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-    let client = CLIENT.read().expect("Cannot read client").clone().unwrap();
     for t in list {
-        t.interval = announce(t, client.clone(), Some(Event::Stopped));
+        t.interval = announce(t, Some(Event::Stopped));
     }
 }
 
@@ -65,21 +109,23 @@ pub async fn announce_stopped() {
 ///
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
-pub fn announce(torrent: &mut BasicTorrent, client: Client, event: Option<Event>) -> u64 {
+pub fn announce(torrent: &mut BasicTorrent, event: Option<Event>) -> u64 {
     let mut interval = 4_294_967_295u64;
-    for url in torrent.urls.clone() {
-        if url.to_lowercase().starts_with("udp://") {
-            interval = futures::executor::block_on(announce_udp(&url, torrent, &client, event));
-        } else {
-            interval = announce_http(&url, torrent, &client, event);
+    if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
+        for url in torrent.urls.clone() {
+            if url.to_lowercase().starts_with("udp://") {
+                interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
+            } else {
+                interval = announce_http(&url, torrent, client, event);
+            }
         }
+        info!("Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", torrent.interval, event, torrent.downloaded, torrent.uploaded, torrent.seeders, torrent.leechers, torrent.name);
     }
-    info!("Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", torrent.interval, event, torrent.downloaded, torrent.uploaded, torrent.seeders, torrent.leechers, torrent.name);
     interval
 }
 
 fn announce_http(
-    url: &String,
+    url: &str,
     torrent: &mut BasicTorrent,
     client: &Client,
     event: Option<Event>,
@@ -133,16 +179,12 @@ fn announce_http(
     //     peer_id = percent_encoding::percent_encode(&params.peer_id, URL_ENCODE_RESERVED),
     // );
 
-    let client = crate::CLIENT
-        .read()
-        .expect("Cannot get client")
-        .clone()
-        .unwrap();
     let query = client.get_query();
     let agent = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(60))
         .user_agent(&client.user_agent);
-    build_urls(torrent, event, client.key);
+    let urls = build_urls(torrent, event, client.key.clone());
+    debug!("Announce URL(s) {:?}", urls);
     let mut req = agent
         .build()
         .get(url)
@@ -152,7 +194,46 @@ fn announce_http(
         .into_iter()
         .fold(req, |req, header| req.set(&header.0, &header.1));
     match req.call() {
-        Ok(resp) => todo!(),
+        Ok(resp) => {
+            let code = resp.status();
+                info!(
+                    "\tTime since last announce: {}s \t interval: {}",
+                    torrent.last_announce.elapsed().as_secs(),
+                    torrent.interval
+                );
+                let mut bytes: Vec<u8> = Vec::with_capacity(2048);
+                resp.into_reader()
+                    .take(1024)
+                    .read_to_end(&mut bytes)
+                    .expect("Cannot read response");
+                //we start to check if the tracker has returned an error message, if yes, we will reannounce later
+                debug!(
+                    "Tracker response: {:?}",
+                    String::from_utf8_lossy(&bytes.clone())
+                );
+                match serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
+                    Ok(tr) => {
+                        torrent.seeders = u16::try_from(tr.complete).unwrap();
+                        torrent.leechers = u16::try_from(tr.incomplete).unwrap();
+                        torrent.interval = u64::try_from(tr.interval).unwrap();
+                        info!(
+                            "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
+                            tr.incomplete, tr.complete, tr.interval
+                        );
+                    }
+                    Err(e1) => {
+                        match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
+                            Ok(tr) => warn!("Cannot announce: {}", tr.reason),
+                            Err(e2) => {
+                                error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
+                            }
+                        }
+                    }
+                }
+                if code != actix_web::http::StatusCode::OK {
+                    info!("\tResponse: code={}\tdata={:?}", code, bytes);
+                }
+        },
         Err(err) => error!("Cannot announce: {:?}", err),
     }
     // send request
@@ -167,12 +248,18 @@ fn announce_http(
     //     .await?;
     // let resp = serde_bencode::from_bytes(&resp)?;
     // Ok(resp)
-    1800
+    torrent.interval
 }
 
 /// Called after a torrent is added to RatioUp or when RatioUp started (load torrents)
 /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
-fn prepare_urls(torrent: &mut BasicTorrent, query: String, port: u16, peer_id: String, numwant: u16) {
+fn prepare_urls(
+    torrent: &mut BasicTorrent,
+    query: String,
+    port: u16,
+    peer_id: String,
+    numwant: u16,
+) {
     let mut url = String::new();
     if let Some(a) = torrent.announce.clone() {
         url = a;
@@ -390,6 +477,7 @@ async fn announce_udp(
     // };
 
     // Ok(response)
+    debug!("UDP announced:  interval: {}, seeders: {}, leecherc: {}", interval, seeders, leechers);
     u64::try_from(interval).unwrap()
 }
 
@@ -424,7 +512,9 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
     let mut could_connect = false;
 
     while response_buf == [0; 16] && attempts < 5 {
-        could_connect = timeout(wait_time, sock.recv_from(&mut response_buf)).await.is_ok();
+        could_connect = timeout(wait_time, sock.recv_from(&mut response_buf))
+            .await
+            .is_ok();
         attempts += 1;
     }
 

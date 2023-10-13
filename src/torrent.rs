@@ -3,25 +3,16 @@
 extern crate serde;
 extern crate serde_bencode;
 extern crate serde_bytes;
-use std::io::Read;
 
 use hex::ToHex;
 use hmac_sha1_compact::Hash;
-use log::{debug, error, info, warn};
+use log::{error, warn};
 use rand::Rng;
 use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
 
 use crate::tracker::Event;
-
-/// The tracker responds with "text/plain" document consisting of a bencoded dictionary
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct FailureTrackerResponse {
-    /// If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
-    #[serde(rename = "failure reason")]
-    pub reason: String,
-}
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone)]
 pub struct Peer {
@@ -31,28 +22,6 @@ pub struct Peer {
     pub ip: String,
     /// peer's port number
     pub port: i64,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct OkTrackerResponse {
-    /// (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
-    #[serde(default, rename = "warning message")]
-    pub warning_message: Option<String>,
-    /// Interval in seconds that the client should wait between sending regular requests to the tracker
-    pub interval: i64,
-    /// (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
-    #[serde(default, rename = "min interval")]
-    pub min_interval: Option<i64>,
-    /// A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
-    pub tracker_id: Option<String>,
-    /// number of peers with the entire file, i.e. seeders
-    pub complete: i64,
-    /// number of non-seeder peers, aka "leechers"
-    pub incomplete: i64,
-    /// (dictionary model) The value is a list of dictionaries, each with the following keys.
-    /// peers: (binary model) Instead of using the dictionary model described above, the peers value may be a string consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number. All in network (big endian) notation.
-    #[serde(default, skip_deserializing)]
-    peers: Option<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -241,44 +210,44 @@ impl BasicTorrent {
     pub fn announce(&mut self, event: Option<Event>, request: ureq::Request) -> u64 {
         match request.call() {
             Ok(resp) => {
-                let code = resp.status();
-                info!(
-                    "\tTime since last announce: {}s \t interval: {}",
-                    self.last_announce.elapsed().as_secs(),
-                    self.interval
-                );
-                let mut bytes: Vec<u8> = Vec::with_capacity(2048);
-                resp.into_reader()
-                    .take(1024)
-                    .read_to_end(&mut bytes)
-                    .expect("Cannot read response");
-                //we start to check if the tracker has returned an error message, if yes, we will reannounce later
-                debug!(
-                    "Tracker response: {:?}",
-                    String::from_utf8_lossy(&bytes.clone())
-                );
-                match serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
-                    Ok(tr) => {
-                        self.seeders = u16::try_from(tr.complete).unwrap();
-                        self.leechers = u16::try_from(tr.incomplete).unwrap();
-                        self.interval = u64::try_from(tr.interval).unwrap();
-                        info!(
-                            "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
-                            tr.incomplete, tr.complete, tr.interval
-                        );
-                    }
-                    Err(e1) => {
-                        match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
-                            Ok(tr) => warn!("Cannot announce: {}", tr.reason),
-                            Err(e2) => {
-                                error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
-                            }
-                        }
-                    }
-                }
-                if code != actix_web::http::StatusCode::OK {
-                    info!("\tResponse: code={}\tdata={:?}", code, bytes);
-                }
+                // let code = resp.status();
+                // info!(
+                //     "\tTime since last announce: {}s \t interval: {}",
+                //     self.last_announce.elapsed().as_secs(),
+                //     self.interval
+                // );
+                // let mut bytes: Vec<u8> = Vec::with_capacity(2048);
+                // resp.into_reader()
+                //     .take(1024)
+                //     .read_to_end(&mut bytes)
+                //     .expect("Cannot read response");
+                // //we start to check if the tracker has returned an error message, if yes, we will reannounce later
+                // debug!(
+                //     "Tracker response: {:?}",
+                //     String::from_utf8_lossy(&bytes.clone())
+                // );
+                // match serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
+                //     Ok(tr) => {
+                //         self.seeders = u16::try_from(tr.complete).unwrap();
+                //         self.leechers = u16::try_from(tr.incomplete).unwrap();
+                //         self.interval = u64::try_from(tr.interval).unwrap();
+                //         info!(
+                //             "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
+                //             tr.incomplete, tr.complete, tr.interval
+                //         );
+                //     }
+                //     Err(e1) => {
+                //         match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
+                //             Ok(tr) => warn!("Cannot announce: {}", tr.reason),
+                //             Err(e2) => {
+                //                 error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
+                //             }
+                //         }
+                //     }
+                // }
+                // if code != actix_web::http::StatusCode::OK {
+                //     info!("\tResponse: code={}\tdata={:?}", code, bytes);
+                // }
             }
             Err(ureq::Error::Status(code, response)) => {
                 //the server returned an unexpected status code (such as 400, 500 etc)
