@@ -4,7 +4,6 @@
 extern crate serde_derive;
 extern crate rand;
 
-use actix::prelude::*;
 use actix_files::Files;
 use actix_web::{middleware, App, HttpServer};
 use dotenv::dotenv;
@@ -12,7 +11,6 @@ use fake_torrent_client::Client;
 use log::{self, error, info};
 use std::str::FromStr;
 use std::sync::{OnceLock, RwLock};
-use tracker::Event;
 
 use crate::config::Config;
 
@@ -59,6 +57,7 @@ async fn main() -> std::io::Result<()> {
         ));
     }
     tracker::announce_start();
+    crate::scheduler::set_announce_jobs(&tp);
     tokio::spawn(async move { // graceful exit when Ctrl + C
         //let _addr = crate::scheduler::Scheduler.start(); // FIXME
         tokio::signal::ctrl_c().await.unwrap();
@@ -114,30 +113,28 @@ fn load_torrents(directory: &String) {
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed
 fn add_torrent(path: String) {
     if path.to_lowercase().ends_with(".torrent") {
-        if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
-            let config = CONFIG.get().expect("Cannot read configuration");
-            let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-            info!("Loading torrent: \t{}", path);
-            let t = torrent::from_file(path.clone());
-            match t {
-                Ok(torrent) => {
-                    let mut t = torrent::from_torrent(torrent, path);
-                    if config.min_download_rate > 0 && config.max_download_rate > 0 {
-                        t.downloaded = 0;
-                    } else {
-                        t.downloaded = t.length;
+        let config = CONFIG.get().expect("Cannot read configuration");
+        let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+        info!("Loading torrent: \t{}", path);
+        let t = torrent::from_file(path.clone());
+        match t {
+            Ok(torrent) => {
+                let mut t = torrent::from_torrent(torrent, path);
+                if config.min_download_rate > 0 && config.max_download_rate > 0 {
+                    t.downloaded = 0;
+                } else {
+                    t.downloaded = t.length;
+                }
+                for existing in list.iter() {
+                    if existing.info_hash == t.info_hash {
+                        info!("Torrent is already in list");
+                        return;
                     }
-                    for existing in list.iter() {
-                        if existing.info_hash == t.info_hash {
-                            info!("Torrent is already in list");
-                            return;
-                        }
-                    }
-                    tracker::announce(&mut t, client.clone(), Some(Event::Started));
-                    list.push(t);
-                },
-                Err(e) => error!("Cannot parse torrent: \t{} {:?}", path, e),
-            }
+                }
+                // tracker::announce(&mut t, Some(Event::Started));
+                list.push(t);
+            },
+            Err(e) => error!("Cannot parse torrent: \t{} {:?}", path, e),
         }
     }
 }
