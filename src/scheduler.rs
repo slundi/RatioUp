@@ -1,7 +1,4 @@
-use std::time::Duration;
-
 use log::debug;
-use log::info;
 
 use crate::tracker;
 use crate::tracker::Event;
