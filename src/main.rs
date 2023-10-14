@@ -23,6 +23,13 @@ mod tracker;
 static CONFIG: OnceLock<Config> = OnceLock::new();
 static CLIENT: RwLock<Option<Client>> = RwLock::new(None); // TODO: remove, build it every time because it can be HTTP or UDP
 static TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
+static THREAD_POOL: once_cell::sync::Lazy<scheduled_thread_pool::ScheduledThreadPool> =
+    once_cell::sync::Lazy::new(|| {
+        scheduled_thread_pool::ScheduledThreadPool::builder()
+            .num_threads(1)
+            .on_drop_behavior(scheduled_thread_pool::OnPoolDropBehavior::DiscardPendingScheduled)
+            .build()
+    });
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -44,9 +51,8 @@ async fn main() -> std::io::Result<()> {
 
     let tp = scheduled_thread_pool::ScheduledThreadPool::new(1);
     // schedule client refresh key if applicable
-    let mut job_refresh_key: Option<scheduled_thread_pool::JobHandle> = None;
     if let Some(refresh_every) = init_client(&config) {
-        job_refresh_key = Some(tp.execute_at_fixed_rate(
+        tp.execute_at_fixed_rate(
             std::time::Duration::from_secs(u64::try_from(refresh_every).unwrap()),
             std::time::Duration::from_secs(u64::try_from(refresh_every).unwrap()),
             move || {
@@ -54,16 +60,14 @@ async fn main() -> std::io::Result<()> {
                     client.generate_key();
                 }
             },
-        ));
+        );
     }
     tracker::announce_start();
-    crate::scheduler::set_announce_jobs(&tp);
-    tokio::spawn(async move { // graceful exit when Ctrl + C
+    crate::scheduler::set_announce_jobs();
+    tokio::spawn(async move {
+        // graceful exit when Ctrl + C
         //let _addr = crate::scheduler::Scheduler.start(); // FIXME
         tokio::signal::ctrl_c().await.unwrap();
-        if let Some(job) = job_refresh_key {
-            job.cancel();
-        }
         tracker::announce_stopped().await;
     });
     //start web server
@@ -133,7 +137,7 @@ fn add_torrent(path: String) {
                 }
                 // tracker::announce(&mut t, Some(Event::Started));
                 list.push(t);
-            },
+            }
             Err(e) => error!("Cannot parse torrent: \t{} {:?}", path, e),
         }
     }

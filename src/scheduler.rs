@@ -39,8 +39,7 @@ fn announce(event: Option<Event>) {
             interval = interval.min(tracker::announce(t, event));
             // interval = t.announce(event, req);
             //compute the download and upload speed
-            available_upload_speed -=
-                t.uploaded(config.min_upload_rate, available_upload_speed);
+            available_upload_speed -= t.uploaded(config.min_upload_rate, available_upload_speed);
             available_download_speed -=
                 t.uploaded(config.min_upload_rate, available_download_speed);
             t.uploaded += (interval as usize) * (t.next_upload_speed as usize);
@@ -63,22 +62,17 @@ fn announce(event: Option<Event>) {
 
 /// Schedule annonce job
 pub fn set_announce_jobs(
-    thread_pool: &scheduled_thread_pool::ScheduledThreadPool,
 ) -> Vec<scheduled_thread_pool::JobHandle> {
     let mut jobs: Vec<scheduled_thread_pool::JobHandle> = Vec::new();
     let list = &*TORRENTS.read().expect("Cannot get torrent list");
-    let mut interval = 4_294_967_295u64;
     for t in list {
-        interval = interval.min(t.interval);
+        jobs.push(crate::THREAD_POOL.execute_after(
+            std::time::Duration::from_secs(t.interval),
+            check_and_announce,
+        ));
     }
-    thread_pool.execute_after(
-        std::time::Duration::from_secs(interval),
-        check_and_announce,
-    );
     jobs
 }
 
 /// Check which torrents need to be announced and call the announce fuction when applicable
-fn check_and_announce() {
-
-}
+fn check_and_announce() {}
