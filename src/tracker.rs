@@ -425,7 +425,7 @@ async fn announce_udp(
 
     match timeout(wait_time, sock.recv_from(&mut response_buf)).await {
         Ok(_) => (),
-        Err(_) => failure_reason = Some(String::from("Couldn't announce to tracker")),
+        Err(e) => failure_reason = Some(format!("timeout after {}s", e))
     };
 
     let transaction_id_recv: i32 = i32::from_be_bytes((&response_buf[4..8]).try_into().unwrap());
@@ -462,7 +462,9 @@ async fn announce_udp(
 
     if transaction_id != transaction_id_recv {
         failure_reason = Some(String::from("Transaction ID's did not match"));
-        warn!("Cannot announce: {:?}", failure_reason);
+    }
+    if let Some(fr) = failure_reason {
+        warn!("Cannot announce: {}", fr);
     }
 
     // let response = Response {
