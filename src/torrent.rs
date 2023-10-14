@@ -6,6 +6,7 @@ extern crate serde_bytes;
 
 use hex::ToHex;
 use hmac_sha1_compact::Hash;
+use log::debug;
 use rand::Rng;
 use serde::Serialize;
 use serde_bencode::ser;
@@ -297,6 +298,18 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         next_download_speed: 0,
         interval: 4_294_967_295,
     };
+    if let Some(url) = torrent.announce.clone() {
+        t.urls.push(url);
+    }
+    if let Some(al) = torrent.announce_list.clone() {
+        for v in al {
+            for s in v {
+                if !s.is_empty() && !t.urls.iter().any(|value| value == &s) {
+                    t.urls.push(s);
+                }
+            }
+        }
+    }
     t.info_hash_urlencoded =
         percent_encoding::percent_encode(&hash_bytes, crate::tracker::URL_ENCODE_RESERVED)
             .to_string();
@@ -311,6 +324,7 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         }
         t.files = Some(list);
     }
+    debug!("Torrent: {:?}", t);
     t
 }
 

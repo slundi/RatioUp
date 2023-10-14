@@ -112,6 +112,7 @@ pub async fn announce_stopped() {
 pub fn announce(torrent: &mut BasicTorrent, event: Option<Event>) -> u64 {
     let mut interval = 4_294_967_295u64;
     if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
+        debug!("Torrent has {} url(s)", torrent.urls.len());
         for url in torrent.urls.clone() {
             if url.to_lowercase().starts_with("udp://") {
                 interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
@@ -184,7 +185,7 @@ fn announce_http(
         .timeout(std::time::Duration::from_secs(60))
         .user_agent(&client.user_agent);
     let urls = build_urls(torrent, event, client.key.clone());
-    debug!("Announce URL(s) {:?}", urls);
+    debug!("Announce HTTP URL {:?}", urls);
     let mut req = agent
         .build()
         .get(url)
@@ -340,6 +341,7 @@ async fn announce_udp(
 
     // All of the potential addressese of a URL
     let url = reqwest::Url::parse(url).expect("Cannot parse tracker URL");
+    debug!("Announce UDP URL  {:?}", url);
     let mut addrs = url.socket_addrs(|| None).unwrap();
     // Shuffle the list
     addrs.shuffle(&mut thread_rng());
