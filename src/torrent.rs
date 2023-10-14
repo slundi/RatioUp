@@ -6,13 +6,10 @@ extern crate serde_bytes;
 
 use hex::ToHex;
 use hmac_sha1_compact::Hash;
-use log::{error, warn};
 use rand::Rng;
 use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
-
-use crate::tracker::Event;
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone)]
 pub struct Peer {
@@ -207,67 +204,67 @@ impl BasicTorrent {
         }
     }
 
-    pub fn announce(&mut self, event: Option<Event>, request: ureq::Request) -> u64 {
-        match request.call() {
-            Ok(resp) => {
-                // let code = resp.status();
-                // info!(
-                //     "\tTime since last announce: {}s \t interval: {}",
-                //     self.last_announce.elapsed().as_secs(),
-                //     self.interval
-                // );
-                // let mut bytes: Vec<u8> = Vec::with_capacity(2048);
-                // resp.into_reader()
-                //     .take(1024)
-                //     .read_to_end(&mut bytes)
-                //     .expect("Cannot read response");
-                // //we start to check if the tracker has returned an error message, if yes, we will reannounce later
-                // debug!(
-                //     "Tracker response: {:?}",
-                //     String::from_utf8_lossy(&bytes.clone())
-                // );
-                // match serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
-                //     Ok(tr) => {
-                //         self.seeders = u16::try_from(tr.complete).unwrap();
-                //         self.leechers = u16::try_from(tr.incomplete).unwrap();
-                //         self.interval = u64::try_from(tr.interval).unwrap();
-                //         info!(
-                //             "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
-                //             tr.incomplete, tr.complete, tr.interval
-                //         );
-                //     }
-                //     Err(e1) => {
-                //         match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
-                //             Ok(tr) => warn!("Cannot announce: {}", tr.reason),
-                //             Err(e2) => {
-                //                 error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
-                //             }
-                //         }
-                //     }
-                // }
-                // if code != actix_web::http::StatusCode::OK {
-                //     info!("\tResponse: code={}\tdata={:?}", code, bytes);
-                // }
-            }
-            Err(ureq::Error::Status(code, response)) => {
-                //the server returned an unexpected status code (such as 400, 500 etc)
-                if code == 400 {
-                    warn!("\tBad request (error 400), please check the URL");
-                } else {
-                    warn!(
-                        "\tUnexpected server response status: {}\t{:?}",
-                        code, response
-                    );
-                }
-            }
-            Err(err) => {
-                if event != Some(Event::Stopped) {
-                    error!("I/O error while announcing: {:?}", err);
-                }
-            }
-        }
-        self.interval
-    }
+    // pub fn announce(&mut self, event: Option<Event>, request: ureq::Request) -> u64 {
+    //     match request.call() {
+    //         Ok(resp) => {
+    //             // let code = resp.status();
+    //             // info!(
+    //             //     "\tTime since last announce: {}s \t interval: {}",
+    //             //     self.last_announce.elapsed().as_secs(),
+    //             //     self.interval
+    //             // );
+    //             // let mut bytes: Vec<u8> = Vec::with_capacity(2048);
+    //             // resp.into_reader()
+    //             //     .take(1024)
+    //             //     .read_to_end(&mut bytes)
+    //             //     .expect("Cannot read response");
+    //             // //we start to check if the tracker has returned an error message, if yes, we will reannounce later
+    //             // debug!(
+    //             //     "Tracker response: {:?}",
+    //             //     String::from_utf8_lossy(&bytes.clone())
+    //             // );
+    //             // match serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
+    //             //     Ok(tr) => {
+    //             //         self.seeders = u16::try_from(tr.complete).unwrap();
+    //             //         self.leechers = u16::try_from(tr.incomplete).unwrap();
+    //             //         self.interval = u64::try_from(tr.interval).unwrap();
+    //             //         info!(
+    //             //             "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
+    //             //             tr.incomplete, tr.complete, tr.interval
+    //             //         );
+    //             //     }
+    //             //     Err(e1) => {
+    //             //         match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
+    //             //             Ok(tr) => warn!("Cannot announce: {}", tr.reason),
+    //             //             Err(e2) => {
+    //             //                 error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
+    //             //             }
+    //             //         }
+    //             //     }
+    //             // }
+    //             // if code != actix_web::http::StatusCode::OK {
+    //             //     info!("\tResponse: code={}\tdata={:?}", code, bytes);
+    //             // }
+    //         }
+    //         Err(ureq::Error::Status(code, response)) => {
+    //             //the server returned an unexpected status code (such as 400, 500 etc)
+    //             if code == 400 {
+    //                 warn!("\tBad request (error 400), please check the URL");
+    //             } else {
+    //                 warn!(
+    //                     "\tUnexpected server response status: {}\t{:?}",
+    //                     code, response
+    //                 );
+    //             }
+    //         }
+    //         Err(err) => {
+    //             if event != Some(Event::Stopped) {
+    //                 error!("I/O error while announcing: {:?}", err);
+    //             }
+    //         }
+    //     }
+    //     self.interval
+    // }
 }
 
 /// Load essential data from a parsed torrent using the full parsed torrent file. It reduces the RAM use to have smaller data
