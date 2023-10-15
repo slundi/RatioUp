@@ -134,6 +134,11 @@ fn add_torrent(path: String) {
                     }
                 }
                 t.interval = tracker::announce(&mut t, Some(tracker::Event::Started));
+                THREAD_POOL.execute_with_fixed_delay(
+                    std::time::Duration::from_secs(t.interval),
+                    std::time::Duration::from_secs(t.interval),
+                    tracker::check_and_announce,
+                );
                 list.push(t);
             }
             Err(e) => error!("Cannot parse torrent: \t{} {:?}", path, e),

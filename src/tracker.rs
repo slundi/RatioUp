@@ -116,6 +116,15 @@ pub fn announce(torrent: &mut BasicTorrent, event: Option<Event>) -> u64 {
     interval
 }
 
+pub fn check_and_announce() {
+    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+    for t in list {
+        if t.shound_announce() {
+            announce(t, None);
+        }
+    }
+}
+
 fn announce_http(
     url: &str,
     torrent: &mut BasicTorrent,

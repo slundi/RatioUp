@@ -116,6 +116,7 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 ## Roadmap
 
 - [ ] Split project in 2: web service with UI or CLI usage with cron
+- [ ] Change delay if different after announcing
 - [x] Torrent clients in a separated library
 - [x] Parse response instead of using REGEX
 - [ ] Display session upload (global & per torrent)
