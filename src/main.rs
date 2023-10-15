@@ -62,7 +62,6 @@ async fn main() -> std::io::Result<()> {
             },
         );
     }
-    tracker::announce_start();
     crate::scheduler::set_announce_jobs();
     tokio::spawn(async move {
         // graceful exit when Ctrl + C
@@ -134,7 +133,7 @@ fn add_torrent(path: String) {
                         return;
                     }
                 }
-                // tracker::announce(&mut t, Some(Event::Started));
+                t.interval = tracker::announce(&mut t, Some(tracker::Event::Started));
                 list.push(t);
             }
             Err(e) => error!("Cannot parse torrent: \t{} {:?}", path, e),

@@ -83,15 +83,6 @@ pub struct OkTrackerResponse {
     peers: Option<u8>,
 }
 
-pub fn announce_start() {
-    debug!("Annouce start");
-    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-    for t in list {
-        debug!("Start: announcing {}", t.name);
-        t.interval = announce(t, Some(Event::Started));
-    }
-}
-
 pub async fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
     let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
