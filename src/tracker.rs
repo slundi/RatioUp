@@ -115,7 +115,7 @@ pub fn announce(torrent: &mut BasicTorrent, event: Option<Event>) -> u64 {
         debug!("Torrent has {} url(s)", torrent.urls.len());
         for url in torrent.urls.clone() {
             if url.to_lowercase().starts_with("udp://") {
-                interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
+                //interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
             } else {
                 interval = announce_http(&url, torrent, client, event);
             }
@@ -184,11 +184,11 @@ fn announce_http(
     let agent = ureq::AgentBuilder::new()
         .timeout(std::time::Duration::from_secs(60))
         .user_agent(&client.user_agent);
-    let urls = build_urls(torrent, event, client.key.clone());
-    debug!("Announce HTTP URL {:?}", urls);
+    let built_url = build_url(url, torrent, event, client.key.clone());
+    debug!("Announce HTTP URL {:?}", built_url);
     let mut req = agent
         .build()
-        .get(url)
+        .get(&built_url)
         .timeout(std::time::Duration::from_secs(90));
     req = query
         .1
@@ -252,32 +252,9 @@ fn announce_http(
     torrent.interval
 }
 
-/// Called after a torrent is added to RatioUp or when RatioUp started (load torrents)
+/// Build the HTTP announce URLs for the listed trackers in the torrent file.
 /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
-fn prepare_urls(
-    torrent: &mut BasicTorrent,
-    query: String,
-    port: u16,
-    peer_id: String,
-    numwant: u16,
-) {
-    let mut url = String::new();
-    if let Some(a) = torrent.announce.clone() {
-        url = a;
-        url.push('?');
-        url.push_str(&query);
-    }
-    url = url
-        .replace("{peerid}", &peer_id)
-        .replace("&ipv6={ipv6}", "")
-        .replace("{infohash}", &torrent.info_hash_urlencoded)
-        .replace("{numwant}", numwant.to_string().as_str())
-        .replace("{port}", port.to_string().as_str());
-    let _ = &torrent.urls.push(url);
-}
-
-/// Build the announce URLs for the listed trackers in the torrent file. FOR NOW IT DOES NOT HANDLE MULTIPLE URLS!
-pub fn build_urls(torrent: &mut BasicTorrent, event: Option<Event>, key: String) -> Vec<String> {
+pub fn build_url(url: &str, torrent: &mut BasicTorrent, event: Option<Event>, key: String) -> String {
     info!("Torrent {:?}: {}", event, torrent.name);
     //compute downloads and uploads
     let elapsed: usize = if event == Some(Event::Started) {
@@ -293,12 +270,19 @@ pub fn build_urls(torrent: &mut BasicTorrent, event: Option<Event>, key: String)
     torrent.downloaded += downloaded;
 
     //build URL list
-    let mut urls: Vec<String> = Vec::new();
-    let url = torrent.urls[0]
+    let client = (*CLIENT.read().expect("Cannot read client")).clone().unwrap();
+    let mut result = String::from(url);
+    result.push('?');
+    result.push_str(&client.query);
+    let result = result
         .replace("{infohash}", &torrent.info_hash_urlencoded)
         .replace("{key}", &key)
         .replace("{uploaded}", uploaded.to_string().as_str())
         .replace("{downloaded}", downloaded.to_string().as_str())
+        .replace("{peerid}", &client.peer_id)
+        .replace("{port}", &crate::CONFIG.get().unwrap().port.to_string())
+        .replace("{numwant}", &client.num_want.to_string())
+        .replace("ipv6={ipv6}", "")
         .replace(
             "{left}",
             (torrent.length - torrent.downloaded).to_string().as_str(),
@@ -324,8 +308,7 @@ pub fn build_urls(torrent: &mut BasicTorrent, event: Option<Event>, key: String)
             .to_string()
     );
     info!("\tAnnonce at: {}", url);
-    urls.push(url);
-    urls
+    result
 }
 
 async fn announce_udp(
@@ -351,7 +334,8 @@ async fn announce_udp(
 
     let mut failure_reason = None;
 
-    let connection_id: i64 = connect_udp(addr).await.unwrap();
+    let connection_id: i64 = (connect_udp(addr).await).unwrap();
+    debug!("announce_udp: connect_id={}", connection_id);
 
     const ACTION: i32 = 1;
     let transaction_id: i32 = random();
@@ -493,11 +477,13 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
     let sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
         .await
         .unwrap();
+    debug!("connect_udp: sock={:?}", sock);
 
     //The magic protocol id number
     const PROTOCOL_ID: i64 = 0x41727101980;
     const ACTION: i32 = 0;
     let transaction_id: i32 = random();
+    debug!("connect_udp: transaction_id={}", transaction_id);
 
     let mut bytes_to_send = BytesMut::with_capacity(16);
     bytes_to_send.put_i64(PROTOCOL_ID);
@@ -508,7 +494,11 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
 
     let mut response_buf: [u8; 16] = [0; 16];
 
+    debug!("connect_udp: will send 1st data");
+    let ready = sock.ready(tokio::io::Interest::READABLE | tokio::io::Interest::WRITABLE).await;
+    debug!("connect_udp: ready? {:?}", ready);
     sock.send_to(bytes_to_send, ip_addr).await.unwrap();
+    debug!("connect_udp: 1st data send");
 
     let wait_time = std::time::Duration::from_secs(3);
     let mut attempts: u8 = 0;

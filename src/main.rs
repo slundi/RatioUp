@@ -21,13 +21,13 @@ mod torrent;
 mod tracker;
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
-static CLIENT: RwLock<Option<Client>> = RwLock::new(None); // TODO: remove, build it every time because it can be HTTP or UDP
+static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
 static TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
 static THREAD_POOL: once_cell::sync::Lazy<scheduled_thread_pool::ScheduledThreadPool> =
     once_cell::sync::Lazy::new(|| {
         scheduled_thread_pool::ScheduledThreadPool::builder()
             .num_threads(1)
-            .on_drop_behavior(scheduled_thread_pool::OnPoolDropBehavior::DiscardPendingScheduled)
+            .on_drop_behavior(scheduled_thread_pool::OnPoolDropBehavior::DiscardPendingScheduled) // do not announce scheduled when dropped
             .build()
     });
 
@@ -66,7 +66,6 @@ async fn main() -> std::io::Result<()> {
     crate::scheduler::set_announce_jobs();
     tokio::spawn(async move {
         // graceful exit when Ctrl + C
-        //let _addr = crate::scheduler::Scheduler.start(); // FIXME
         tokio::signal::ctrl_c().await.unwrap();
         tracker::announce_stopped().await;
     });
