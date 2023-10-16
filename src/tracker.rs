@@ -124,6 +124,7 @@ pub fn set_announce_jobs(
     let mut jobs: Vec<scheduled_thread_pool::JobHandle> = Vec::new();
     let list = &*TORRENTS.read().expect("Cannot get torrent list");
     for t in list {
+        debug!("Schedule {} every {}s", t.name, t.interval);
         jobs.push(crate::THREAD_POOL.execute_after(
             std::time::Duration::from_secs(t.interval),
             check_and_announce,

@@ -48,10 +48,9 @@ async fn main() -> std::io::Result<()> {
     prepare_torrent_directory(&config.torrent_dir);
     load_torrents(&config.torrent_dir);
 
-    let tp = scheduled_thread_pool::ScheduledThreadPool::new(1);
     // schedule client refresh key if applicable
     if let Some(refresh_every) = init_client(&config) {
-        tp.execute_at_fixed_rate(
+        THREAD_POOL.execute_at_fixed_rate(
             std::time::Duration::from_secs(u64::try_from(refresh_every).unwrap()),
             std::time::Duration::from_secs(u64::try_from(refresh_every).unwrap()),
             move || {
