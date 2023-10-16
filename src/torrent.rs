@@ -169,6 +169,8 @@ pub struct BasicTorrent {
     /// Tracker announce URLs built from the config and the torrent. Some variables are still there (key, left, downloaded, uploaded, event)
     #[serde(skip)]
     pub urls: Vec<String>,
+    #[serde(skip)]
+    pub error_count: u16,
 }
 
 impl BasicTorrent {
@@ -203,6 +205,12 @@ impl BasicTorrent {
         } else {
             0
         }
+    }
+
+    pub fn compute_speeds(&mut self) {
+        let config = crate::CONFIG.get().unwrap();
+        self.downloaded(config.min_download_rate, config.max_download_rate);
+        self.uploaded(config.min_upload_rate, config.max_upload_rate);
     }
 
     // pub fn announce(&mut self, event: Option<Event>, request: ureq::Request) -> u64 {
@@ -297,6 +305,7 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         next_upload_speed: 0,
         next_download_speed: 0,
         interval: 4_294_967_295,
+        error_count: 0,
     };
     if let Some(url) = torrent.announce.clone() {
         t.urls.push(url);
@@ -364,6 +373,7 @@ mod tests {
             next_download_speed: 0,
             interval: 1800,
             urls: Vec::with_capacity(0),
+            error_count: 0,
         };
         assert!(!t.can_download());
         assert!(!t.can_upload());
@@ -404,6 +414,7 @@ mod tests {
             next_download_speed: 0,
             interval: 1800,
             urls: Vec::with_capacity(0),
+            error_count: 0,
         };
         let speed = t.downloaded(16, 64);
         assert!(speed == 0);

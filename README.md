@@ -71,7 +71,7 @@ CLIENT = Transmission_3_00
 # Torrent port, otherwise it is randomized
 TORRENT_PORT = 56789
 
-# Speeds in bytes
+# Applicable speeds in bytes for each torrent
 MIN_UPLOAD_RATE = 
 MAX_UPLOAD_RATE =
 MIN_DOWNLOAD_RATE = 

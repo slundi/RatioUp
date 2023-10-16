@@ -16,7 +16,6 @@ use crate::config::Config;
 
 mod config;
 mod routes;
-mod scheduler;
 mod torrent;
 mod tracker;
 
@@ -62,7 +61,7 @@ async fn main() -> std::io::Result<()> {
             },
         );
     }
-    crate::scheduler::set_announce_jobs();
+    crate::tracker::set_announce_jobs();
     tokio::spawn(async move {
         // graceful exit when Ctrl + C
         tokio::signal::ctrl_c().await.unwrap();

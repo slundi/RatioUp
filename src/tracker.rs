@@ -102,6 +102,8 @@ pub async fn announce_stopped() {
 /// returned in the first announce response.
 pub fn announce(torrent: &mut BasicTorrent, event: Option<Event>) -> u64 {
     let mut interval = 4_294_967_295u64;
+    // TODO: prepare announce (uploaded and downloaded if applicable)
+    torrent.compute_speeds();
     if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
         debug!("Torrent has {} url(s)", torrent.urls.len());
         for url in torrent.urls.clone() {
@@ -116,6 +118,21 @@ pub fn announce(torrent: &mut BasicTorrent, event: Option<Event>) -> u64 {
     interval
 }
 
+/// Schedule annonce job
+pub fn set_announce_jobs(
+) -> Vec<scheduled_thread_pool::JobHandle> {
+    let mut jobs: Vec<scheduled_thread_pool::JobHandle> = Vec::new();
+    let list = &*TORRENTS.read().expect("Cannot get torrent list");
+    for t in list {
+        jobs.push(crate::THREAD_POOL.execute_after(
+            std::time::Duration::from_secs(t.interval),
+            check_and_announce,
+        ));
+    }
+    jobs
+}
+
+/// Check which torrents need to be announced and call the announce fuction when applicable
 pub fn check_and_announce() {
     let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
     for t in list {
@@ -221,6 +238,7 @@ fn announce_http(
                             "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
                             tr.incomplete, tr.complete, tr.interval
                         );
+                        torrent.last_announce = std::time::Instant::now();
                     }
                     Err(e1) => {
                         match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
