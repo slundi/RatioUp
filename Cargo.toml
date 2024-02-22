@@ -17,11 +17,11 @@ tokio = {version = "1.32", features=["rt", "fs"]}
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 sanitize-filename = "0.5"
 uuid = { version = "1", features = ["v4"] }
-byte-unit = "4"
+byte-unit = "5"
 url = "2"
 fake-torrent-client = "0.9"
 
-rust-ini = "0.19"
+rust-ini = "0.20"
 dotenv = "0.15"
 log = "0.4"
 simple_logger = "4"
