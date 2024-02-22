@@ -1,0 +1,9 @@
+steps:
+  test:
+    image: rust:slim
+    environment: [CARGO_TERM_COLOR=always]
+    commands:
+      - rustup default stable
+      - rustup component add clippy
+      - cargo clippy
+      - cargo test
