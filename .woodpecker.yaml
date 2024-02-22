@@ -1,12 +1,9 @@
-matrix:
-  RUST: [stable, beta, nightly]
-
 steps:
   test:
     image: rust:slim
     environment: [CARGO_TERM_COLOR=always]
     commands:
-      - rustup default $RUST
+      - rustup default stable
       - rustup component add clippy
       - cargo clippy
       - cargo test
