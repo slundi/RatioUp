@@ -7,5 +7,6 @@ steps:
     environment: [CARGO_TERM_COLOR=always]
     commands:
       - rustup default $RUST
+      - rustup component add clippy
       - cargo clippy
       - cargo test
