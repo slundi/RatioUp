@@ -4,6 +4,7 @@ extern crate serde_bencode;
 extern crate serde_bytes;
 use std::io::Read;
 
+use byte_unit::UnitType;
 use hex::ToHex;
 use hmac_sha1_compact::Hash;
 use log::{error, info, warn};
@@ -292,11 +293,13 @@ impl BasicTorrent {
             .replace("{event}", event);
         info!(
             "\tDownloaded: {} \t Uploaded: {}",
-            byte_unit::Byte::from_bytes(downloaded as u128)
-                .get_appropriate_unit(true)
+            byte_unit::Byte::from_u128(downloaded as u128)
+                .unwrap()
+                .get_appropriate_unit(UnitType::Binary)
                 .to_string(),
-            byte_unit::Byte::from_bytes(uploaded as u128)
-                .get_appropriate_unit(true)
+            byte_unit::Byte::from_u128(uploaded as u128)
+                .unwrap()
+                .get_appropriate_unit(UnitType::Binary)
                 .to_string()
         );
         info!("\tAnnonce at: {}", url);

@@ -7,7 +7,7 @@ extern crate rand;
 use actix::prelude::*;
 use actix_files::Files;
 use actix_web::{middleware, App, HttpServer};
-use byte_unit::Byte;
+use byte_unit::{Byte, UnitType};
 use dotenv::dotenv;
 use fake_torrent_client::Client;
 use log::{self, debug, error, info};
@@ -170,17 +170,21 @@ async fn main() -> std::io::Result<()> {
     init_client(&config);
     info!(
         "Bandwidth: \u{2191} {} - {} \t \u{2193} {} - {}",
-        Byte::from_bytes(u128::try_from(config.min_upload_rate).unwrap())
-            .get_appropriate_unit(true)
+        Byte::from_u128(u128::try_from(config.min_upload_rate).unwrap())
+            .unwrap()
+            .get_appropriate_unit(UnitType::Binary)
             .to_string(),
-        Byte::from_bytes(u128::try_from(config.max_upload_rate).unwrap())
-            .get_appropriate_unit(true)
+        Byte::from_u128(u128::try_from(config.max_upload_rate).unwrap())
+            .unwrap()
+            .get_appropriate_unit(UnitType::Binary)
             .to_string(),
-        Byte::from_bytes(u128::try_from(config.min_download_rate).unwrap())
-            .get_appropriate_unit(true)
+        Byte::from_u128(u128::try_from(config.min_download_rate).unwrap())
+            .unwrap()
+            .get_appropriate_unit(UnitType::Binary)
             .to_string(),
-        Byte::from_bytes(u128::try_from(config.max_download_rate).unwrap())
-            .get_appropriate_unit(true)
+        Byte::from_u128(u128::try_from(config.max_download_rate).unwrap())
+            .unwrap()
+            .get_appropriate_unit(UnitType::Binary)
             .to_string(),
     );
 
@@ -204,7 +208,7 @@ async fn main() -> std::io::Result<()> {
             .expect("Cannot get file name");
         add_torrent(f);
     }
-    
+
     Scheduler.start();
     //start web server
     let server = HttpServer::new(move || {
@@ -267,7 +271,10 @@ fn init_client(config: &Config) {
         fake_torrent_client::clients::ClientVersion::from_str(&config.client)
             .expect("Wrong client"),
     );
-    info!("Client information (key: {}, peer ID:{})", client.key, client.peer_id);
+    info!(
+        "Client information (key: {}, peer ID:{})",
+        client.key, client.peer_id
+    );
     let mut guard = CLIENT.write().unwrap();
     *guard = Some(client);
 }
