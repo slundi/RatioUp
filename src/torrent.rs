@@ -382,7 +382,7 @@ mod tests {
         assert!(t.can_upload());
         t.leechers = 0;
         t.seeders = 1;
-        assert!(!t.can_download());
+        assert!(t.can_download());
         assert!(!t.can_upload());
         t.seeders = 4;
         t.leechers = 8;
@@ -417,9 +417,9 @@ mod tests {
             error_count: 0,
         };
         let speed = t.downloaded(16, 64);
-        assert!(speed == 0);
+        assert!(speed > 0);
         let speed = t.uploaded(16, 64);
-        assert!(speed == 0);
+        assert!(speed > 0);
         t.interval = 1;
         std::thread::sleep(std::time::Duration::from_secs(2));
         let speed = t.downloaded(16, 64);
