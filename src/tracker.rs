@@ -21,10 +21,9 @@ pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::
     .remove(b'~')
     .remove(b'.');
 
-
 enum ErrorCode {
     /// Client request was not a HTTP GET
-    InvalidRequestType = 100, 
+    InvalidRequestType = 100,
     MissingInfosash = 101,
     MissingPeerId = 102,
     MissingPort = 103,
@@ -35,7 +34,7 @@ enum ErrorCode {
     /// Client requested more peers than allowed by tracker
     InvalidNumwant = 152,
     /// info_hash not found in the database. Sent only by trackers that do not automatically include new hashes into the database.
-    InfohashNotFound = 200, 
+    InfohashNotFound = 200,
     /// Client sent an eventless request before the specified time.
     ClientSentEventlessRequest = 500,
     GenericError = 900,
@@ -119,8 +118,7 @@ pub fn announce(torrent: &mut BasicTorrent, event: Option<Event>) -> u64 {
 }
 
 /// Schedule annonce job
-pub fn set_announce_jobs(
-) -> Vec<scheduled_thread_pool::JobHandle> {
+pub fn set_announce_jobs() -> Vec<scheduled_thread_pool::JobHandle> {
     let mut jobs: Vec<scheduled_thread_pool::JobHandle> = Vec::new();
     let list = &*TORRENTS.read().expect("Cannot get torrent list");
     for t in list {
@@ -215,45 +213,45 @@ fn announce_http(
     match req.call() {
         Ok(resp) => {
             let code = resp.status();
-                info!(
-                    "\tTime since last announce: {}s \t interval: {}",
-                    torrent.last_announce.elapsed().as_secs(),
-                    torrent.interval
-                );
-                let mut bytes: Vec<u8> = Vec::with_capacity(2048);
-                resp.into_reader()
-                    .take(1024)
-                    .read_to_end(&mut bytes)
-                    .expect("Cannot read response");
-                //we start to check if the tracker has returned an error message, if yes, we will reannounce later
-                debug!(
-                    "Tracker response: {:?}",
-                    String::from_utf8_lossy(&bytes.clone())
-                );
-                match serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
-                    Ok(tr) => {
-                        torrent.seeders = u16::try_from(tr.complete).unwrap();
-                        torrent.leechers = u16::try_from(tr.incomplete).unwrap();
-                        torrent.interval = u64::try_from(tr.interval).unwrap();
-                        info!(
-                            "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
-                            tr.incomplete, tr.complete, tr.interval
-                        );
-                        torrent.last_announce = std::time::Instant::now();
-                    }
-                    Err(e1) => {
-                        match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
-                            Ok(tr) => warn!("Cannot announce: {}", tr.reason),
-                            Err(e2) => {
-                                error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
-                            }
+            info!(
+                "\tTime since last announce: {}s \t interval: {}",
+                torrent.last_announce.elapsed().as_secs(),
+                torrent.interval
+            );
+            let mut bytes: Vec<u8> = Vec::with_capacity(2048);
+            resp.into_reader()
+                .take(1024)
+                .read_to_end(&mut bytes)
+                .expect("Cannot read response");
+            //we start to check if the tracker has returned an error message, if yes, we will reannounce later
+            debug!(
+                "Tracker response: {:?}",
+                String::from_utf8_lossy(&bytes.clone())
+            );
+            match serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
+                Ok(tr) => {
+                    torrent.seeders = u16::try_from(tr.complete).unwrap();
+                    torrent.leechers = u16::try_from(tr.incomplete).unwrap();
+                    torrent.interval = u64::try_from(tr.interval).unwrap();
+                    info!(
+                        "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
+                        tr.incomplete, tr.complete, tr.interval
+                    );
+                    torrent.last_announce = std::time::Instant::now();
+                }
+                Err(e1) => {
+                    match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
+                        Ok(tr) => warn!("Cannot announce: {}", tr.reason),
+                        Err(e2) => {
+                            error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
                         }
                     }
                 }
-                if code != actix_web::http::StatusCode::OK {
-                    info!("\tResponse: code={}\tdata={:?}", code, bytes);
-                }
-        },
+            }
+            if code != actix_web::http::StatusCode::OK {
+                info!("\tResponse: code={}\tdata={:?}", code, bytes);
+            }
+        }
         Err(err) => error!("Cannot announce: {:?}", err),
     }
     // send request
@@ -273,7 +271,12 @@ fn announce_http(
 
 /// Build the HTTP announce URLs for the listed trackers in the torrent file.
 /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
-pub fn build_url(url: &str, torrent: &mut BasicTorrent, event: Option<Event>, key: String) -> String {
+pub fn build_url(
+    url: &str,
+    torrent: &mut BasicTorrent,
+    event: Option<Event>,
+    key: String,
+) -> String {
     info!("Torrent {:?}: {}", event, torrent.name);
     //compute downloads and uploads
     let elapsed: usize = if event == Some(Event::Started) {
@@ -289,7 +292,9 @@ pub fn build_url(url: &str, torrent: &mut BasicTorrent, event: Option<Event>, ke
     torrent.downloaded += downloaded;
 
     //build URL list
-    let client = (*CLIENT.read().expect("Cannot read client")).clone().unwrap();
+    let client = (*CLIENT.read().expect("Cannot read client"))
+        .clone()
+        .unwrap();
     let mut result = String::from(url);
     result.push('?');
     result.push_str(&client.query);
@@ -430,7 +435,7 @@ async fn announce_udp(
 
     match timeout(wait_time, sock.recv_from(&mut response_buf)).await {
         Ok(_) => (),
-        Err(e) => failure_reason = Some(format!("timeout after {}s", e))
+        Err(e) => failure_reason = Some(format!("timeout after {}s", e)),
     };
 
     let transaction_id_recv: i32 = i32::from_be_bytes((&response_buf[4..8]).try_into().unwrap());
@@ -484,7 +489,10 @@ async fn announce_udp(
     // };
 
     // Ok(response)
-    debug!("UDP announced:  interval: {}, seeders: {}, leecherc: {}", interval, seeders, leechers);
+    debug!(
+        "UDP announced:  interval: {}, seeders: {}, leecherc: {}",
+        interval, seeders, leechers
+    );
     u64::try_from(interval).unwrap()
 }
 
@@ -514,7 +522,9 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
     let mut response_buf: [u8; 16] = [0; 16];
 
     debug!("connect_udp: will send 1st data");
-    let ready = sock.ready(tokio::io::Interest::READABLE | tokio::io::Interest::WRITABLE).await;
+    let ready = sock
+        .ready(tokio::io::Interest::READABLE | tokio::io::Interest::WRITABLE)
+        .await;
     debug!("connect_udp: ready? {:?}", ready);
     sock.send_to(bytes_to_send, ip_addr).await.unwrap();
     debug!("connect_udp: 1st data send");
