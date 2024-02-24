@@ -1,11 +1,15 @@
 steps:
   test:
     image: rust:slim
-    environment: [CARGO_TERM_COLOR=always]
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTFLAGS="-Cinstrument-coverage"
+      - LLVM_PROFILE_FILE="RatioUp-%p-%m.profraw"
     commands:
       - rustup default stable
       - rustup component add rustfmt
       - cargo fmt -- --check
       - rustup component add clippy
       - cargo clippy
+      - rustup component add llvm-tools-preview
       - cargo test

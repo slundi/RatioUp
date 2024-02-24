@@ -111,3 +111,6 @@ dkms.conf
 .history/
 
 builds/
+
+# Ignore profile in test for code coverage
+*.profraw
