@@ -4,6 +4,8 @@ steps:
     environment: [CARGO_TERM_COLOR=always]
     commands:
       - rustup default stable
+      - rustup component add rustfmt
+      - cargo fmt -- --check
       - rustup component add clippy
       - cargo clippy
       - cargo test
