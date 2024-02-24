@@ -3,7 +3,7 @@ name = "RatioUp"
 author = "slundi"
 version = "1.1.4"
 edition = "2021"
-homepage = "https://github.com/slundi/RatioUp"
+homepage = "https://codeberg.org/slundi/RatioUp"
 
 [source.vendored-sources]
 directory = "vendor"
