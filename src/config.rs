@@ -34,8 +34,8 @@ impl Default for Config {
         Config {
             server_addr: "127.0.0.1:8330".to_owned(),
             log_level: "INFO".to_owned(),
-            /// The port number that the client is listening on. Ports reserved for BitTorrent are typically 6881-6889. Clients may choose to give up if it cannot establish
-            /// a port within this range. Here ports are random between 49152 and 65534
+            // The port number that the client is listening on. Ports reserved for BitTorrent are typically 6881-6889. Clients may choose to give up if it cannot establish
+            // a port within this range. Here ports are random between 49152 and 65534
             port: rand::thread_rng().gen_range(49152..65534),
             min_upload_rate: 8192,    //8*1024
             max_upload_rate: 2097152, //2048*1024
