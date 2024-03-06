@@ -71,7 +71,7 @@ CLIENT = Transmission_3_00
 # Torrent port, otherwise it is randomized
 TORRENT_PORT = 56789
 
-# Speeds in bytes
+# Applicable speeds in bytes for each torrent
 MIN_UPLOAD_RATE = 
 MAX_UPLOAD_RATE =
 MIN_DOWNLOAD_RATE = 
@@ -116,6 +116,7 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 ## Roadmap
 
 - [ ] Split project in 2: web service with UI or CLI usage with cron
+- [ ] Change delay if different after announcing
 - [x] Torrent clients in a separated library
 - [x] Parse response instead of using REGEX
 - [ ] Display session upload (global & per torrent)
@@ -123,3 +124,4 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 - [x] Drop torrent files from the web UI
 - [ ] Retracker torrents
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
+- [ ] UDP announce URL support
