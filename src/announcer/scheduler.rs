@@ -1,3 +1,19 @@
+use crate::{tracker, TORRENTS};
+
+pub fn run(wait_time: u64) {
+    let mut next_interval = wait_time;
+    loop {
+        let list = TORRENTS.read().expect("Cannot get torrent list");
+        for m in list.iter() {
+            let mut t = m.lock().unwrap();
+            if t.shound_announce() {
+                next_interval = u64::min(next_interval, tracker::announce(&mut t, None));
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(next_interval));
+    }
+}
+
 // /// Build the announce query and perform it in another thread
 // fn announce(event: Option<Event>) {
 //     debug!("Announcing");

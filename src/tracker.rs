@@ -82,11 +82,12 @@ pub struct OkTrackerResponse {
     peers: Option<u8>,
 }
 
-pub async fn announce_stopped() {
+pub fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
-    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-    for t in list {
-        t.interval = announce(t, Some(Event::Stopped));
+    let list = TORRENTS.read().expect("Cannot get torrent list");
+    for m in list.iter() {
+        let mut t = m.lock().unwrap();
+        t.interval = announce(&mut t, Some(Event::Stopped));
     }
 }
 
@@ -107,7 +108,8 @@ pub fn announce(torrent: &mut BasicTorrent, event: Option<Event>) -> u64 {
         debug!("Torrent has {} url(s)", torrent.urls.len());
         for url in torrent.urls.clone() {
             if url.to_lowercase().starts_with("udp://") {
-                //interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
+                warn!("UDP tracker not supported (yet): cannot announce");
+                // interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
             } else {
                 interval = announce_http(&url, torrent, client, event);
             }
@@ -117,26 +119,13 @@ pub fn announce(torrent: &mut BasicTorrent, event: Option<Event>) -> u64 {
     interval
 }
 
-/// Schedule annonce job
-pub fn set_announce_jobs() -> Vec<scheduled_thread_pool::JobHandle> {
-    let mut jobs: Vec<scheduled_thread_pool::JobHandle> = Vec::new();
-    let list = &*TORRENTS.read().expect("Cannot get torrent list");
-    for t in list {
-        debug!("Schedule {} every {}s", t.name, t.interval);
-        jobs.push(crate::THREAD_POOL.execute_after(
-            std::time::Duration::from_secs(t.interval),
-            check_and_announce,
-        ));
-    }
-    jobs
-}
-
 /// Check which torrents need to be announced and call the announce fuction when applicable
 pub fn check_and_announce() {
-    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-    for t in list {
+    let list = TORRENTS.read().expect("Cannot get torrent list");
+    for m in list.iter() {
+        let mut t = m.lock().unwrap();
         if t.shound_announce() {
-            announce(t, None);
+            announce(&mut t, None);
         }
     }
 }
@@ -324,11 +313,13 @@ pub fn build_url(
         );
     info!(
         "\tDownloaded: {} \t Uploaded: {}",
-        byte_unit::Byte::from_bytes(downloaded as u128)
-            .get_appropriate_unit(true)
+        byte_unit::Byte::from_u128(downloaded as u128)
+            .unwrap()
+            .get_appropriate_unit(byte_unit::UnitType::Decimal)
             .to_string(),
-        byte_unit::Byte::from_bytes(uploaded as u128)
-            .get_appropriate_unit(true)
+        byte_unit::Byte::from_u128(uploaded as u128)
+            .unwrap()
+            .get_appropriate_unit(byte_unit::UnitType::Decimal)
             .to_string()
     );
     info!("\tAnnonce at: {}", url);

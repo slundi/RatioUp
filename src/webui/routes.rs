@@ -11,7 +11,18 @@ use log::info;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::{CONFIG, TORRENTS};
+use crate::{torrent::BasicTorrent, CONFIG, TORRENTS};
+
+/// Get the torrent list because it is originally a list of mutexes
+fn get_torrent_list() -> Vec<BasicTorrent> {
+    let list = &*TORRENTS.read().expect("Cannot get torrent list");
+    let mut result: Vec<BasicTorrent> = Vec::with_capacity(list.len());
+    for mutex in list {
+        let t = mutex.lock().unwrap();
+        result.push(t.clone());
+    }
+    result
+}
 
 #[post("/add_torrents")]
 async fn receive_files(mut payload: Multipart) -> Result<HttpResponse> {
@@ -32,10 +43,9 @@ async fn receive_files(mut payload: Multipart) -> Result<HttpResponse> {
         }
         crate::add_torrent(filepath2);
     }
-    let list = &*TORRENTS.read().expect("Cannot get torrent list");
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type(ContentType::json())
-        .body(format!("{{\"torrents\":{}}}", json!(list))))
+        .body(format!("{{\"torrents\":{}}}", json!(get_torrent_list()))))
 }
 
 /// Returns the configuration as a JSON string
@@ -50,10 +60,9 @@ async fn get_config() -> Result<HttpResponse> {
 /// Returns the torrent list as a JSON string
 #[get("/torrents")]
 async fn get_torrents() -> Result<HttpResponse> {
-    let list = &*TORRENTS.read().expect("Cannot get torrent list");
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type(ContentType::json())
-        .body(format!("{{\"torrents\":{}}}", json!(list))))
+        .body(format!("{{\"torrents\":{}}}", json!(get_torrent_list()))))
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -67,19 +76,25 @@ async fn process_user_command(params: web::Form<CommandParams>) -> HttpResponse 
     if params.command.to_lowercase() == "remove" && !params.infohash.is_empty() {
         //enable disable torrent
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+        let mut item_to_remove: Option<usize> = None;
         for i in 0..list.len() {
-            if list[i].info_hash == params.infohash {
-                let r = std::fs::remove_file(&list[i].path);
+            let t = list[i].lock().unwrap();
+            if t.info_hash == params.infohash {
+                let r = std::fs::remove_file(&t.path);
                 if r.is_ok() {
-                    list.swap_remove(i);
-                    return HttpResponse::build(StatusCode::OK)
-                        .content_type(ContentType::json())
-                        .body(format!("{{\"removed\":\"{}\"}}", params.infohash));
+                    item_to_remove = Some(i);
+                    break;
                 } else {
                     return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
                         .body("Cannot remove torrent file");
                 }
             }
+        }
+        if let Some(index) = item_to_remove {
+            list.swap_remove(index);
+            return HttpResponse::build(StatusCode::OK)
+                .content_type(ContentType::json())
+                .body(format!("{{\"removed\":\"{}\"}}", params.infohash));
         }
     }
     HttpResponse::build(StatusCode::BAD_REQUEST).finish()

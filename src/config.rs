@@ -4,10 +4,48 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Config {
+pub struct WebServerConfig {
     /// Server `<IP or hostaname>:<port>`. Default is `127.0.0.1:8070`
-    #[serde(skip_serializing)]
     pub server_addr: String,
+    /// Set a custom web root (ex: / or /ratio-up/)
+    pub web_root: String,
+    /// Disable the web server
+    pub disabled: bool,
+}
+
+impl Default for WebServerConfig {
+    fn default() -> Self {
+        Self {
+            server_addr: "127.0.0.1:8070".to_owned(),
+            web_root: "/".to_owned(),
+            disabled: false,
+        }
+    }
+}
+
+impl WebServerConfig {
+    pub fn load() -> WebServerConfig {
+        let mut config: WebServerConfig = WebServerConfig::default();
+        for (key, value) in std::env::vars() {
+            if key == "SERVER_ADDR" {
+                config.server_addr = value.clone();
+            }
+            if key == "WEB_ROOT" {
+                config.web_root = value.clone();
+            }
+            if key == "NO_WEBUI" {
+                let v = value.clone().to_lowercase();
+                if v == "true" || v == "1" {
+                    config.disabled = true;
+                }
+            }
+        }
+        config
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AnnouncerConfig {
     /// Log level (available options are: INFO, WARN, ERROR, DEBUG, TRACE). Default is `INFO`.
     #[serde(skip_serializing)]
     pub log_level: String,
@@ -23,16 +61,12 @@ pub struct Config {
     /// Directory where torrents are saved
     #[serde(skip_serializing)]
     pub torrent_dir: String,
-    /// Set a custom web root (ex: / or /ratio-up/)
-    #[serde(skip_serializing)]
-    pub web_root: String,
     #[serde(skip_serializing)]
     pub key_refresh_every: u16,
 }
-impl Default for Config {
+impl Default for AnnouncerConfig {
     fn default() -> Self {
-        Config {
-            server_addr: "127.0.0.1:8330".to_owned(),
+        AnnouncerConfig {
             log_level: "INFO".to_owned(),
             // The port number that the client is listening on. Ports reserved for BitTorrent are typically 6881-6889. Clients may choose to give up if it cannot establish
             // a port within this range. Here ports are random between 49152 and 65534
@@ -42,21 +76,18 @@ impl Default for Config {
             min_download_rate: 8192,
             max_download_rate: 16777216, //16*1024*1024
             torrent_dir: String::from("./torrents"),
-            web_root: String::from("/"),
+            // web_root: String::from("/"),
             //client: fake_torrent_client::Client::from(fake_torrent_client::clients::ClientVersion::Qbittorrent_4_4_2),
             key_refresh_every: 0,
             client: String::from("INVALID"),
         }
     }
 }
-impl Config {
+impl AnnouncerConfig {
     /// Load configuration in environment. Also load client.
-    pub fn load_config() -> Config {
-        let mut config: Config = Config::default();
+    pub fn load() -> AnnouncerConfig {
+        let mut config: AnnouncerConfig = AnnouncerConfig::default();
         for (key, value) in std::env::vars() {
-            if key == "SERVER_ADDR" {
-                config.server_addr = value.clone();
-            }
             if key == "LOG_LEVEL" {
                 config.log_level = value.clone();
             }
@@ -86,17 +117,17 @@ impl Config {
         info!("Torrent client: {}", config.client);
         info!(
             "Bandwidth: \u{2191} {} - {} \t \u{2193} {} - {}",
-            Byte::from_bytes(u128::try_from(config.min_upload_rate).unwrap())
-                .get_appropriate_unit(true)
+            Byte::from_u64(u64::try_from(config.min_upload_rate).unwrap())
+                .get_appropriate_unit(byte_unit::UnitType::Decimal)
                 .to_string(),
-            Byte::from_bytes(u128::try_from(config.max_upload_rate).unwrap())
-                .get_appropriate_unit(true)
+            Byte::from_u64(u64::try_from(config.max_upload_rate).unwrap())
+                .get_appropriate_unit(byte_unit::UnitType::Decimal)
                 .to_string(),
-            Byte::from_bytes(u128::try_from(config.min_download_rate).unwrap())
-                .get_appropriate_unit(true)
+            Byte::from_u64(u64::try_from(config.min_download_rate).unwrap())
+                .get_appropriate_unit(byte_unit::UnitType::Decimal)
                 .to_string(),
-            Byte::from_bytes(u128::try_from(config.max_download_rate).unwrap())
-                .get_appropriate_unit(true)
+            Byte::from_u64(u64::try_from(config.max_download_rate).unwrap())
+                .get_appropriate_unit(byte_unit::UnitType::Decimal)
                 .to_string(),
         );
         config.clone()

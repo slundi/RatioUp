@@ -4,36 +4,43 @@
 extern crate serde_derive;
 extern crate rand;
 
-use actix_files::Files;
-use actix_web::{middleware, App, HttpServer};
+use config::WebServerConfig;
 use dotenv::dotenv;
 use fake_torrent_client::Client;
 use log::{self, error, info};
 use std::str::FromStr;
-use std::sync::{OnceLock, RwLock};
+use std::sync::{Mutex, OnceLock, RwLock};
+use tokio::time::Duration;
 
-use crate::config::Config;
+use crate::announcer::scheduler::run as run_announcer;
+use crate::config::AnnouncerConfig;
+use crate::webui::server::run as run_webui;
 
+mod announcer;
 mod config;
-mod routes;
 mod torrent;
 mod tracker;
+mod webui;
 
-static CONFIG: OnceLock<Config> = OnceLock::new();
+static CONFIG: OnceLock<AnnouncerConfig> = OnceLock::new();
+static WS_CONFIG: OnceLock<WebServerConfig> = OnceLock::new();
 static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
-static TORRENTS: RwLock<Vec<torrent::BasicTorrent>> = RwLock::new(Vec::new());
-static THREAD_POOL: once_cell::sync::Lazy<scheduled_thread_pool::ScheduledThreadPool> =
-    once_cell::sync::Lazy::new(|| {
-        scheduled_thread_pool::ScheduledThreadPool::builder()
-            .num_threads(1)
-            .on_drop_behavior(scheduled_thread_pool::OnPoolDropBehavior::DiscardPendingScheduled) // do not announce scheduled when dropped
-            .build()
-    });
+static TORRENTS: RwLock<Vec<Mutex<torrent::BasicTorrent>>> = RwLock::new(Vec::new()); // TODO: replace with mutex
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
+fn run_key_renewer(refresh_every: u16) {
+    loop {
+        if let Some(client) = &mut *CLIENT.write().expect("Cannot read client") {
+            client.generate_key();
+        }
+        std::thread::sleep(Duration::from_secs(u64::try_from(refresh_every).unwrap()));
+    }
+}
+
+#[actix::main]
+async fn main() {
     dotenv().ok();
-    let config = Config::load_config();
+    WS_CONFIG.get_or_init(|| WebServerConfig::load());
+    let config = AnnouncerConfig::load();
     CONFIG.get_or_init(|| config.clone());
     //configure logger
     simple_logger::init_with_level(match &config.log_level as &str {
@@ -46,42 +53,24 @@ async fn main() -> std::io::Result<()> {
     .unwrap();
 
     prepare_torrent_directory(&config.torrent_dir);
-    load_torrents(&config.torrent_dir);
+    let wait_time = load_torrents(&config.torrent_dir);
 
-    // schedule client refresh key if applicable
-    if let Some(refresh_every) = init_client(&config) {
-        THREAD_POOL.execute_at_fixed_rate(
-            std::time::Duration::from_secs(u64::try_from(refresh_every).unwrap()),
-            std::time::Duration::from_secs(u64::try_from(refresh_every).unwrap()),
-            move || {
-                if let Some(client) = &mut *CLIENT.write().expect("Cannot read client") {
-                    client.generate_key();
-                }
-            },
-        );
-    }
-    crate::tracker::set_announce_jobs();
     tokio::spawn(async move {
         // graceful exit when Ctrl + C
         tokio::signal::ctrl_c().await.unwrap();
-        tracker::announce_stopped().await;
+        tracker::announce_stopped();
     });
-    //start web server
-    let server = HttpServer::new(move || {
-        App::new()
-            .wrap(middleware::Logger::default())
-            .service(routes::get_config)
-            .service(routes::get_torrents)
-            .service(routes::receive_files)
-            .service(routes::process_user_command)
-            .service(Files::new(&config.web_root.clone(), "static/").index_file("index.html"))
-    })
-    .bind(config.server_addr.clone())?
-    .workers(1)
-    .system_exit()
-    .run();
-    info!("Starting HTTP server at http://{}/", &config.server_addr);
-    server.await
+    // Spawn probes (background thread)
+    // schedule client refresh key if applicable
+    if let Some(refresh_every) = init_client(&config) {
+        std::thread::spawn(move || run_key_renewer(refresh_every));
+    }
+    if WS_CONFIG.get().unwrap().disabled {
+        run_announcer(wait_time);
+    } else {
+        std::thread::spawn(move || run_announcer(wait_time));
+        run_webui().await // start web server
+    }
 }
 
 fn prepare_torrent_directory(directory: &String) {
@@ -94,9 +83,10 @@ fn prepare_torrent_directory(directory: &String) {
     info!("Will load torrents from: {}", directory);
 }
 
-fn load_torrents(directory: &String) {
+fn load_torrents(directory: &String) -> u64 {
     let paths = std::fs::read_dir(directory).expect("Cannot read torrent directory");
     let mut count = 0u16;
+    let mut next_announce_time = u64::MAX;
     for p in paths {
         let f = p
             .expect("Cannot get torrent path")
@@ -104,14 +94,17 @@ fn load_torrents(directory: &String) {
             .into_os_string()
             .into_string()
             .expect("Cannot get file name");
-        add_torrent(f);
+        next_announce_time = u64::max(next_announce_time, add_torrent(f));
         count += 1;
     }
     info!("{} torrent(s) loaded", count);
+    next_announce_time
 }
 
-/// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed
-fn add_torrent(path: String) {
+/// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed.
+/// It returns the time to wait before anouncing.
+fn add_torrent(path: String) -> u64 {
+    let mut interval = u64::MAX;
     if path.to_lowercase().ends_with(".torrent") {
         let config = CONFIG.get().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
@@ -125,27 +118,25 @@ fn add_torrent(path: String) {
                 } else {
                     t.downloaded = t.length;
                 }
-                for existing in list.iter() {
+                for items in list.iter() {
+                    let existing = items.lock().unwrap();
                     if existing.info_hash == t.info_hash {
                         info!("Torrent is already in list");
-                        return;
+                        return interval;
                     }
                 }
                 t.interval = tracker::announce(&mut t, Some(tracker::Event::Started));
-                THREAD_POOL.execute_with_fixed_delay(
-                    std::time::Duration::from_secs(t.interval),
-                    std::time::Duration::from_secs(t.interval),
-                    tracker::check_and_announce,
-                );
-                list.push(t);
+                interval = t.interval;
+                list.push(Mutex::new(t));
             }
             Err(e) => error!("Cannot parse torrent: \t{} {:?}", path, e),
         }
     }
+    interval
 }
 
 /// Init the client from the configuration and returns the interval to refresh client key if applicable
-fn init_client(config: &Config) -> Option<u16> {
+fn init_client(config: &AnnouncerConfig) -> Option<u16> {
     let mut client = Client::default();
     client.build(
         fake_torrent_client::clients::ClientVersion::from_str(&config.client)

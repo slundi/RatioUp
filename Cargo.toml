@@ -20,7 +20,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 once_cell = "1.18"
 sanitize-filename = "0.5"
 uuid = { version = "1", features = ["v4"] }
-byte-unit = "4"
+byte-unit = "5"
 reqwest = { version = "0.11", features = [
     "blocking",
     "rustls-tls",
@@ -32,7 +32,6 @@ percent-encoding = "2"
 fake-torrent-client = "0.9"
 scheduled-thread-pool = "0.2"
 
-rust-ini = "0.19"
 dotenv = "0.15"
 log = "0.4"
 simple_logger = "4"
