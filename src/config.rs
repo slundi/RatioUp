@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use byte_unit::Byte;
 use log::info;
 use rand::Rng;
@@ -132,4 +134,21 @@ impl AnnouncerConfig {
         );
         config.clone()
     }
+}
+
+/// Init the client from the configuration and returns the interval to refresh client key if applicable
+pub fn init_client(config: &AnnouncerConfig) -> Option<u16> {
+    let mut client = fake_torrent_client::Client::default();
+    client.build(
+        fake_torrent_client::clients::ClientVersion::from_str(&config.client)
+            .expect("Wrong client"),
+    );
+    info!(
+        "Client information (key: {}, peer ID:{})",
+        client.key, client.peer_id
+    );
+    let key_interval = client.key_refresh_every;
+    let mut guard = crate::CLIENT.write().unwrap();
+    *guard = Some(client);
+    key_interval
 }

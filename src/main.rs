@@ -7,8 +7,7 @@ extern crate rand;
 use config::WebServerConfig;
 use dotenv::dotenv;
 use fake_torrent_client::Client;
-use log::{self, error, info};
-use std::str::FromStr;
+use log::{self, debug, error, info};
 use std::sync::{Mutex, OnceLock, RwLock};
 use tokio::time::Duration;
 
@@ -18,6 +17,7 @@ use crate::webui::server::run as run_webui;
 
 mod announcer;
 mod config;
+mod directory;
 mod torrent;
 mod tracker;
 mod webui;
@@ -52,8 +52,13 @@ async fn main() {
     })
     .unwrap();
 
-    prepare_torrent_directory(&config.torrent_dir);
-    let wait_time = load_torrents(&config.torrent_dir);
+    // schedule client refresh key if applicable
+    if let Some(refresh_every) = config::init_client(&config) {
+        std::thread::spawn(move || run_key_renewer(refresh_every));
+    }
+
+    directory::prepare_torrent_folder(&config.torrent_dir);
+    let wait_time = directory::load_torrents(&config.torrent_dir);
 
     tokio::spawn(async move {
         // graceful exit when Ctrl + C
@@ -61,44 +66,12 @@ async fn main() {
         tracker::announce_stopped();
     });
     // Spawn probes (background thread)
-    // schedule client refresh key if applicable
-    if let Some(refresh_every) = init_client(&config) {
-        std::thread::spawn(move || run_key_renewer(refresh_every));
-    }
     if WS_CONFIG.get().unwrap().disabled {
         run_announcer(wait_time);
     } else {
         std::thread::spawn(move || run_announcer(wait_time));
         run_webui().await // start web server
     }
-}
-
-fn prepare_torrent_directory(directory: &String) {
-    if !std::path::Path::new(directory).is_dir() {
-        std::fs::create_dir_all(directory).unwrap_or_else(|_e| {
-            error!("Cannot create torrent folder directory(ies)");
-        });
-        info!("Torrent directory created: {}", directory);
-    }
-    info!("Will load torrents from: {}", directory);
-}
-
-fn load_torrents(directory: &String) -> u64 {
-    let paths = std::fs::read_dir(directory).expect("Cannot read torrent directory");
-    let mut count = 0u16;
-    let mut next_announce_time = u64::MAX;
-    for p in paths {
-        let f = p
-            .expect("Cannot get torrent path")
-            .path()
-            .into_os_string()
-            .into_string()
-            .expect("Cannot get file name");
-        next_announce_time = u64::max(next_announce_time, add_torrent(f));
-        count += 1;
-    }
-    info!("{} torrent(s) loaded", count);
-    next_announce_time
 }
 
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed.
@@ -135,23 +108,6 @@ fn add_torrent(path: String) -> u64 {
     interval
 }
 
-/// Init the client from the configuration and returns the interval to refresh client key if applicable
-fn init_client(config: &AnnouncerConfig) -> Option<u16> {
-    let mut client = Client::default();
-    client.build(
-        fake_torrent_client::clients::ClientVersion::from_str(&config.client)
-            .expect("Wrong client"),
-    );
-    info!(
-        "Client information (key: {}, peer ID:{})",
-        client.key, client.peer_id
-    );
-    let key_interval = client.key_refresh_every;
-    let mut guard = CLIENT.write().unwrap();
-    *guard = Some(client);
-    key_interval
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,8 +121,8 @@ mod tests {
         if dir.is_dir() {
             let _ = std::fs::remove_dir(dir.clone());
         }
-        prepare_torrent_directory(&dir.display().to_string());
+        directory::prepare_torrent_folder(&dir.display().to_string());
         assert!(dir.is_dir());
-        prepare_torrent_directory(&dir.display().to_string());
+        directory::prepare_torrent_folder(&dir.display().to_string());
     }
 }
