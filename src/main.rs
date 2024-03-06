@@ -7,7 +7,7 @@ extern crate rand;
 use config::WebServerConfig;
 use dotenv::dotenv;
 use fake_torrent_client::Client;
-use log::{self, debug, error, info};
+use log::{self, error, info};
 use std::sync::{Mutex, OnceLock, RwLock};
 use tokio::time::Duration;
 
@@ -19,7 +19,6 @@ mod announcer;
 mod config;
 mod directory;
 mod torrent;
-mod tracker;
 mod webui;
 
 static CONFIG: OnceLock<AnnouncerConfig> = OnceLock::new();
@@ -63,7 +62,7 @@ async fn main() {
     tokio::spawn(async move {
         // graceful exit when Ctrl + C
         tokio::signal::ctrl_c().await.unwrap();
-        tracker::announce_stopped();
+        announcer::tracker::announce_stopped();
     });
     // Spawn probes (background thread)
     if WS_CONFIG.get().unwrap().disabled {
@@ -98,7 +97,8 @@ fn add_torrent(path: String) -> u64 {
                         return interval;
                     }
                 }
-                t.interval = tracker::announce(&mut t, Some(tracker::Event::Started));
+                t.interval =
+                    announcer::tracker::announce(&mut t, Some(announcer::tracker::Event::Started));
                 interval = t.interval;
                 list.push(Mutex::new(t));
             }

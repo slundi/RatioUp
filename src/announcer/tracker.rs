@@ -332,11 +332,6 @@ async fn announce_udp(
     client: &Client,
     event: Option<Event>,
 ) -> u64 {
-    let port = thread_rng().gen_range(1025..u16::MAX);
-    let sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
-        .await
-        .unwrap();
-
     // All of the potential addressese of a URL
     let url = reqwest::Url::parse(url).expect("Cannot parse tracker URL");
     debug!("Announce UDP URL  {:?}", url);
@@ -349,7 +344,9 @@ async fn announce_udp(
 
     let mut failure_reason = None;
 
-    let connection_id: i64 = (connect_udp(addr).await).unwrap();
+    let result = (connect_udp(addr).await).unwrap();
+    let connection_id: i64 = result.0;
+    let sock = result.1;
     debug!("announce_udp: connect_id={}", connection_id);
 
     const ACTION: i32 = 1;
@@ -488,13 +485,8 @@ async fn announce_udp(
 }
 
 ///https://www.bittorrent.org/beps/bep_0015.html
-async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
-    //Bind to a random port
-    let port = rand::thread_rng().gen_range(1025..u16::MAX);
-
-    let sock = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], port)))
-        .await
-        .unwrap();
+async fn connect_udp(ip_addr: SocketAddr) -> Option<(i64, UdpSocket)> {
+    let sock = crate::announcer::udp::get_udp_socket().await;
     debug!("connect_udp: sock={:?}", sock);
 
     //The magic protocol id number
@@ -521,7 +513,9 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
     debug!("connect_udp: 1st data send");
 
     let wait_time = std::time::Duration::from_secs(3);
+    debug!("connect_udp: waited");
     let mut attempts: u8 = 0;
+    debug!("connect_udp: attempts: {}", attempts);
 
     let mut could_connect = false;
 
@@ -535,7 +529,7 @@ async fn connect_udp(ip_addr: SocketAddr) -> Option<i64> {
     let transaction_id_recv: i32 = i32::from_be_bytes((&response_buf[4..8]).try_into().unwrap());
 
     match could_connect && transaction_id == transaction_id_recv {
-        true => Some(i64::from_be_bytes((&response_buf[8..]).try_into().unwrap())),
+        true => Some((i64::from_be_bytes((&response_buf[8..]).try_into().unwrap()), sock)),
         false => None,
     }
 }

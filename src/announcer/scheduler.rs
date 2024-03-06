@@ -1,4 +1,4 @@
-use crate::{tracker, TORRENTS};
+use crate::TORRENTS;
 
 pub fn run(wait_time: u64) {
     let mut next_interval = wait_time;
@@ -7,7 +7,7 @@ pub fn run(wait_time: u64) {
         for m in list.iter() {
             let mut t = m.lock().unwrap();
             if t.shound_announce() {
-                next_interval = u64::min(next_interval, tracker::announce(&mut t, None));
+                next_interval = u64::min(next_interval, super::tracker::announce(&mut t, None));
             }
         }
         std::thread::sleep(std::time::Duration::from_secs(next_interval));

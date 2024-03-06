@@ -320,7 +320,7 @@ pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
         }
     }
     t.info_hash_urlencoded =
-        percent_encoding::percent_encode(&hash_bytes, crate::tracker::URL_ENCODE_RESERVED)
+        percent_encoding::percent_encode(&hash_bytes, crate::announcer::tracker::URL_ENCODE_RESERVED)
             .to_string();
     if let Some(files) = torrent.info.files {
         let mut list: Vec<File> = Vec::with_capacity(files.len());
