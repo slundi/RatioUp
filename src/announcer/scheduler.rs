@@ -1,6 +1,9 @@
+use log::{debug, info};
+
 use crate::TORRENTS;
 
 pub fn run(wait_time: u64) {
+    info!("Starting scheduler");
     let mut next_interval = wait_time;
     loop {
         let list = TORRENTS.read().expect("Cannot get torrent list");
@@ -10,6 +13,7 @@ pub fn run(wait_time: u64) {
                 next_interval = u64::min(next_interval, super::tracker::announce(&mut t, None));
             }
         }
+        debug!("Next announce in {}s", next_interval);
         std::thread::sleep(std::time::Duration::from_secs(next_interval));
     }
 }

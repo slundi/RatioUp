@@ -41,11 +41,13 @@ rustup self uninstall
 
 ### With Docker
 
-In a terminal:
+Using a terminal:
 
 ```shell
-docker run --name RatioUp -p 0.0.0.0:8070:8070 slundi/ratioup
+docker run --name RatioUp -p 0.0.0.0:8070:8070 slundi/ratioup:<tag>
 ```
+
+*For now I did not manage to build a multi-arch docker image so you need to specify the [image tag](https://hub.docker.com/r/slundi/ratioup/tags)*
 
 You can change `-p 0.0.0.0:8070:8070` to manage your access through your prefered port.
 
@@ -115,12 +117,11 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 
 ## Roadmap
 
-- [ ] Split project in 2: web service with UI or CLI usage with cron
-- [ ] Change delay if different after announcing
+- [x] Change delay if different after announcing
 - [x] Torrent clients in a separated library
 - [x] Parse response instead of using REGEX
 - [ ] Display session upload (global & per torrent)
-- [ ] Torrents with multiple trackers?
+- [x] Torrents with multiple trackers?
 - [x] Drop torrent files from the web UI
 - [ ] Retracker torrents
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)

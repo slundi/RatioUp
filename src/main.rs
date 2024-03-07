@@ -53,7 +53,7 @@ async fn main() {
 
     // schedule client refresh key if applicable
     if let Some(refresh_every) = config::init_client(&config) {
-        std::thread::spawn(move || run_key_renewer(refresh_every));
+        let _ = std::thread::Builder::new().name("ratioup-key-renewer".to_owned()).spawn(move || run_key_renewer(refresh_every));
     }
 
     directory::prepare_torrent_folder(&config.torrent_dir);
@@ -68,7 +68,7 @@ async fn main() {
     if WS_CONFIG.get().unwrap().disabled {
         run_announcer(wait_time);
     } else {
-        std::thread::spawn(move || run_announcer(wait_time));
+        let _ = std::thread::Builder::new().name("ratioup-scheduler".to_owned()).spawn(move || run_announcer(wait_time));
         run_webui().await // start web server
     }
 }
@@ -76,7 +76,7 @@ async fn main() {
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed.
 /// It returns the time to wait before anouncing.
 fn add_torrent(path: String) -> u64 {
-    let mut interval = u64::MAX;
+    let mut interval = 1800u64;
     if path.to_lowercase().ends_with(".torrent") {
         let config = CONFIG.get().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");

@@ -1,7 +1,7 @@
 [package]
 name = "RatioUp"
 author = "slundi"
-version = "1.1.5"
+version = "1.2.0"
 edition = "2021"
 homepage = "https://codeberg.org/slundi/RatioUp"
 
@@ -15,13 +15,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ureq = { version = "2", features = ["charset", "gzip"] }
 tokio = { version = "1.32", features = ["rt", "fs", "net"] }
-futures = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 once_cell = "1.18"
 sanitize-filename = "0.5"
 uuid = { version = "1", features = ["v4"] }
 byte-unit = "5"
-url = "2"
 reqwest = { version = "0.11", features = [
     "blocking",
     "rustls-tls",
@@ -31,7 +29,6 @@ reqwest = { version = "0.11", features = [
 ] }
 percent-encoding = "2"
 fake-torrent-client = "0.9"
-scheduled-thread-pool = "0.2"
 
 dotenv = "0.15"
 log = "0.4"
