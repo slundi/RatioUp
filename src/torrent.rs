@@ -37,8 +37,9 @@ pub struct File {
     md5sum: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
 pub struct Info {
+    /// the filename. This is purely advisory. (string)
     pub name: String,
     pieces: ByteBuf,
     #[serde(rename = "piece length")]
@@ -47,6 +48,7 @@ pub struct Info {
     md5sum: Option<String>,
     #[serde(default)]
     pub length: Option<i64>,
+    /// a list of dictionaries, one for each file.
     #[serde(default)]
     pub files: Option<Vec<File>>,
     #[serde(default)]
@@ -57,9 +59,10 @@ pub struct Info {
     pub root_hash: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
 pub struct Torrent {
     pub info: Info,
+    /// The announce URL of the tracker
     #[serde(default)]
     pub announce: Option<String>,
     #[serde(default)]
@@ -68,13 +71,16 @@ pub struct Torrent {
     pub encoding: Option<String>,
     #[serde(default)]
     httpseeds: Option<Vec<String>>,
-    /// http://bittorrent.org/beps/bep_0012.html
+    /// (optional) this is an extention to the official specification, offering backwards-compatibility. 
+    /// (list of lists of strings). http://bittorrent.org/beps/bep_0012.html
     #[serde(default, rename = "announce-list")]
     pub announce_list: Option<Vec<Vec<String>>>,
     #[serde(default, rename = "creation date")]
     pub creation_date: Option<i64>,
+    /// (optional) free-form textual comments of the author (string)
     #[serde(rename = "comment")]
     pub comment: Option<String>,
+    /// (optional) name and version of the program used to create the .torrent (string)
     #[serde(default, rename = "created by")]
     pub created_by: Option<String>,
 }
@@ -109,40 +115,35 @@ impl Torrent {
         }
         None
     }
+
+    pub fn get_urls(&self) -> Vec<String> {
+        let mut urls: Vec<String> = Vec::new();
+        if let Some(url) = self.announce.clone() {
+            urls.push(url);
+        }
+        if let Some(al) = self.announce_list.clone() {
+            for v in al {
+                for s in v {
+                    if !s.is_empty() && !urls.iter().any(|value| value == &s) {
+                        urls.push(s);
+                    }
+                }
+            }
+        }
+        urls
+    }
 }
 
-/// Store only essential information
+/// To only keep minimal torrent info in RAM. Info are ised in:
+/// - the announcer (info hash, urls, name in log, sizes, downloaded, uploaded, interval, last_announce, seeders, leechers)
+/// - web UI (info hash, name, size, downloaded, uploaded, seeders, leechers, is private, is a folder, path)
 #[derive(Debug, Serialize, PartialEq, Eq, Clone)]
-pub struct BasicTorrent {
-    /// the filename. This is purely advisory. (string)
+pub struct CleansedTorrent {
     pub name: String,
-    /// (optional) free-form textual comments of the author (string)
-    comment: String,
-    /// (optional) name and version of the program used to create the .torrent (string)
-    created_by: String,
-    /// The announce URL of the tracker
-    pub announce: Option<String>,
-    /// (optional) this is an extention to the official specification, offering backwards-compatibility. (list of lists of strings). http://bittorrent.org/beps/bep_0012.html
-    announce_list: Option<Vec<Vec<String>>>,
-    //creation_date? (optional) the creation time of the torrent, in standard UNIX epoch format (integer, seconds since 1-Jan-1970 00:00:00 UTC)
-    /// urlencoded 20-byte SHA1 hash of the value of the info key from the Metainfo file. Note that the value will be a bencoded dictionary, given the definition of the info key above.
-    pub info_hash: String,
-    /// number of bytes in each piece (integer)
-    piece_length: usize,
-    /// length of the file in bytes (integer)
+    pub urls: Vec<String>,
     pub length: usize,
-    /// a list of dictionaries, one for each file.
-    files: Option<Vec<File>>,
-    /// (optional) this field is an integer. If it is set to "1", the client MUST publish its presence to get other peers ONLY via the trackers explicitly described
-    /// in the metainfo file. If this field is set to "0" or is not present, the client may obtain peer from other means, e.g. PEX peer exchange, dht. Here, "private"
-    /// may be read as "no external peer source".
-    ///
-    /// - NOTE: There is much debate surrounding private trackers.
-    /// - The official request for a specification change is here: http://bittorrent.org/beps/bep_0027.html
-    /// - Azureus/Vuze was the first client to respect private trackers, see their wiki (http://wiki.vuze.com/w/Private_torrent) for more details.
     pub private: bool,
-
-    //Fields used by RatioUp
+    pub info_hash: String,
     /// Path to the torrent file
     pub path: String,
     /// If we have to virtually download the torrent first, it is the downloaded size in bytes
@@ -166,6 +167,52 @@ pub struct BasicTorrent {
     /// Current interval after the last annouce
     #[serde(skip)]
     pub interval: u64,
+    #[serde(skip)]
+    pub error_count: u16,
+}
+
+/// Store only essential information
+#[derive(Debug, Serialize, PartialEq, Eq, Clone)]
+pub struct BasicTorrent {
+    /// the filename. This is purely advisory. (string)
+    pub name: String,
+    //creation_date? (optional) the creation time of the torrent, in standard UNIX epoch format (integer, seconds since 1-Jan-1970 00:00:00 UTC)
+    /// urlencoded 20-byte SHA1 hash of the value of the info key from the Metainfo file. Note that the value will be a bencoded dictionary, given the definition of the info key above.
+    pub info_hash: String,
+    /// number of bytes in each piece (integer)
+    piece_length: usize,
+    /// length of the file in bytes (integer)
+    pub length: usize,
+    /// a list of dictionaries, one for each file.
+    files: Option<Vec<File>>,
+    /// (optional) this field is an integer. If it is set to "1", the client MUST publish its presence to get other peers ONLY via the trackers explicitly described
+    /// in the metainfo file. If this field is set to "0" or is not present, the client may obtain peer from other means, e.g. PEX peer exchange, dht. Here, "private"
+    /// may be read as "no external peer source".
+    ///
+    /// - NOTE: There is much debate surrounding private trackers.
+    /// - The official request for a specification change is here: http://bittorrent.org/beps/bep_0027.html
+    /// - Azureus/Vuze was the first client to respect private trackers, see their wiki (http://wiki.vuze.com/w/Private_torrent) for more details.
+    pub private: bool,
+
+    //Fields used by RatioUp
+    /// Path to the torrent file
+    #[serde(skip_serializing)]
+    pub path: String,
+    /// If we have to virtually download the torrent first, it is the downloaded size in bytes
+    pub downloaded: usize,
+    /// Total of fake uploaded data since the start of RatioUp
+    pub uploaded: usize,
+    /// Last announce to the tracker
+    #[serde(skip_serializing)]
+    pub last_announce: std::time::Instant,
+    /// Number of seeders, it is used on the web UI
+    pub seeders: u16,
+    /// Number of leechers, it is used on the web UI
+    pub leechers: u16,
+    /// It is the next upload speed that will be announced. It is also used for UI display.
+    pub next_upload_speed: u32,
+    /// It is the next download speed that will be announced. It allows to end a complete event earlier than the normal interval, It is also used for UI display.
+    pub next_download_speed: u32,
     /// Tracker announce URLs built from the config and the torrent. Some variables are still there (key, left, downloaded, uploaded, event)
     #[serde(skip)]
     pub urls: Vec<String>,
@@ -173,7 +220,7 @@ pub struct BasicTorrent {
     pub error_count: u16,
 }
 
-impl BasicTorrent {
+impl CleansedTorrent {
     /// Tells if we can announce to tracker(s) depending on the last announce
     pub fn shound_announce(&self) -> bool {
         self.last_announce.elapsed().as_secs() >= self.interval
@@ -213,130 +260,83 @@ impl BasicTorrent {
         self.uploaded(config.min_upload_rate, config.max_upload_rate);
     }
 
-    // pub fn announce(&mut self, event: Option<Event>, request: ureq::Request) -> u64 {
-    //     match request.call() {
-    //         Ok(resp) => {
-    //             // let code = resp.status();
-    //             // info!(
-    //             //     "\tTime since last announce: {}s \t interval: {}",
-    //             //     self.last_announce.elapsed().as_secs(),
-    //             //     self.interval
-    //             // );
-    //             // let mut bytes: Vec<u8> = Vec::with_capacity(2048);
-    //             // resp.into_reader()
-    //             //     .take(1024)
-    //             //     .read_to_end(&mut bytes)
-    //             //     .expect("Cannot read response");
-    //             // //we start to check if the tracker has returned an error message, if yes, we will reannounce later
-    //             // debug!(
-    //             //     "Tracker response: {:?}",
-    //             //     String::from_utf8_lossy(&bytes.clone())
-    //             // );
-    //             // match serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
-    //             //     Ok(tr) => {
-    //             //         self.seeders = u16::try_from(tr.complete).unwrap();
-    //             //         self.leechers = u16::try_from(tr.incomplete).unwrap();
-    //             //         self.interval = u64::try_from(tr.interval).unwrap();
-    //             //         info!(
-    //             //             "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
-    //             //             tr.incomplete, tr.complete, tr.interval
-    //             //         );
-    //             //     }
-    //             //     Err(e1) => {
-    //             //         match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
-    //             //             Ok(tr) => warn!("Cannot announce: {}", tr.reason),
-    //             //             Err(e2) => {
-    //             //                 error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
-    //             //             }
-    //             //         }
-    //             //     }
-    //             // }
-    //             // if code != actix_web::http::StatusCode::OK {
-    //             //     info!("\tResponse: code={}\tdata={:?}", code, bytes);
-    //             // }
-    //         }
-    //         Err(ureq::Error::Status(code, response)) => {
-    //             //the server returned an unexpected status code (such as 400, 500 etc)
-    //             if code == 400 {
-    //                 warn!("\tBad request (error 400), please check the URL");
-    //             } else {
-    //                 warn!(
-    //                     "\tUnexpected server response status: {}\t{:?}",
-    //                     code, response
-    //                 );
-    //             }
-    //         }
-    //         Err(err) => {
-    //             if event != Some(Event::Stopped) {
-    //                 error!("I/O error while announcing: {:?}", err);
-    //             }
-    //         }
-    //     }
-    //     self.interval
-    // }
+    /// Load essential data from a parsed torrent using the full parsed torrent file. It reduces the RAM use to have smaller data
+    pub fn from_torrent(torrent: Torrent, path: String) -> CleansedTorrent {
+        let hash_bytes = torrent.info_hash().expect("Cannot get torrent info hash");
+        let hash = hash_bytes.encode_hex::<String>();
+        //let hash = hash_bytes.???;
+        let private = torrent.info.private.is_some() && torrent.info.private == Some(1);
+        let size = torrent.total_size();
+        let mut t = CleansedTorrent {
+            path,
+            name: torrent.info.name.clone(),
+            info_hash_urlencoded: String::with_capacity(64),
+            length: size,
+            last_announce: std::time::Instant::now(),
+            urls: Vec::new(),
+            info_hash: hash,
+            private,
+            downloaded: size,
+            uploaded: 0,
+            seeders: 0,
+            leechers: 0,
+            next_upload_speed: 0,
+            next_download_speed: 0,
+            interval: 4_294_967_295,
+            error_count: 0,
+        };
+        t.urls = torrent.get_urls();
+        t.info_hash_urlencoded = percent_encoding::percent_encode(
+            &hash_bytes,
+            crate::announcer::tracker::URL_ENCODE_RESERVED,
+        )
+        .to_string();
+        debug!("Torrent: {:?}", t);
+        t
+    }
 }
 
-/// Load essential data from a parsed torrent using the full parsed torrent file. It reduces the RAM use to have smaller data
-pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
-    let hash_bytes = torrent.info_hash().expect("Cannot get torrent info hash");
-    let hash = hash_bytes.encode_hex::<String>();
-    //let hash = hash_bytes.???;
-    let private = torrent.info.private.is_some() && torrent.info.private == Some(1);
-    let size = torrent.total_size();
-    let mut t = BasicTorrent {
-        path,
-        name: torrent.info.name,
-        announce: torrent.announce.clone(),
-        announce_list: torrent.announce_list.clone(),
-        info_hash_urlencoded: String::with_capacity(64),
-        comment: String::new(),
-        length: size,
-        created_by: String::new(),
-        last_announce: std::time::Instant::now(),
-        urls: Vec::new(),
-        info_hash: hash,
-        piece_length: torrent.info.piece_length as usize,
-        private,
-        files: None,
-        downloaded: size,
-        uploaded: 0,
-        seeders: 0,
-        leechers: 0,
-        next_upload_speed: 0,
-        next_download_speed: 0,
-        interval: 4_294_967_295,
-        error_count: 0,
-    };
-    if let Some(url) = torrent.announce.clone() {
-        t.urls.push(url);
-    }
-    if let Some(al) = torrent.announce_list.clone() {
-        for v in al {
-            for s in v {
-                if !s.is_empty() && !t.urls.iter().any(|value| value == &s) {
-                    t.urls.push(s);
-                }
+impl BasicTorrent {
+    /// Load torrent data required for a detailled view in the web UI
+    pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
+        let hash_bytes = torrent.info_hash().expect("Cannot get torrent info hash");
+        let hash = hash_bytes.encode_hex::<String>();
+        //let hash = hash_bytes.???;
+        let private = torrent.info.private.is_some() && torrent.info.private == Some(1);
+        let size = torrent.total_size();
+        let mut t = BasicTorrent {
+            path,
+            name: torrent.info.name.clone(),
+            length: size,
+            urls: Vec::new(),
+            info_hash: hash,
+            piece_length: torrent.info.piece_length as usize,
+            private,
+            files: None,
+            downloaded: size,
+            uploaded: 0,
+            seeders: 0,
+            leechers: 0,
+            next_upload_speed: 0,
+            next_download_speed: 0,
+            error_count: 0,
+            last_announce: std::time::Instant::now(),
+        };
+        t.urls = torrent.get_urls();
+        if let Some(files) = torrent.info.files {
+            let mut list: Vec<File> = Vec::with_capacity(files.len());
+            for f in files {
+                list.push(File {
+                    length: f.length,
+                    path: f.path,
+                    md5sum: None,
+                });
             }
+            t.files = Some(list);
         }
+        debug!("Torrent: {:?}", t);
+        t
     }
-    t.info_hash_urlencoded = percent_encoding::percent_encode(
-        &hash_bytes,
-        crate::announcer::tracker::URL_ENCODE_RESERVED,
-    )
-    .to_string();
-    if let Some(files) = torrent.info.files {
-        let mut list: Vec<File> = Vec::with_capacity(files.len());
-        for f in files {
-            list.push(File {
-                length: f.length,
-                path: f.path,
-                md5sum: None,
-            });
-        }
-        t.files = Some(list);
-    }
-    debug!("Torrent: {:?}", t);
-    t
 }
 
 pub fn from_file(path: String) -> Result<Torrent, serde_bencode::Error> {
@@ -345,29 +345,21 @@ pub fn from_file(path: String) -> Result<Torrent, serde_bencode::Error> {
 }
 
 // TODO: test tracker response "with d8:completei0e10:downloadedi0e10:incompletei1e8:intervali1922e12:min intervali961e5:peers6:<3A><><EFBFBD>m<EFBFBD><6D>e"
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::torrent::CleansedTorrent;
 
-    /// Test if it creates the torrent directory and do not panic when it exists
     #[test]
     fn test_can_download_or_upload() {
-        let mut t = BasicTorrent {
+        let mut t = CleansedTorrent {
             name: String::from("Test torrent"),
-            comment: String::with_capacity(0),
-            created_by: String::with_capacity(0),
-            announce: None,
-            announce_list: None,
-            info_hash: String::from("01234567"),
-            piece_length: 1024,
             length: 262144,
-            files: None,
             private: false,
             path: String::from("torrents/linuxmint-21.2-mate-64bit.iso.torrent"),
             downloaded: 262144,
             uploaded: 0,
             last_announce: std::time::Instant::now(),
+            info_hash: String::from("01234567"),
             info_hash_urlencoded: String::from("01234567"),
             seeders: 0,
             leechers: 1,
@@ -394,21 +386,15 @@ mod tests {
 
     #[test]
     fn test_get_average_speeds() {
-        let mut t = BasicTorrent {
+        let mut t = CleansedTorrent {
             name: String::from("Test torrent"),
-            comment: String::with_capacity(0),
-            created_by: String::with_capacity(0),
-            announce: None,
-            announce_list: None,
-            info_hash: String::from("01234567"),
-            piece_length: 1024,
             length: 262144,
-            files: None,
             private: false,
             path: String::from("torrents/linuxmint-21.2-mate-64bit.iso.torrent"),
             downloaded: 262144,
             uploaded: 0,
             last_announce: std::time::Instant::now(),
+            info_hash: String::from("01234567"),
             info_hash_urlencoded: String::from("01234567"),
             seeders: 4,
             leechers: 16,

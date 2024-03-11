@@ -6,7 +6,7 @@ use std::io::Read;
 use fake_torrent_client::Client;
 use log::{debug, error, info, warn};
 
-use crate::torrent::BasicTorrent;
+use crate::torrent::CleansedTorrent;
 use crate::{CLIENT, TORRENTS};
 
 pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
@@ -94,7 +94,7 @@ pub fn announce_stopped() {
 ///
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
-pub fn announce(torrent: &mut BasicTorrent, event: Option<Event>) -> u64 {
+pub fn announce(torrent: &mut CleansedTorrent, event: Option<Event>) -> u64 {
     let mut interval = 4_294_967_295u64;
     // TODO: prepare announce (uploaded and downloaded if applicable)
     torrent.compute_speeds();
@@ -126,7 +126,7 @@ pub fn check_and_announce() {
 
 fn announce_http(
     url: &str,
-    torrent: &mut BasicTorrent,
+    torrent: &mut CleansedTorrent,
     client: &Client,
     event: Option<Event>,
 ) -> u64 {
@@ -256,7 +256,7 @@ fn announce_http(
 /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
 pub fn build_url(
     url: &str,
-    torrent: &mut BasicTorrent,
+    torrent: &mut CleansedTorrent,
     event: Option<Event>,
     key: String,
 ) -> String {

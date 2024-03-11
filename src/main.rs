@@ -13,6 +13,7 @@ use tokio::time::Duration;
 
 use crate::announcer::scheduler::run as run_announcer;
 use crate::config::AnnouncerConfig;
+use crate::torrent::CleansedTorrent;
 use crate::webui::server::run as run_webui;
 
 mod announcer;
@@ -24,7 +25,7 @@ mod webui;
 static CONFIG: OnceLock<AnnouncerConfig> = OnceLock::new();
 static WS_CONFIG: OnceLock<WebServerConfig> = OnceLock::new();
 static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
-static TORRENTS: RwLock<Vec<Mutex<torrent::BasicTorrent>>> = RwLock::new(Vec::new()); // TODO: replace with mutex
+static TORRENTS: RwLock<Vec<Mutex<CleansedTorrent>>> = RwLock::new(Vec::new()); // TODO: replace with mutex
 
 fn run_key_renewer(refresh_every: u16) {
     loop {
@@ -53,7 +54,9 @@ async fn main() {
 
     // schedule client refresh key if applicable
     if let Some(refresh_every) = config::init_client(&config) {
-        let _ = std::thread::Builder::new().name("ratioup-key-renewer".to_owned()).spawn(move || run_key_renewer(refresh_every));
+        let _ = std::thread::Builder::new()
+            .name("ratioup-key-renewer".to_owned())
+            .spawn(move || run_key_renewer(refresh_every));
     }
 
     directory::prepare_torrent_folder(&config.torrent_dir);
@@ -68,7 +71,9 @@ async fn main() {
     if WS_CONFIG.get().unwrap().disabled {
         run_announcer(wait_time);
     } else {
-        let _ = std::thread::Builder::new().name("ratioup-scheduler".to_owned()).spawn(move || run_announcer(wait_time));
+        let _ = std::thread::Builder::new()
+            .name("ratioup-scheduler".to_owned())
+            .spawn(move || run_announcer(wait_time));
         run_webui().await // start web server
     }
 }
@@ -84,7 +89,7 @@ fn add_torrent(path: String) -> u64 {
         let t = torrent::from_file(path.clone());
         match t {
             Ok(torrent) => {
-                let mut t = torrent::from_torrent(torrent, path);
+                let mut t = CleansedTorrent::from_torrent(torrent, path);
                 if config.min_download_rate > 0 && config.max_download_rate > 0 {
                     t.downloaded = 0;
                 } else {

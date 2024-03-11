@@ -11,12 +11,12 @@ use log::info;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::{torrent::BasicTorrent, CLIENT, CONFIG, TORRENTS};
+use crate::{torrent::CleansedTorrent, CLIENT, CONFIG, TORRENTS};
 
 /// Get the torrent list because it is originally a list of mutexes
-fn get_torrent_list() -> Vec<BasicTorrent> {
+fn get_torrent_list() -> Vec<CleansedTorrent> {
     let list = &*TORRENTS.read().expect("Cannot get torrent list");
-    let mut result: Vec<BasicTorrent> = Vec::with_capacity(list.len());
+    let mut result: Vec<CleansedTorrent> = Vec::with_capacity(list.len());
     for mutex in list {
         let t = mutex.lock().unwrap();
         result.push(t.clone());
