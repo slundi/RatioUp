@@ -31,14 +31,14 @@ fn run_key_renewer(refresh_every: u16) {
         if let Some(client) = &mut *CLIENT.write().expect("Cannot read client") {
             client.generate_key();
         }
-        std::thread::sleep(Duration::from_secs(u64::try_from(refresh_every).unwrap()));
+        std::thread::sleep(Duration::from_secs(u64::from(refresh_every)));
     }
 }
 
 #[actix::main]
 async fn main() {
     dotenv().ok();
-    WS_CONFIG.get_or_init(|| WebServerConfig::load());
+    WS_CONFIG.get_or_init(WebServerConfig::load);
     let config = AnnouncerConfig::load();
     CONFIG.get_or_init(|| config.clone());
     //configure logger

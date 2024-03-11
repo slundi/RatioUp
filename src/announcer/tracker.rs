@@ -15,24 +15,24 @@ pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::
     .remove(b'~')
     .remove(b'.');
 
-enum ErrorCode {
-    /// Client request was not a HTTP GET
-    InvalidRequestType = 100,
-    MissingInfosash = 101,
-    MissingPeerId = 102,
-    MissingPort = 103,
-    /// infohash is not 20 bytes long.
-    InvalidInfohash = 150,
-    /// peerid is not 20 bytes long
-    InvalidPeerId = 151,
-    /// Client requested more peers than allowed by tracker
-    InvalidNumwant = 152,
-    /// info_hash not found in the database. Sent only by trackers that do not automatically include new hashes into the database.
-    InfohashNotFound = 200,
-    /// Client sent an eventless request before the specified time.
-    ClientSentEventlessRequest = 500,
-    GenericError = 900,
-}
+// enum ErrorCode {
+//     /// Client request was not a HTTP GET
+//     InvalidRequestType = 100,
+//     MissingInfosash = 101,
+//     MissingPeerId = 102,
+//     MissingPort = 103,
+//     /// infohash is not 20 bytes long.
+//     InvalidInfohash = 150,
+//     /// peerid is not 20 bytes long
+//     InvalidPeerId = 151,
+//     /// Client requested more peers than allowed by tracker
+//     InvalidNumwant = 152,
+//     /// info_hash not found in the database. Sent only by trackers that do not automatically include new hashes into the database.
+//     InfohashNotFound = 200,
+//     /// Client sent an eventless request before the specified time.
+//     ClientSentEventlessRequest = 500,
+//     GenericError = 900,
+// }
 
 /// The optional announce event.
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -11,7 +11,7 @@ use log::info;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::{torrent::BasicTorrent, CONFIG, TORRENTS};
+use crate::{torrent::BasicTorrent, CLIENT, CONFIG, TORRENTS};
 
 /// Get the torrent list because it is originally a list of mutexes
 fn get_torrent_list() -> Vec<BasicTorrent> {
@@ -77,12 +77,12 @@ async fn process_user_command(params: web::Form<CommandParams>) -> HttpResponse 
         //enable disable torrent
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         let mut item_to_remove: Option<usize> = None;
-        for i in 0..list.len() {
-            let t = list[i].lock().unwrap();
+        for it in list.iter().enumerate() {
+            let t = it.1.lock().unwrap();
             if t.info_hash == params.infohash {
                 let r = std::fs::remove_file(&t.path);
                 if r.is_ok() {
-                    item_to_remove = Some(i);
+                    item_to_remove = Some(it.0);
                     break;
                 } else {
                     return HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
@@ -98,4 +98,24 @@ async fn process_user_command(params: web::Form<CommandParams>) -> HttpResponse 
         }
     }
     HttpResponse::build(StatusCode::BAD_REQUEST).finish()
+}
+
+/// Check the health of the service
+#[get("/health")]
+async fn health_check() -> Result<HttpResponse> {
+    let client = &*CLIENT.read().unwrap();
+    if client.is_none() {
+        return Ok(HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .content_type(ContentType::json())
+            .body("{\"error\":\"CClient is undefined\"}"));
+    }
+    // Check that we can read the torrent list
+    let list = TORRENTS.read();
+    if let Err(_e) = list {
+        return Ok(HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR)
+            .content_type(ContentType::json())
+            .body("{\"error\":\"Cannot get torrent list\"}"));
+    }
+
+    Ok(HttpResponse::build(StatusCode::OK).finish())
 }

@@ -53,6 +53,29 @@ You can change `-p 0.0.0.0:8070:8070` to manage your access through your prefere
 
 You can add `-e WEBROOT=/my-path/` if you want to change your root URL. By default, it is `/`.
 
+### Health check
+
+**When the web UI is enabled**, you can check the health of the service.
+
+With **Docker**, you need to edit the [Dockerfile](Dockerfile) by adding this line: `HEALTHCHECK CMD curl --fail http://<ip>:<port>/health || exit 1`
+
+If you use **docker-compose**, do something like that (change times to your convenience):
+
+```yaml
+version: '3.4'
+services:
+  ratioup:
+    image: slundi/ratioup
+    restart: unless-stopped
+    ports:
+      - "8070:8070"
+    healthcheck:
+      test: curl --fail http://localhost:8070/health || exit 1  # with wget: wget --no-verbose --tries=1 --spider http://localhost:8070/health || exit 1
+      interval: 60s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+```
 
 ## Configuration
 
@@ -126,3 +149,4 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 - [ ] Retracker torrents
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
 - [ ] UDP announce URL support
+- [ ] Improve health check by probing the announcer and the key refresh when applicable

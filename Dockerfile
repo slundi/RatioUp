@@ -11,6 +11,10 @@ VOLUME /torrents
 LABEL author="Slundi"
 LABEL url="https://github.com/slundi/RatioUp"
 LABEL vcs-url="https://github.com/slundi/RatioUp"
+
+# Enable the line below only when the web UI is enabled
+# HEALTHCHECK CMD curl --fail http://localhost:8070/health || exit 1
+
 # set user to non-root unless root is required for your app
 # USER 1001
 ENTRYPOINT [ "/app/RatioUp" ]
