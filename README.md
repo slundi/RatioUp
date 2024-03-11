@@ -150,3 +150,4 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
 - [ ] UDP announce URL support
 - [ ] Improve health check by probing the announcer and the key refresh when applicable
+- [ ] Allow to generate a static JSON file with runtime statistics (global and per torrent download & upload, some torrent information), ie: `OUTPUT=/var/www/ratioup.json`
