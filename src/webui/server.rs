@@ -18,6 +18,7 @@ pub async fn run() {
             .service(routes::receive_files)
             .service(routes::process_user_command)
             .service(routes::health_check)
+            .service(routes::torrent_files)
             .service(Files::new(&config.web_root, "static/").index_file("index.html"))
     })
     .bind(&config.server_addr)

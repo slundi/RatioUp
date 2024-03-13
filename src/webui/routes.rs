@@ -7,11 +7,14 @@ use actix_web::{
     post, web, HttpResponse, Result,
 };
 use futures_util::TryStreamExt;
-use log::info;
+use log::{info, warn};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::{torrent::CleansedTorrent, CLIENT, CONFIG, TORRENTS};
+use crate::{
+    torrent::{self, CleansedTorrent},
+    CLIENT, CONFIG, TORRENTS,
+};
 
 /// Get the torrent list because it is originally a list of mutexes
 fn get_torrent_list() -> Vec<CleansedTorrent> {
@@ -63,6 +66,43 @@ async fn get_torrents() -> Result<HttpResponse> {
     Ok(HttpResponse::build(StatusCode::OK)
         .content_type(ContentType::json())
         .body(format!("{{\"torrents\":{}}}", json!(get_torrent_list()))))
+}
+
+/// Returns the torrent file list when applicable
+#[get("/torrents/{info_hash}/files")]
+async fn torrent_files(path: web::Path<String>) -> Result<HttpResponse> {
+    let torrents = get_torrent_list();
+    #[derive(Debug, Serialize)]
+    struct File {
+        path: String,
+        size: i64,
+    }
+    for t in torrents {
+        if t.info_hash == path.as_str() {
+            match torrent::from_file(t.path) {
+                Ok(torrent) => {
+                    if let Some(files) = torrent.info.files {
+                        let mut result: Vec<File> = Vec::with_capacity(files.len());
+                        for f in files.iter() {
+                            result.push(File {
+                                path: f.get_path_with_separator(),
+                                size: f.length,
+                            });
+                        }
+                        return Ok(HttpResponse::build(StatusCode::OK)
+                            .content_type(ContentType::json())
+                            .json(json!(result)));
+                    }
+                    break; // returns the 404 Not found error
+                }
+                Err(err) => {
+                    warn!("Torrent not found with info hash: {}\tError: {}", path, err);
+                    return Ok(HttpResponse::build(StatusCode::NOT_FOUND).finish());
+                }
+            }
+        }
+    }
+    Ok(HttpResponse::build(StatusCode::NOT_FOUND).finish())
 }
 
 #[derive(Serialize, Deserialize, Clone)]

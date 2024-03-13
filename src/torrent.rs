@@ -37,6 +37,17 @@ pub struct File {
     md5sum: Option<String>,
 }
 
+impl File {
+    pub fn get_path_with_separator(&self) -> String {
+        let mut result = String::new();
+        for s in self.path.iter() {
+            result.push('/');
+            result.push_str(s);
+        }
+        result
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
 pub struct Info {
     /// the filename. This is purely advisory. (string)
@@ -71,7 +82,7 @@ pub struct Torrent {
     pub encoding: Option<String>,
     #[serde(default)]
     httpseeds: Option<Vec<String>>,
-    /// (optional) this is an extention to the official specification, offering backwards-compatibility. 
+    /// (optional) this is an extention to the official specification, offering backwards-compatibility.
     /// (list of lists of strings). http://bittorrent.org/beps/bep_0012.html
     #[serde(default, rename = "announce-list")]
     pub announce_list: Option<Vec<Vec<String>>>,
@@ -143,6 +154,8 @@ pub struct CleansedTorrent {
     pub urls: Vec<String>,
     pub length: usize,
     pub private: bool,
+    /// If the torrent contains many files, not just one
+    pub folder: bool,
     pub info_hash: String,
     /// Path to the torrent file
     pub path: String,
@@ -267,6 +280,10 @@ impl CleansedTorrent {
         //let hash = hash_bytes.???;
         let private = torrent.info.private.is_some() && torrent.info.private == Some(1);
         let size = torrent.total_size();
+        let mut folder = false;
+        if let Some(files) = torrent.info.files.clone() {
+            folder = !files.is_empty();
+        }
         let mut t = CleansedTorrent {
             path,
             name: torrent.info.name.clone(),
@@ -276,6 +293,7 @@ impl CleansedTorrent {
             urls: Vec::new(),
             info_hash: hash,
             private,
+            folder,
             downloaded: size,
             uploaded: 0,
             seeders: 0,
@@ -355,6 +373,7 @@ mod tests {
             name: String::from("Test torrent"),
             length: 262144,
             private: false,
+            folder: false,
             path: String::from("torrents/linuxmint-21.2-mate-64bit.iso.torrent"),
             downloaded: 262144,
             uploaded: 0,
@@ -390,6 +409,7 @@ mod tests {
             name: String::from("Test torrent"),
             length: 262144,
             private: false,
+            folder: false,
             path: String::from("torrents/linuxmint-21.2-mate-64bit.iso.torrent"),
             downloaded: 262144,
             uploaded: 0,

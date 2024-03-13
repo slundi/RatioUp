@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html><head>
+<html lang="en"><head>
 <title>Ratio Up</title>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="stylesheet" href="css/bulma.min.css"/>
-<link rel="stylesheet" href="css/bulma-dark.min.css"/>
-<link rel="stylesheet" href="css/materialdesignicons.min.css"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="css/bulma.min.css">
+<link rel="stylesheet" href="css/bulma-dark.min.css">
+<link rel="stylesheet" href="css/materialdesignicons.min.css">
 <style>
 #dropoverlay {
   position: absolute;
@@ -22,13 +22,13 @@
 </head><body><div id="dropoverlay"></div>
 <nav class="navbar is-fixed-top is-dark">
   <div class="navbar-brand"><span  class="navbar-item" style="display: inline-block;">
-    <strong>RatioUp</strong><br/>
-    <a href="https://github.com/slundi/RatioUp" target="_blank" title="View sources on GitHub"><i class="mdi mdi-github"></i></a>
+    <strong>RatioUp</strong><br>
+    <a href="https://codeberg.org/slundi/RatioUp" target="_blank" title="View sources on GitHub"><i class="mdi mdi-github"></i></a>
   </span></div>
   <div class="navbar-end">
     <div class="navbar-item file" id="upload_torrent">
       <label class="file-label">
-        <input class="file-input" type="file" name="resume" accept=".torrent" multiple />
+        <input class="file-input" type="file" name="resume" accept=".torrent" multiple>
         <span class="file-cta">
           <span class="file-icon"><i class="mdi mdi-file-plus mdi-24px"></i></span>
           <span class="file-label">Choose a torrent file…</span>
@@ -37,44 +37,44 @@
     </div>
     <div class="navbar-item has-text-info" title="Overall download speed">
       <i class="mdi mdi-download-network mdi-36px"></i>
-      <span style="display: inline-block;"><small id="download_speed" title="Current download speed">-</small><br/><span class="tag" id="download_speeds"></span>
+      <span style="display: inline-block;"><small id="download_speed" title="Current download speed">-</small><br><span class="tag" id="download_speeds"></span></span>
     </div>
     <div class="navbar-item has-text-success" title="Overall upload speed">
       <i class="mdi mdi-upload-network mdi-36px"></i>
-      <span style="display: inline-block;"><small id="upload_speed" title="Current upload speed">-</small><br/><span class="tag" id="upload_speeds"></span>
+      <span style="display: inline-block;"><small id="upload_speed" title="Current upload speed">-</small><br><span class="tag" id="upload_speeds"></span></span>
       
     </div>
     <div class="navbar-item has-text-primary" title="Client software"><i class="mdi mdi-desktop-tower-monitor mdi-24px"></i>&nbsp;<i id="client"></i></div>
   </div>
 </nav>
 <div class="container is-fullhd mt-6 pt-6" id="content">
-  <div class="modal" id="retracker"><div class="modal-background"></div>
-    <div class="modal-content">
-      <h5>Retracker</h5>
-      <input type="hidden" id="old-trackers" value="" />
-      <div class="field is-horizontal">
-        <div class="field-label is-normal"><label class="label">Tracker</label></div>
-        <div class="field-body"><div class="field"><div class="control"><input class="input is-warning" type="text" placeholder="Tracker URL" /></div></div></div>
-      </div>
-      <div class="field is-horizontal">
-        <div class="field-label is-normal"></div>
-        <div class="field-body"><div class="field">
-            <div class="control"><label class="checkbox"><input type="checkbox" id="apply-all-trackers" /> Apply to all torrents with the same tracker(s)</label></div>
-          </div></div>
-      </div>
-      <a href="javascript:apply_retracker()"><i class="mdi mdi-check">Apply</i></a>
-    </div>
-    <button class="modal-close is-large" aria-label="close"></button>
-  </div>
-  <div class="modal" id="files"><div class="modal-background"></div>
-    <div class="modal-content">
-      <h5>Files</h5>
-      <table class="table is-striped is-narrow is-fullwidth"><thead><tr><td>Path</td><td class="c2"><i class="mdi mdi-harddisk"></i> Size</td></tr></thead><tbody id="paths"></tbody></table>
-    </div>
-    <button class="modal-close is-large" aria-label="close"></button>
-  </div>
 
 <!--Icons to display on the torrent file browser (future feature): mdi-folder-multiple mdi-folder mdi-folder-open mdi-grid (chunks) mdi-information-->
+</div>
+<div class="modal" id="retracker"><div class="modal-background"></div>
+  <div class="modal-content">
+    <h5>Retracker</h5>
+    <input type="hidden" id="old-trackers" value="">
+    <div class="field is-horizontal">
+      <div class="field-label is-normal"><label class="label">Tracker</label></div>
+      <div class="field-body"><div class="field"><div class="control"><input class="input is-warning" type="text" placeholder="Tracker URL"></div></div></div>
+    </div>
+    <div class="field is-horizontal">
+      <div class="field-label is-normal"></div>
+      <div class="field-body"><div class="field">
+          <div class="control"><label class="checkbox"><input type="checkbox" id="apply-all-trackers"> Apply to all torrents with the same tracker(s)</label></div>
+        </div></div>
+    </div>
+    <a href="javascript:apply_retracker()"><i class="mdi mdi-check">Apply</i></a>
+  </div>
+  <button class="modal-close is-large" aria-label="close"></button>
+</div>
+<div class="modal" id="files"><div class="modal-background"></div>
+  <div class="modal-content">
+    <h5>Files</h5>
+    <table class="table is-striped is-narrow is-fullwidth"><thead><tr><td>Path</td><td class="c2"><i class="mdi mdi-harddisk"></i> Size</td></tr></thead><tbody id="paths"></tbody></table>
+  </div>
+  <button class="modal-close is-large" aria-label="close"></button>
 </div>
 <script>
 var torrents = [];
@@ -87,9 +87,9 @@ function send_command(c, h){
         infos = msg['infos'];
         for(let i=0; i<infos.length; i++) {
           var tr = document.getElementById(infos[i]['info_hash']);
-          tr.getElementsByClassName("uploading")[0].innerHTML = bytes_to_Size(infos[i]['upload_speed']) + "/s";
-          tr.getElementsByClassName("seeders")[0].innerHTML = infos[i]['seeders'];
-          tr.getElementsByClassName("leechers")[0].innerHTML = infos[i]['leechers'];
+          tr.getElementsByClassName("uploading")[0].innerText = bytes_to_Size(infos[i]['upload_speed']) + "/s";
+          tr.getElementsByClassName("seeders")[0].innerText = infos[i]['seeders'];
+          tr.getElementsByClassName("leechers")[0].innerText = infos[i]['leechers'];
         }
       } else if (r.responseText.startsWith('{"removed":')) { document.getElementById(msg['removed']).remove(); }
     }
@@ -164,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.keyCode === 27) {closeAllModals();}// Escape key
   });
   //load config
-  let rc = new XMLHttpRequest();
+  const rc = new XMLHttpRequest();
   rc.onreadystatechange = function() {
     if (rc.readyState == 4 && rc.status === 200) {
       let msg = JSON.parse(rc.responseText);
@@ -180,12 +180,12 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(load_torrents, 120000);
 });
 function load_torrents(a=true){
-  let r = new XMLHttpRequest();
+  const r = new XMLHttpRequest();
   r.onreadystatechange = function() {
     if (r.readyState == 4 && r.status === 200) {
       let msg = JSON.parse(r.responseText);
       let list = document.getElementById("content");
-      list.innerHTML = '';
+      list.innerText = '';
       torrents = msg['torrents'].sort(function(t1, t2) { //sort torrents by name
         if(t1['name'].toLowerCase() < t2['name'].toLowerCase()) return -1;
         if(t1['name'].toLowerCase() > t2['name'].toLowerCase()) return 1;
@@ -197,7 +197,21 @@ function load_torrents(a=true){
         d=document.createElement('div');
         d.setAttribute('id', torrents[i]['info_hash']);
         d.setAttribute('class','box');
-        d.innerHTML = '<div class="columns"><div class="column"><h3 class="title is-6">' +(torrents[i]['files']==null?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-folder"></i></a> ') +torrents[i]['name']+ '</h3></div>'
+        // div1=document.createElement('div'); div1.setAttribute('class', 'column'); d.append(div1);
+        // div2=document.createElement('div'); div2.setAttribute('class', 'column'); div1.append(div2);
+        // h3=document.createElement('h3'); h3.setAttribute('class', 'title is-6');
+        // icon = document.createElement('i');
+        // icon.setAttribute('class', 'mdi mdi-'+(torrents[i]['folder']?'folder':'file'));
+        // if(torrents[i]['folder']) {
+        //   a=document.createElement('a'); a.setAttribute('href', 'javascript:files(\''+torrents[i]['info_hash']+'\')');
+        //   a.append(icon);
+        //   h3.append(a);
+        // } else {
+        //   h3.append(icon);
+        // }
+        // h3.append(' '+torrents[i]['name']);
+        // div2.append(h3);
+        d.innerHTML = '<div class="columns"><div class="column"><h3 class="title is-6">' +(!torrents[i]['folder']?'<i class="mdi mdi-file"></i> ':'<a href="javascript:files(\''+torrents[i]['info_hash']+'\')"><i class="mdi mdi-folder"></i></a> ') +torrents[i]['name']+ '</h3></div>'
                     + '<div class="column is-1 has-text-right"><!--<a href="javascript:retracker(\''+torrents[i]['info_hash']+'\')" class="has-text-warning"><i class="mdi mdi-directions-fork"></i></a> -->'
                     + '<a href="javascript:remove(\''+torrents[i]['info_hash']+'\')" class="has-text-danger"><i class="mdi mdi-delete-forever"></i></a></div></div>'
                     + '<small class="columns"><div class="column is-3"><i class="mdi mdi-harddisk"></i> ' +bytes_to_Size(torrents[i]['length'])+ '</div>'
@@ -212,19 +226,29 @@ function load_torrents(a=true){
   r.send();
 }
 function files(hash){
-  for(let i=0; i<torrents.length; i++){
-    if(torrents[i]['info_hash']==hash){
-      let e=document.getElementById('files');
-      e.classList.add('is-active');
+  const r = new XMLHttpRequest();
+  r.onreadystatechange = function() {
+    if (r.readyState == 4 && r.status === 200) {
+      let files = JSON.parse(r.responseText);
+      let modal=document.getElementById('files');
+      modal.classList.add('is-active');
       let table=document.getElementById('paths');
-      for(let j=0; j<torrents[i]['files'].length; j++){
+      table.innerText="";
+      files.forEach((f) => {
         tr=document.createElement('tr');
-        tr.innerHTML='<tr><td>'+torrents[i]['files'][j]['path'].join('/')+'</td><td  class="has-text-right">'+bytes_to_Size(torrents[i]['files'][j]['length'])+'</td></tr>';
+        td=document.createElement('td');
+        td.innerText=f.path;
+        tr.append(td);
+        td=document.createElement('td');
+        td.innerText=bytes_to_Size(f.size);
+        td.setAttribute("class", "has-text-right");
+        tr.append(td);
         table.append(tr);
-      }
-      break;
+      });
     }
   }
+  r.open('GET', '/torrents/'+hash+'/files');
+  r.send();
 }
 </script>
 <script src="js/bulma-toast.min.js" async></script>
