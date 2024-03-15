@@ -5,7 +5,9 @@ use log::info;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+use crate::json_output;
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct WebServerConfig {
     /// Server `<IP or hostaname>:<port>`. Default is `127.0.0.1:8070`
     pub server_addr: String,
@@ -13,6 +15,8 @@ pub struct WebServerConfig {
     pub web_root: String,
     /// Disable the web server
     pub disabled: bool,
+    /// JSON output file. Not really related to the web server but less code/easier to implement.
+    pub output_file: Option<String>,
 }
 
 impl Default for WebServerConfig {
@@ -21,6 +25,7 @@ impl Default for WebServerConfig {
             server_addr: "127.0.0.1:8070".to_owned(),
             web_root: "/".to_owned(),
             disabled: false,
+            output_file: None,
         }
     }
 }
@@ -30,13 +35,17 @@ impl WebServerConfig {
         let mut config: WebServerConfig = WebServerConfig::default();
         for (key, value) in std::env::vars() {
             if key == "SERVER_ADDR" {
-                config.server_addr = value.clone();
+                config.server_addr = value.to_owned();
             }
             if key == "WEB_ROOT" {
-                config.web_root = value.clone();
+                config.web_root = value.to_owned();
+            }
+            if key == "OUTPUT" && !value.is_empty() {
+                json_output::writable(&value);
+                config.output_file = Some(value.to_owned());
             }
             if key == "NO_WEBUI" {
-                let v = value.clone().to_lowercase();
+                let v = value.to_owned().to_lowercase();
                 if v == "true" || v == "1" {
                     config.disabled = true;
                 }
@@ -151,4 +160,60 @@ pub fn init_client(config: &AnnouncerConfig) -> Option<u16> {
     let mut guard = crate::CLIENT.write().unwrap();
     *guard = Some(client);
     key_interval
+}
+
+#[cfg(test)]
+mod tests {
+    use std::*;
+
+    use crate::config::WebServerConfig;
+
+    #[test]
+    fn test_ws_config() {
+        // test default
+        let mut config = WebServerConfig::default();
+        assert_eq!(
+            config,
+            WebServerConfig {
+                server_addr: "127.0.0.1:8070".to_owned(),
+                web_root: "/".to_owned(),
+                disabled: false,
+                output_file: None
+            }
+        );
+
+        // case 2
+        env::set_var("SERVER_ADDR", "127.0.0.2:8070");
+        env::set_var("WEB_ROOT", "ratioup/");
+        env::set_var("NO_WEBUI", "true");
+        env::set_var("OUTPUT", ""); // no value
+        config = WebServerConfig::load();
+        assert_eq!(
+            config,
+            WebServerConfig {
+                server_addr: "127.0.0.2:8070".to_owned(),
+                web_root: "ratioup/".to_owned(),
+                disabled: true,
+                output_file: None
+            }
+        );
+
+        // case 3
+        env::set_var("OUTPUT", "/tmp/ratioup.json");
+        config = WebServerConfig::load();
+        assert_eq!(
+            config,
+            WebServerConfig {
+                server_addr: "127.0.0.2:8070".to_owned(),
+                web_root: "ratioup/".to_owned(),
+                disabled: true,
+                output_file: Some("/tmp/ratioup.json".to_string())
+            }
+        );
+    }
+
+    #[test]
+    fn test_announcer_config() {
+        todo!();
+    }
 }

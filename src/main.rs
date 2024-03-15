@@ -19,9 +19,11 @@ use crate::webui::server::run as run_webui;
 mod announcer;
 mod config;
 mod directory;
-mod torrent;
+pub mod json_output;
+pub mod torrent;
 mod webui;
 
+static STARTED: OnceLock<chrono::DateTime<chrono::Utc>> = OnceLock::new();
 static CONFIG: OnceLock<AnnouncerConfig> = OnceLock::new();
 static WS_CONFIG: OnceLock<WebServerConfig> = OnceLock::new();
 static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
@@ -51,6 +53,7 @@ async fn main() {
         _ => log::Level::Info,
     })
     .unwrap();
+    STARTED.set(chrono::offset::Utc::now()).unwrap();
 
     // schedule client refresh key if applicable
     if let Some(refresh_every) = config::init_client(&config) {
@@ -110,6 +113,7 @@ fn add_torrent(path: String) -> u64 {
             Err(e) => error!("Cannot parse torrent: \t{} {:?}", path, e),
         }
     }
+    json_output::write();
     interval
 }
 

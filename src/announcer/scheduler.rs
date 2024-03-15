@@ -14,6 +14,7 @@ pub fn run(wait_time: u64) {
             }
         }
         debug!("Next announce in {}s", next_interval);
+        crate::json_output::write();
         std::thread::sleep(std::time::Duration::from_secs(next_interval));
     }
 }

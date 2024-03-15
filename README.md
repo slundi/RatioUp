@@ -104,6 +104,9 @@ MAX_DOWNLOAD_RATE =
 
 # DIRECTORY WHERE TORRENTS ARE SAVED
 TORRENT_DIR = "./torrents"
+
+# Read only output file that contains the torrent list and few more information in order to be used for an external program
+OUTPUT = "/var/www/ratioup.json"
 ```
 
 Download and upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes).
@@ -150,5 +153,5 @@ For now, I'm not planning add a security layer because I'll use it on my home la
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
 - [ ] UDP announce URL support
 - [ ] Improve health check by probing the announcer and the key refresh when applicable
-- [ ] Allow to generate a static JSON file with runtime statistics (global and per torrent download & upload, some torrent information), ie: `OUTPUT=/var/www/ratioup.json`
+- [x] Allow to generate a static JSON file with runtime statistics (global and per torrent download & upload, some torrent information), ie: `OUTPUT=/var/www/ratioup.json`
 - [ ] Improve UI (folders' modal, reduce CSS zo only used elements?, JS use `e.createElement()` instead of `e.innerHTML`);
