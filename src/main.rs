@@ -4,7 +4,6 @@
 extern crate serde_derive;
 extern crate rand;
 
-use config::WebServerConfig;
 use dotenv::dotenv;
 use fake_torrent_client::Client;
 use log::{self, error, info};
@@ -14,18 +13,15 @@ use tokio::time::Duration;
 use crate::announcer::scheduler::run as run_announcer;
 use crate::config::AnnouncerConfig;
 use crate::torrent::CleansedTorrent;
-use crate::webui::server::run as run_webui;
 
 mod announcer;
 mod config;
 mod directory;
 pub mod json_output;
 pub mod torrent;
-mod webui;
 
 static STARTED: OnceLock<chrono::DateTime<chrono::Utc>> = OnceLock::new();
 static CONFIG: OnceLock<AnnouncerConfig> = OnceLock::new();
-static WS_CONFIG: OnceLock<WebServerConfig> = OnceLock::new();
 static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
 static TORRENTS: RwLock<Vec<Mutex<CleansedTorrent>>> = RwLock::new(Vec::new()); // TODO: replace with mutex
 
@@ -38,10 +34,9 @@ fn run_key_renewer(refresh_every: u16) {
     }
 }
 
-#[actix::main]
+#[tokio::main]
 async fn main() {
     dotenv().ok();
-    WS_CONFIG.get_or_init(WebServerConfig::load);
     let config = AnnouncerConfig::load();
     CONFIG.get_or_init(|| config.clone());
     //configure logger
@@ -70,15 +65,6 @@ async fn main() {
         tokio::signal::ctrl_c().await.unwrap();
         announcer::tracker::announce_stopped();
     });
-    // Spawn probes (background thread)
-    if WS_CONFIG.get().unwrap().disabled {
-        run_announcer(wait_time);
-    } else {
-        let _ = std::thread::Builder::new()
-            .name("ratioup-scheduler".to_owned())
-            .spawn(move || run_announcer(wait_time));
-        run_webui().await // start web server
-    }
 }
 
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed.

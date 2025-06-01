@@ -13,6 +13,13 @@ RatioUp is not designed to help or encourage you downloading illegal materials !
 
 I am not responsible if you get banned using this tool. However, you can reduce risk by using popular torrents (with many seeders and leechers).
 
+## Changes (2025)
+
+Because  I don't have much time to work on this project, I've decided to minimize features of this project.
+
+It will simply load torrents from a given path before "seeding". I'll generate a static webpage/JSON to display stats
+of the torrent files (the previous web UI was overkill).
+
 ## Installation
 
 ```shell
@@ -37,8 +44,6 @@ echo "@reboot cd $(pwd) && $(pwd)/RatioUp" | crontab -
 rustup self uninstall
 ```
 
-You can perform heath checks from: `http://<ip>:<port>/health`
-
 ## Configuration
 
 Everything is contained in a `.env` file.
@@ -46,12 +51,6 @@ Everything is contained in a `.env` file.
 ```ini
 # Log level (available options are: INFO, WARN, ERROR, DEBUG, TRACE). Default is `INFO`.
 LOG_LEVEL = INFO
-
-# Web serveur configuration
-# HTTP web port
-HTTP_PORT = 8070
-#Custom web root
-#WEB_ROOT = "/ratioup/"
 
 # Client configuration
 CLIENT = Transmission_3_00
@@ -74,46 +73,17 @@ OUTPUT = "/var/www/ratioup.json"
 Download and upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes).
 To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 
-## Security
-
-For now, I'm not planning add a security layer because I'll use it on my home lan network. If you want to secure it, you can use a reverse proxy with **nginx** (and any other web server you ar familiar with) and add a SSL layer and a basic authentication. You can also contribute by adding a basic auth.
-
-### Nginx reverse proxy
-
-1. Edit `/etc/nginx/sites-available/ratioup` and set your configuration:
-
-```nginx
-  location / {  #if you change "/" with another path, you must set the web root on the CLI
-    #if you want a basic auth, remove the # of the following 2 lines
-    #auth_basic “Restricted Area”;
-    #auth_basic_user_file /path/to/the/password/file/.my_password_file;
-
-    proxy_pass http://127.0.0.1:8070;
-  }
-```
-
-2. Enable the new site: `sudo ln -s /etc/nginx/sites-available/ratioup /etc/nginx/sites-enabled/ratioup`
-3. Check nginx configuration: `sudo nginx -t`
-4. Reaload nginx with the new configuration: `sudo nginx -s reload` or `sudo systemctl reload nginx` or `sudo service nginx reload` (Debian/Ubuntu) or `sudo /etc/init.d/nginx reload` (CentOS,Fedora/...)
-
-### Basic auth
-
-1. `sudo apt install apache2-utils` or `sudo apt install httpd-tools`
-2. Create a user with and **new file** with `sudo htpasswd -c /path/to/the/password/file/.my_password_file user1`, if the file already exists you just need to remove the `-c`: `sudo htpasswd /path/to/the/password/file/.my_password_file user1`
-3. Check nginx configuration: `sudo nginx -t`
-4. Reaload nginx with the new configuration: `sudo nginx -s reload` or `sudo systemctl reload nginx` or `sudo service nginx reload` (Debian/Ubuntu) or `sudo /etc/init.d/nginx reload` (CentOS,Fedora/...)
-
 ## Roadmap
 
+- [ ] Log using `tracing`
+- [ ] use of XDG for the config file and logs
 - [x] Change delay if different after announcing
 - [x] Torrent clients in a separated library
 - [x] Parse response instead of using REGEX
 - [ ] Display session upload (global & per torrent)
 - [x] Torrents with multiple trackers?
 - [x] Drop torrent files from the web UI
-- [ ] Retracker torrents
+- [x] BREAKING CHANGE: remove web UI
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
 - [ ] UDP announce URL support
-- [ ] Improve health check by probing the announcer and the key refresh when applicable
 - [x] Allow to generate a static JSON file with runtime statistics (global and per torrent download & upload, some torrent information), ie: `OUTPUT=/var/www/ratioup.json`
-- [ ] Improve UI (folders' modal, reduce CSS zo only used elements?, JS use `e.createElement()` instead of `e.innerHTML`);

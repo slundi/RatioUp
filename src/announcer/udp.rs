@@ -19,7 +19,7 @@ pub async fn get_udp_socket() -> UdpSocket {
     // give one of the ports incrementing from 6881
     let config = CONFIG.get().unwrap();
     //Bind to a random port
-    let mut port = rand::thread_rng().gen_range(1025..65000);
+    let mut port = rand::rng().random_range(1025..65000);
     // TODO: Get a list of all the ports used by the entire application as well,
     // i.e store a global use  of entire sockets somewhere in a global state
     //
@@ -49,7 +49,7 @@ async fn announce_udp(
     debug!("Announce UDP URL  {:?}", url);
     let mut addrs = url.socket_addrs(|| None).unwrap();
     // Shuffle the list
-    addrs.shuffle(&mut thread_rng());
+    addrs.shuffle(&mut rng());
 
     //TODO: Make an error for not finding an actual IPV4 address
     let addr = *addrs.iter().find(|a| a.is_ipv4()).unwrap();

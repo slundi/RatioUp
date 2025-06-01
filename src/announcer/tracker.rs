@@ -231,9 +231,7 @@ fn announce_http(
                     }
                 }
             }
-            if code != actix_web::http::StatusCode::OK {
-                info!("\tResponse: code={}\tdata={:?}", code, bytes);
-            }
+            // TODO: check response code
         }
         Err(err) => error!("Cannot announce: {:?}", err),
     }

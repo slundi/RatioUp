@@ -2,7 +2,7 @@ use std::{fs, io::Write, path::Path};
 
 use log::error;
 
-use crate::{torrent::CleansedTorrent, STARTED, TORRENTS, WS_CONFIG};
+use crate::{torrent::CleansedTorrent, STARTED, TORRENTS};
 
 #[derive(Serialize, PartialEq, Debug)]
 struct Output {
@@ -35,27 +35,26 @@ pub fn writable(path: &str) -> bool {
     !md.permissions().readonly()
 }
 
-/// Write the output to the specified file (WebServerConfig::output_file).
+/// Write a session file with torrent and its stats
 pub fn write() {
-    let config = WS_CONFIG.get().unwrap();
-    if let Some(path) = config.output_file.clone() {
-        let fh = fs::File::create(&path);
-        if let Ok(mut file) = fh {
-            // fill data in struct
-            let started = *STARTED.get().unwrap();
-            let torrents = TORRENTS.read().expect("Cannot get torrent list");
-            let mut data = Output {
-                started,
-                torrents: Vec::with_capacity(torrents.len()),
-            };
-            for m in torrents.iter() {
-                data.torrents.push(m.lock().unwrap().clone());
-            }
-            // write content
-            let content = serde_json::to_string(&data).unwrap();
-            file.write_all(content.as_bytes())
-                .unwrap_or_else(|e| error!("Cannot write to file {}\t{:?}", path.to_string(), e));
+    // TODO: output path
+    let path = "/tmp/ratioup_stats.json";
+    let fh = fs::File::create(path);
+    if let Ok(mut file) = fh {
+        // fill data in struct
+        let started = *STARTED.get().unwrap();
+        let torrents = TORRENTS.read().expect("Cannot get torrent list");
+        let mut data = Output {
+            started,
+            torrents: Vec::with_capacity(torrents.len()),
+        };
+        for m in torrents.iter() {
+            data.torrents.push(m.lock().unwrap().clone());
         }
+        // write content
+        let content = serde_json::to_string(&data).unwrap();
+        file.write_all(content.as_bytes())
+            .unwrap_or_else(|e| error!("Cannot write to file {}\t{:?}", path.to_string(), e));
     }
 }
 

@@ -7,54 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::json_output;
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct WebServerConfig {
-    /// Server `<IP or hostaname>:<port>`. Default is `127.0.0.1:8070`
-    pub server_addr: String,
-    /// Set a custom web root (ex: / or /ratio-up/)
-    pub web_root: String,
-    /// Disable the web server
-    pub disabled: bool,
-    /// JSON output file. Not really related to the web server but less code/easier to implement.
-    pub output_file: Option<String>,
-}
-
-impl Default for WebServerConfig {
-    fn default() -> Self {
-        Self {
-            server_addr: "127.0.0.1:8070".to_owned(),
-            web_root: "/".to_owned(),
-            disabled: false,
-            output_file: None,
-        }
-    }
-}
-
-impl WebServerConfig {
-    pub fn load() -> WebServerConfig {
-        let mut config: WebServerConfig = WebServerConfig::default();
-        for (key, value) in std::env::vars() {
-            if key == "SERVER_ADDR" {
-                config.server_addr = value.to_owned();
-            }
-            if key == "WEB_ROOT" {
-                config.web_root = value.to_owned();
-            }
-            if key == "OUTPUT" && !value.is_empty() {
-                json_output::writable(&value);
-                config.output_file = Some(value.to_owned());
-            }
-            if key == "NO_WEBUI" {
-                let v = value.to_owned().to_lowercase();
-                if v == "true" || v == "1" {
-                    config.disabled = true;
-                }
-            }
-        }
-        config
-    }
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AnnouncerConfig {
     /// Log level (available options are: INFO, WARN, ERROR, DEBUG, TRACE). Default is `INFO`.
@@ -81,7 +33,7 @@ impl Default for AnnouncerConfig {
             log_level: "INFO".to_owned(),
             // The port number that the client is listening on. Ports reserved for BitTorrent are typically 6881-6889. Clients may choose to give up if it cannot establish
             // a port within this range. Here ports are random between 49152 and 65534
-            port: rand::thread_rng().gen_range(49152..65534),
+            port: rand::rng().random_range(49152..65534),
             min_upload_rate: 8192,    //8*1024
             max_upload_rate: 2097152, //2048*1024
             min_download_rate: 8192,
@@ -165,52 +117,6 @@ pub fn init_client(config: &AnnouncerConfig) -> Option<u16> {
 #[cfg(test)]
 mod tests {
     use std::*;
-
-    use crate::config::WebServerConfig;
-
-    #[test]
-    fn test_ws_config() {
-        // test default
-        let mut config = WebServerConfig::default();
-        assert_eq!(
-            config,
-            WebServerConfig {
-                server_addr: "127.0.0.1:8070".to_owned(),
-                web_root: "/".to_owned(),
-                disabled: false,
-                output_file: None
-            }
-        );
-
-        // case 2
-        env::set_var("SERVER_ADDR", "127.0.0.2:8070");
-        env::set_var("WEB_ROOT", "ratioup/");
-        env::set_var("NO_WEBUI", "true");
-        env::set_var("OUTPUT", ""); // no value
-        config = WebServerConfig::load();
-        assert_eq!(
-            config,
-            WebServerConfig {
-                server_addr: "127.0.0.2:8070".to_owned(),
-                web_root: "ratioup/".to_owned(),
-                disabled: true,
-                output_file: None
-            }
-        );
-
-        // case 3
-        env::set_var("OUTPUT", "/tmp/ratioup.json");
-        config = WebServerConfig::load();
-        assert_eq!(
-            config,
-            WebServerConfig {
-                server_addr: "127.0.0.2:8070".to_owned(),
-                web_root: "ratioup/".to_owned(),
-                disabled: true,
-                output_file: Some("/tmp/ratioup.json".to_string())
-            }
-        );
-    }
 
     #[test]
     fn test_announcer_config() {
