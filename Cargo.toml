@@ -26,9 +26,11 @@ reqwest = { version = "0.11", features = ["blocking", "rustls-tls", "gzip", "bro
 percent-encoding = "2"
 fake-torrent-client = "0.9.6"
 
-dotenv = "0.15"
-log = "0.4.27"
-simple_logger = "5.0.0"
+xdg = "3.0"
+
+# logging
+tracing = "0.1.41"
+tracing-subscriber = "0.3"
 
 #bittorrent parsing
 serde_bytes = "0.11.17"

@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use byte_unit::Byte;
-use log::info;
+use tracing::info;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +42,7 @@ impl Default for AnnouncerConfig {
             // web_root: String::from("/"),
             //client: fake_torrent_client::Client::from(fake_torrent_client::clients::ClientVersion::Qbittorrent_4_4_2),
             key_refresh_every: 0,
-            client: String::from("INVALID"),
+            client: String::from("Transmission_3_00"),
         }
     }
 }
@@ -50,31 +50,39 @@ impl AnnouncerConfig {
     /// Load configuration in environment. Also load client.
     pub fn load() -> AnnouncerConfig {
         let mut config: AnnouncerConfig = AnnouncerConfig::default();
-        for (key, value) in std::env::vars() {
-            if key == "LOG_LEVEL" {
-                config.log_level = value.clone();
-            }
-            if key == "MIN_UPLOAD_RATE" {
-                config.min_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");
-            }
-            if key == "MAX_UPLOAD_RATE" {
-                config.max_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");
-            }
-            if key == "MIN_DOWNLOAD_RATE" {
-                config.min_download_rate =
-                    value.clone().parse::<u32>().expect("Wrong download rate");
-            }
-            if key == "MAX_DOWNLOAD_RATE" {
-                config.max_download_rate =
-                    value.clone().parse::<u32>().expect("Wrong download rate");
-            }
-            if key == "CLIENT" {
-                config.client = value.clone();
-            }
-            if key == "TORRENT_DIR" {
-                config.torrent_dir = value.clone();
-            }
-        }
+        // match xdg::BaseDirectories::new() {
+        //     Ok(xdg) => {
+        //         // TODO:let _home = xdg.get_config_home();
+        //     }
+        //     Err(e) => {
+        //         eprintln!("Cannot get XDG");
+        //     }
+        // }
+        // for (key, value) in std::env::vars() {
+        //     if key == "LOG_LEVEL" {
+        //         config.log_level = value.clone();
+        //     }
+        //     if key == "MIN_UPLOAD_RATE" {
+        //         config.min_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");
+        //     }
+        //     if key == "MAX_UPLOAD_RATE" {
+        //         config.max_upload_rate = value.clone().parse::<u32>().expect("Wrong upload rate");
+        //     }
+        //     if key == "MIN_DOWNLOAD_RATE" {
+        //         config.min_download_rate =
+        //             value.clone().parse::<u32>().expect("Wrong download rate");
+        //     }
+        //     if key == "MAX_DOWNLOAD_RATE" {
+        //         config.max_download_rate =
+        //             value.clone().parse::<u32>().expect("Wrong download rate");
+        //     }
+        //     if key == "CLIENT" {
+        //         config.client = value.clone();
+        //     }
+        //     if key == "TORRENT_DIR" {
+        //         config.torrent_dir = value.clone();
+        //     }
+        // }
         // let client = &mut *CLIENT.write().expect("Cannot get client");
         // client.build(clients::ClientVersion::from_str(&config.client).expect("Wrong client"));
         info!("Torrent client: {}", config.client);

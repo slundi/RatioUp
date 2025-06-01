@@ -4,11 +4,10 @@
 extern crate serde_derive;
 extern crate rand;
 
-use dotenv::dotenv;
 use fake_torrent_client::Client;
-use log::{self, error, info};
 use std::sync::{Mutex, OnceLock, RwLock};
 use tokio::time::Duration;
+use tracing::{self, error, info};
 
 use crate::announcer::scheduler::run as run_announcer;
 use crate::config::AnnouncerConfig;
@@ -36,18 +35,20 @@ fn run_key_renewer(refresh_every: u16) {
 
 #[tokio::main]
 async fn main() {
-    dotenv().ok();
     let config = AnnouncerConfig::load();
     CONFIG.get_or_init(|| config.clone());
     //configure logger
-    simple_logger::init_with_level(match &config.log_level as &str {
-        "WARN" => log::Level::Warn,
-        "ERROR" => log::Level::Error,
-        "DEBUG" => log::Level::Debug,
-        "TRACE" => log::Level::Trace,
-        _ => log::Level::Info,
-    })
-    .unwrap();
+    tracing_subscriber::fmt()
+        .with_max_level(match &config.log_level as &str {
+            "WARN" => tracing::Level::WARN,
+            "ERROR" => tracing::Level::ERROR,
+            "DEBUG" => tracing::Level::DEBUG,
+            "TRACE" => tracing::Level::TRACE,
+            _ => tracing::Level::INFO,
+        })
+        .with_level(true)
+        .with_target(false)
+        .init();
     STARTED.set(chrono::offset::Utc::now()).unwrap();
 
     // schedule client refresh key if applicable

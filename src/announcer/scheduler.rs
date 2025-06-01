@@ -1,4 +1,4 @@
-use log::{debug, info};
+use tracing::{debug, info};
 
 use crate::TORRENTS;
 

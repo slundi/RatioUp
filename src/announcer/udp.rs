@@ -1,7 +1,7 @@
 use bytes::{BufMut, BytesMut};
 use fake_torrent_client::Client;
-use log::debug;
-use log::warn;
+use tracing::debug;
+use tracing::warn;
 use rand::prelude::*;
 use rand::Rng;
 use std::{convert::TryInto, net::SocketAddr, time::Duration};

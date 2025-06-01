@@ -6,7 +6,7 @@ extern crate serde_bytes;
 
 use hex::ToHex;
 use hmac_sha1_compact::Hash;
-use log::debug;
+use tracing::debug;
 use rand::Rng;
 use serde::Serialize;
 use serde_bencode::ser;

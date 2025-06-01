@@ -4,7 +4,7 @@
 use std::io::Read;
 
 use fake_torrent_client::Client;
-use log::{debug, error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::torrent::CleansedTorrent;
 use crate::{CLIENT, TORRENTS};

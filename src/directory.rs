@@ -1,4 +1,4 @@
-use log::{error, info};
+use tracing::{error, info};
 
 pub fn prepare_torrent_folder(directory: &String) {
     if !std::path::Path::new(directory).is_dir() {

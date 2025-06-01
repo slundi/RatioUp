@@ -1,6 +1,6 @@
 use std::{fs, io::Write, path::Path};
 
-use log::error;
+use tracing::error;
 
 use crate::{torrent::CleansedTorrent, STARTED, TORRENTS};
 
