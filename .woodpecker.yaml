@@ -2,9 +2,9 @@ steps:
   test:
     image: rust:slim
     environment:
-      - CARGO_TERM_COLOR=always
-      - RUSTFLAGS="-Cinstrument-coverage"
-      - LLVM_PROFILE_FILE="RatioUp-%p-%m.profraw"
+      CARGO_TERM_COLOR: always
+      RUSTFLAGS: "-Cinstrument-coverage"
+      LLVM_PROFILE_FILE: "RatioUp-%p-%m.profraw"
     commands:
       - rustup default stable
       - rustup component add rustfmt

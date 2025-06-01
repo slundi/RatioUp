@@ -1,0 +1,50 @@
+name: Rust CI
+
+on:
+  push:
+    branches:
+      - main # Or your default branch like 'master', 'develop'
+  pull_request:
+    branches:
+      - main # Or your default branch
+
+jobs:
+  test:
+    runs-on: ubuntu-latest # Or 'macos-latest', 'windows-latest' if you need other OS
+    container:
+      image: rust:slim # Using the slim Rust image as specified in Woodpecker
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4 # Action to checkout your repository code
+
+    - name: Set environment variables
+      run: |
+        echo "CARGO_TERM_COLOR=always" >> $GITHUB_ENV
+        echo "RUSTFLAGS=-Cinstrument-coverage" >> $GITHUB_ENV
+        echo "LLVM_PROFILE_FILE=RatioUp-%p-%m.profraw" >> $GITHUB_ENV
+      # Note: For RUSTFLAGS and LLVM_PROFILE_FILE, if you are planning to
+      # collect and process coverage reports, you'll need additional steps
+      # (e.g., using `grcov` or `llvm-profdata`/`llvm-cov`).
+      # This setup just enables the instrumentation.
+
+    - name: Install stable Rust
+      run: rustup default stable # The container should already have stable, but good for explicit safety
+
+    - name: Add rustfmt component
+      run: rustup component add rustfmt
+
+    - name: Run rustfmt check
+      run: cargo fmt -- --check
+
+    - name: Add clippy component
+      run: rustup component add clippy
+
+    - name: Run clippy
+      run: cargo clippy -- -D warnings # Add -D warnings to treat lints as errors
+
+    - name: Add llvm-tools-preview component
+      run: rustup component add llvm-tools-preview
+
+    - name: Run tests
+      run: cargo test
