@@ -27,6 +27,7 @@ percent-encoding = "2"
 fake-torrent-client = "0.9.6"
 
 xdg = "3.0"
+toml = "0.8"
 
 # logging
 tracing = "0.1.41"

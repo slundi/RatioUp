@@ -108,7 +108,16 @@ pub fn announce(torrent: &mut CleansedTorrent, event: Option<Event>) -> u64 {
                 interval = announce_http(&url, torrent, client, event);
             }
         }
-        info!("Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}", torrent.interval, event, torrent.downloaded, torrent.uploaded, torrent.seeders, torrent.leechers, torrent.name);
+        info!(
+            "Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}",
+            torrent.interval,
+            event,
+            torrent.downloaded,
+            torrent.uploaded,
+            torrent.seeders,
+            torrent.leechers,
+            torrent.name
+        );
     }
     interval
 }

@@ -1,15 +1,15 @@
 use bytes::{BufMut, BytesMut};
 use fake_torrent_client::Client;
-use tracing::debug;
-use tracing::warn;
-use rand::prelude::*;
 use rand::Rng;
+use rand::prelude::*;
 use std::{convert::TryInto, net::SocketAddr, time::Duration};
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
+use tracing::debug;
+use tracing::warn;
 
-use crate::torrent::BasicTorrent;
 use crate::CONFIG;
+use crate::torrent::BasicTorrent;
 
 use super::tracker::Event;
 

@@ -2,7 +2,7 @@ use std::{fs, io::Write, path::Path};
 
 use tracing::error;
 
-use crate::{torrent::CleansedTorrent, STARTED, TORRENTS};
+use crate::{STARTED, TORRENTS, torrent::CleansedTorrent};
 
 #[derive(Serialize, PartialEq, Debug)]
 struct Output {

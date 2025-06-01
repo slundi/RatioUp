@@ -6,11 +6,11 @@ extern crate serde_bytes;
 
 use hex::ToHex;
 use hmac_sha1_compact::Hash;
-use tracing::debug;
 use rand::Rng;
 use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
+use tracing::debug;
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone)]
 pub struct Peer {

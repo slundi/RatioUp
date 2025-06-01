@@ -21,8 +21,11 @@ pub fn load_torrents(directory: &String) -> u64 {
             .into_os_string()
             .into_string()
             .expect("Cannot get file name");
-        next_announce_time = u64::min(next_announce_time, crate::add_torrent(f));
-        count += 1;
+        if f.to_lowercase().ends_with(".torrent") {
+            info!("Adding torrent {f}");
+            next_announce_time = u64::min(next_announce_time, crate::add_torrent(f));
+            count += 1;
+        }
     }
     info!("{} torrent(s) loaded", count);
     next_announce_time

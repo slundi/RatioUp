@@ -4,13 +4,15 @@
 extern crate serde_derive;
 extern crate rand;
 
+use byte_unit::Byte;
 use fake_torrent_client::Client;
+use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock, RwLock};
 use tokio::time::Duration;
 use tracing::{self, error, info};
 
 use crate::announcer::scheduler::run as run_announcer;
-use crate::config::AnnouncerConfig;
+use crate::config::Config;
 use crate::torrent::CleansedTorrent;
 
 mod announcer;
@@ -20,7 +22,7 @@ pub mod json_output;
 pub mod torrent;
 
 static STARTED: OnceLock<chrono::DateTime<chrono::Utc>> = OnceLock::new();
-static CONFIG: OnceLock<AnnouncerConfig> = OnceLock::new();
+static CONFIG: OnceLock<Config> = OnceLock::new();
 static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
 static TORRENTS: RwLock<Vec<Mutex<CleansedTorrent>>> = RwLock::new(Vec::new()); // TODO: replace with mutex
 
@@ -35,20 +37,68 @@ fn run_key_renewer(refresh_every: u16) {
 
 #[tokio::main]
 async fn main() {
-    let config = AnnouncerConfig::load();
-    CONFIG.get_or_init(|| config.clone());
     //configure logger
     tracing_subscriber::fmt()
-        .with_max_level(match &config.log_level as &str {
-            "WARN" => tracing::Level::WARN,
-            "ERROR" => tracing::Level::ERROR,
-            "DEBUG" => tracing::Level::DEBUG,
-            "TRACE" => tracing::Level::TRACE,
-            _ => tracing::Level::INFO,
-        })
+        .with_max_level(tracing::Level::INFO)
         .with_level(true)
         .with_target(false)
         .init();
+
+    // parse CLI args
+    let mut config_path: Option<PathBuf> = None;
+    let mut args = std::env::args().skip(1); // Skip the program name
+
+    // Manually parse arguments
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-c" | "--config" => {
+                if let Some(path_str) = args.next() {
+                    config_path = Some(PathBuf::from(path_str));
+                } else {
+                    tracing::error!("Missing value for -c/--config");
+                    return;
+                }
+            }
+            // Handle other arguments or positional arguments here
+            other_arg => {
+                tracing::error!("Warning: Unknown argument: {}, Ignoring", other_arg);
+            }
+        }
+    }
+
+    if config_path.is_none() {
+        let xdg = xdg::BaseDirectories::with_prefix("RatioUp");
+        match xdg.place_config_file("config.toml") {
+            Ok(path) => config_path = Some(path),
+            Err(e) => tracing::error!("Cannot create config file: {e}"),
+        }
+    }
+
+    let config = if let Some(path) = config_path {
+        tracing::info!("Loading configuration from {}", path.display());
+        Config::load_from_file(&path).await
+    } else {
+        tracing::info!("Loading default configuration");
+        Config::default()
+    };
+
+    info!(
+        "Bandwidth: \u{2191} {} - {} \t \u{2193} {} - {}",
+        Byte::from_u64(u64::from(config.min_upload_rate))
+            .get_appropriate_unit(byte_unit::UnitType::Decimal)
+            .to_string(),
+        Byte::from_u64(u64::from(config.max_upload_rate))
+            .get_appropriate_unit(byte_unit::UnitType::Decimal)
+            .to_string(),
+        Byte::from_u64(u64::from(config.min_download_rate))
+            .get_appropriate_unit(byte_unit::UnitType::Decimal)
+            .to_string(),
+        Byte::from_u64(u64::from(config.max_download_rate))
+            .get_appropriate_unit(byte_unit::UnitType::Decimal)
+            .to_string(),
+    );
+
+    CONFIG.get_or_init(|| config.clone());
     STARTED.set(chrono::offset::Utc::now()).unwrap();
 
     // schedule client refresh key if applicable

@@ -76,7 +76,7 @@ To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
 ## Roadmap
 
 - [x] Log using `tracing`
-- [ ] use of XDG for the config file and logs
+- [x] BREAKING CHANGE: use of XDG for the config file. It will no longer be loaded from a `.env`
 - [x] Change delay if different after announcing
 - [x] Torrent clients in a separated library
 - [x] Parse response instead of using REGEX
