@@ -125,12 +125,15 @@ async fn main() {
             let pid_file = write_pid_file().await;
 
             tokio::spawn(async move {
-                // graceful exit when Ctrl + C
+                // graceful exit when Ctrl + C / SIGINT
                 tokio::signal::ctrl_c().await.unwrap();
+                info!("Exiting...");
                 announcer::tracker::announce_stopped();
+                remove_pid_file(pid_file).await;
+                std::process::exit(0);
             });
 
-            remove_pid_file(pid_file).await;
+            run_announcer(wait_time).await;
         }
         None => info!("No torrent, exiting"),
     }

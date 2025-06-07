@@ -154,11 +154,7 @@ pub struct CleansedTorrent {
     pub urls: Vec<String>,
     pub length: usize,
     pub private: bool,
-    /// If the torrent contains many files, not just one
-    pub folder: bool,
     pub info_hash: String,
-    /// Path to the torrent file
-    pub path: String,
     /// If we have to virtually download the torrent first, it is the downloaded size in bytes
     pub downloaded: usize,
     /// Total of fake uploaded data since the start of RatioUp
@@ -274,18 +270,13 @@ impl CleansedTorrent {
     }
 
     /// Load essential data from a parsed torrent using the full parsed torrent file. It reduces the RAM use to have smaller data
-    pub fn from_torrent(torrent: Torrent, path: String) -> CleansedTorrent {
+    pub fn from_torrent(torrent: Torrent) -> CleansedTorrent {
         let hash_bytes = torrent.info_hash().expect("Cannot get torrent info hash");
         let hash = hash_bytes.encode_hex::<String>();
         //let hash = hash_bytes.???;
         let private = torrent.info.private.is_some() && torrent.info.private == Some(1);
         let size = torrent.total_size();
-        let mut folder = false;
-        if let Some(files) = torrent.info.files.clone() {
-            folder = !files.is_empty();
-        }
         let mut t = CleansedTorrent {
-            path,
             name: torrent.info.name.clone(),
             info_hash_urlencoded: String::with_capacity(64),
             length: size,
@@ -293,7 +284,6 @@ impl CleansedTorrent {
             urls: Vec::new(),
             info_hash: hash,
             private,
-            folder,
             downloaded: size,
             uploaded: 0,
             seeders: 0,

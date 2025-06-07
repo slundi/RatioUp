@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::{error, info};
 
-use crate::json_output;
+// use crate::json_output;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]

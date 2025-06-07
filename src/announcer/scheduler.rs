@@ -1,8 +1,9 @@
 use tracing::{debug, info};
 
 use crate::TORRENTS;
+use tokio::time::Duration;
 
-pub fn run(wait_time: u64) {
+pub async fn run(wait_time: u64) {
     info!("Starting scheduler");
     let mut next_interval = wait_time;
     loop {
@@ -15,7 +16,7 @@ pub fn run(wait_time: u64) {
         }
         debug!("Next announce in {}s", next_interval);
         crate::json_output::write();
-        std::thread::sleep(std::time::Duration::from_secs(next_interval));
+        tokio::time::sleep(Duration::from_secs(u64::from(next_interval))).await;
     }
 }
 
