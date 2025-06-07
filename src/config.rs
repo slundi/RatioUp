@@ -17,6 +17,8 @@ pub struct Config {
     pub max_upload_rate: u32,   //in byte
     pub min_download_rate: u32, //in byte
     pub max_download_rate: u32, //in bytes
+    /// To set the number of peers we want
+    pub numwant: Option<u16>,
     // pub simultaneous_seed: u16, //useful ?
     pub client: String,
     /// Directory where torrents are saved. Default is in the working directory.
@@ -35,6 +37,7 @@ impl Default for Config {
             max_upload_rate: 2097152, //2048*1024
             min_download_rate: 8192,
             max_download_rate: 16777216, //16*1024*1024
+            numwant: None,
             torrent_dir: String::from("."),
             //client: fake_torrent_client::Client::from(fake_torrent_client::clients::ClientVersion::Qbittorrent_4_4_2),
             key_refresh_every: 0,
