@@ -9,7 +9,7 @@ use fake_torrent_client::Client;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock, RwLock};
 use tokio::time::Duration;
-use tracing::{self, error, info};
+use tracing::{self, error, info, warn};
 
 use crate::announcer::scheduler::run as run_announcer;
 use crate::config::Config;
@@ -111,11 +111,16 @@ async fn main() {
     directory::prepare_torrent_folder(&config.torrent_dir);
     match directory::load_torrents(&config.torrent_dir) {
         Some(wait_time) => {
+            // Create PID file
+            let pid_file = write_pid_file().await;
+
             tokio::spawn(async move {
                 // graceful exit when Ctrl + C
                 tokio::signal::ctrl_c().await.unwrap();
                 announcer::tracker::announce_stopped();
             });
+
+            remove_pid_file(pid_file).await;
         }
         None => info!("No torrent, exiting"),
     }
@@ -155,6 +160,34 @@ fn add_torrent(path: String) -> u64 {
     }
     json_output::write();
     interval
+}
+
+async fn write_pid_file() -> Option<PathBuf> {
+    match xdg::BaseDirectories::new()
+        .place_runtime_file("ratio_up.pid")
+    {
+        Ok(file) => {
+            match tokio::fs::write(file.clone(), std::process::id().to_string().as_bytes())
+                .await
+            {
+                Ok(_) => Some(file),
+                Err(e) => {
+                    warn!("Cannot create PID file: {e}");
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            warn!("Cannot create PID file: {e}");
+            None
+        }
+    }
+}
+
+async fn remove_pid_file(pid_file: Option<PathBuf>) {
+    if let Some(path) = pid_file {
+        let _ = tokio::fs::remove_file(path).await;
+    }
 }
 
 #[cfg(test)]

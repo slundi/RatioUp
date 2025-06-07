@@ -61,7 +61,7 @@ impl Config {
                 }
             }
             Err(e) => {
-                error!("Could not read config file: {}", path.display());
+                error!("Could not read config file: {} {e}", path.display());
                 info!("Using default configuration");
             }
         };
