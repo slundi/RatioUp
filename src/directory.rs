@@ -10,7 +10,10 @@ pub fn prepare_torrent_folder(directory: &String) {
     info!("Will load torrents from: {}", directory);
 }
 
-pub fn load_torrents(directory: &String) -> u64 {
+/// Load torrents from the provided directory.
+///
+/// Returns the next announce time or None if there is no torrent loaded
+pub fn load_torrents(directory: &String) -> Option<u64> {
     let paths = std::fs::read_dir(directory).expect("Cannot read torrent directory");
     let mut count = 0u16;
     let mut next_announce_time = 1800u64;
@@ -28,5 +31,9 @@ pub fn load_torrents(directory: &String) -> u64 {
         }
     }
     info!("{} torrent(s) loaded", count);
-    next_announce_time
+    if count == 0 {
+        None
+    } else {
+        Some(next_announce_time)
+    }
 }

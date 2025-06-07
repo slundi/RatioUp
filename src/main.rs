@@ -109,13 +109,16 @@ async fn main() {
     }
 
     directory::prepare_torrent_folder(&config.torrent_dir);
-    let wait_time = directory::load_torrents(&config.torrent_dir);
-
-    tokio::spawn(async move {
-        // graceful exit when Ctrl + C
-        tokio::signal::ctrl_c().await.unwrap();
-        announcer::tracker::announce_stopped();
-    });
+    match directory::load_torrents(&config.torrent_dir) {
+        Some(wait_time) => {
+            tokio::spawn(async move {
+                // graceful exit when Ctrl + C
+                tokio::signal::ctrl_c().await.unwrap();
+                announcer::tracker::announce_stopped();
+            });
+        }
+        None => info!("No torrent, exiting"),
+    }
 }
 
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed.
