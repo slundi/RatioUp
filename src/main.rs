@@ -26,13 +26,46 @@ static CONFIG: OnceLock<Config> = OnceLock::new();
 static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
 static TORRENTS: RwLock<Vec<Mutex<CleansedTorrent>>> = RwLock::new(Vec::new()); // TODO: replace with mutex
 
-fn run_key_renewer(refresh_every: u16) {
+async fn run_key_renewer(refresh_every: u16) {
     loop {
         if let Some(client) = &mut *CLIENT.write().expect("Cannot read client") {
             client.generate_key();
         }
-        std::thread::sleep(Duration::from_secs(u64::from(refresh_every)));
+        // std::thread::sleep(Duration::from_secs(u64::from(refresh_every)));
+        tokio::time::sleep(Duration::from_secs(u64::from(refresh_every))).await;
     }
+}
+
+/// Parse CLI args. Only a config file can be there.
+fn parse_cli_args() -> Option<PathBuf> {
+    let mut args = std::env::args().skip(1); // Skip the program name
+
+    // Manually parse arguments
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-c" | "--config" => {
+                if let Some(path_str) = args.next() {
+                    return Some(PathBuf::from(path_str));
+                } else {
+                    tracing::error!("Missing value for -c/--config");
+                }
+            }
+            // Handle other arguments or positional arguments here
+            other_arg => {
+                tracing::error!("Warning: Unknown argument: {}, Ignoring", other_arg);
+            }
+        }
+    }
+    None
+}
+
+fn get_config_from_xdg() -> Option<PathBuf> {
+    let xdg = xdg::BaseDirectories::with_prefix("RatioUp");
+    match xdg.place_config_file("config.toml") {
+        Ok(path) => return Some(path),
+        Err(e) => tracing::error!("Cannot create config file: {e}"),
+    }
+    None
 }
 
 #[tokio::main]
@@ -44,36 +77,13 @@ async fn main() {
         .with_target(false)
         .init();
 
-    // parse CLI args
-    let mut config_path: Option<PathBuf> = None;
-    let mut args = std::env::args().skip(1); // Skip the program name
-
-    // Manually parse arguments
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "-c" | "--config" => {
-                if let Some(path_str) = args.next() {
-                    config_path = Some(PathBuf::from(path_str));
-                } else {
-                    tracing::error!("Missing value for -c/--config");
-                    return;
-                }
-            }
-            // Handle other arguments or positional arguments here
-            other_arg => {
-                tracing::error!("Warning: Unknown argument: {}, Ignoring", other_arg);
-            }
-        }
-    }
-
+    // get config path if possible
+    let mut config_path: Option<PathBuf> = parse_cli_args();
     if config_path.is_none() {
-        let xdg = xdg::BaseDirectories::with_prefix("RatioUp");
-        match xdg.place_config_file("config.toml") {
-            Ok(path) => config_path = Some(path),
-            Err(e) => tracing::error!("Cannot create config file: {e}"),
-        }
+        config_path = get_config_from_xdg();
     }
 
+    // load config from file or default
     let config = if let Some(path) = config_path {
         tracing::info!("Loading configuration from {}", path.display());
         Config::load_from_file(&path).await
@@ -83,7 +93,7 @@ async fn main() {
     };
 
     info!(
-        "Bandwidth: \u{2191} {} - {} \t \u{2193} {} - {}",
+        "Bandwidth: \u{2191} {} - {}    \u{2193} {} - {}",
         Byte::from_u64(u64::from(config.min_upload_rate))
             .get_appropriate_unit(byte_unit::UnitType::Decimal)
             .to_string(),
@@ -133,11 +143,21 @@ fn add_torrent(path: String) -> u64 {
     if path.to_lowercase().ends_with(".torrent") {
         let config = CONFIG.get().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
-        info!("Loading torrent: \t{}", path);
+        info!("Loading torrent: {path}");
         let t = torrent::from_file(path.clone());
         match t {
             Ok(torrent) => {
-                let mut t = CleansedTorrent::from_torrent(torrent, path);
+                let mut t = CleansedTorrent::from_torrent(torrent);
+
+                // ignore UDP
+                for url in t.urls.clone() {
+                    if url.to_lowercase().starts_with("udp://") && t.urls.len() == 1 {
+                        warn!("UDP tracker not supported (yet): skipping torrent");
+                        // interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
+                        return u64::MAX;
+                    }
+                }
+
                 if config.min_download_rate > 0 && config.max_download_rate > 0 {
                     t.downloaded = 0;
                 } else {
@@ -163,13 +183,9 @@ fn add_torrent(path: String) -> u64 {
 }
 
 async fn write_pid_file() -> Option<PathBuf> {
-    match xdg::BaseDirectories::new()
-        .place_runtime_file("ratio_up.pid")
-    {
+    match xdg::BaseDirectories::new().place_runtime_file("ratio_up.pid") {
         Ok(file) => {
-            match tokio::fs::write(file.clone(), std::process::id().to_string().as_bytes())
-                .await
-            {
+            match tokio::fs::write(file.clone(), std::process::id().to_string().as_bytes()).await {
                 Ok(_) => Some(file),
                 Err(e) => {
                     warn!("Cannot create PID file: {e}");
