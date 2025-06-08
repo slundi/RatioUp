@@ -92,13 +92,3 @@ pub fn init_client(config: &Config) -> Option<u16> {
     *guard = Some(client);
     key_interval
 }
-
-#[cfg(test)]
-mod tests {
-    use std::*;
-
-    #[test]
-    fn test_announcer_config() {
-        todo!();
-    }
-}

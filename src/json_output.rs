@@ -105,9 +105,7 @@ mod tests {
             urls: vec!["https://localhost:7777/announce".to_string()],
             length: 123456,
             private: true,
-            folder: false,
             info_hash: "infohash".to_owned(),
-            path: "torrents/Test.torrent".to_owned(),
             downloaded: 123456,
             uploaded: 654321,
             last_announce: std::time::Instant::now(),
@@ -122,7 +120,7 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&data).unwrap(),
             format!(
-                "{{\"started\":\"{}\",\"torrents\":[{{\"name\":\"Test\",\"urls\":[\"https://localhost:7777/announce\"],\"length\":123456,\"private\":true,\"folder\":false,\"info_hash\":\"infohash\",\"path\":\"torrents/Test.torrent\",\"downloaded\":123456,\"uploaded\":654321,\"seeders\":1,\"leechers\":2,\"next_upload_speed\":6789,\"next_download_speed\":0}}]}}",
+                "{{\"started\":\"{}\",\"torrents\":[{{\"name\":\"Test\",\"urls\":[\"https://localhost:7777/announce\"],\"length\":123456,\"private\":true,\"info_hash\":\"infohash\",\"downloaded\":123456,\"uploaded\":654321,\"seeders\":1,\"leechers\":2,\"next_upload_speed\":6789,\"next_download_speed\":0}}]}}",
                 now.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
             )
         );
