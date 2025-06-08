@@ -13,7 +13,7 @@ pub fn prepare_torrent_folder(directory: &String) {
 /// Load torrents from the provided directory.
 ///
 /// Returns the next announce time or None if there is no torrent loaded
-pub fn load_torrents(directory: &String) -> Option<u64> {
+pub async fn load_torrents(directory: &String) -> Option<u64> {
     let paths = std::fs::read_dir(directory).expect("Cannot read torrent directory");
     let mut count = 0u16;
     let mut next_announce_time = 1800u64;
@@ -26,7 +26,7 @@ pub fn load_torrents(directory: &String) -> Option<u64> {
             .expect("Cannot get file name");
         if f.to_lowercase().ends_with(".torrent") {
             info!("Adding torrent {f}");
-            next_announce_time = u64::min(next_announce_time, crate::add_torrent(f));
+            next_announce_time = u64::min(next_announce_time, crate::add_torrent(f).await);
             count += 1;
         }
     }

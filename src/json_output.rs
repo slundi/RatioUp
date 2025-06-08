@@ -1,4 +1,4 @@
-use std::{fs, io::Write, path::Path};
+use std::{fs, path::Path};
 
 use tracing::error;
 
@@ -36,11 +36,9 @@ pub fn writable(path: &str) -> bool {
 }
 
 /// Write a session file with torrent and its stats
-pub fn write() {
-    // TODO: output path
-    let path = "/tmp/ratioup_stats.json";
-    let fh = fs::File::create(path);
-    if let Ok(mut file) = fh {
+pub async fn write() {
+    let config = crate::CONFIG.get().unwrap();
+    if let Some(path) = config.output_stats.clone() {
         // fill data in struct
         let started = *STARTED.get().unwrap();
         let torrents = TORRENTS.read().expect("Cannot get torrent list");
@@ -53,8 +51,9 @@ pub fn write() {
         }
         // write content
         let content = serde_json::to_string(&data).unwrap();
-        file.write_all(content.as_bytes())
-            .unwrap_or_else(|e| error!("Cannot write to file {}\t{:?}", path.to_string(), e));
+        if let Err(e) = tokio::fs::write(path, content.as_bytes()).await {
+            error!("Cannot write stat file: {e}");
+        }
     }
 }
 

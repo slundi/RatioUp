@@ -26,6 +26,9 @@ pub struct Config {
     pub torrent_dir: String,
     #[serde(skip_serializing)]
     pub key_refresh_every: u16,
+    /// Output file path for the JSON file.
+    /// You may want somethink like `/var/www/ratio_up.json` to expose it on your web server.
+    pub output_stats: Option<PathBuf>,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -42,6 +45,7 @@ impl Default for Config {
             //client: fake_torrent_client::Client::from(fake_torrent_client::clients::ClientVersion::Qbittorrent_4_4_2),
             key_refresh_every: 0,
             client: String::from("Transmission_3_00"),
+            output_stats: None,
         }
     }
 }

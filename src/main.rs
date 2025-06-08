@@ -119,7 +119,7 @@ async fn main() {
     }
 
     directory::prepare_torrent_folder(&config.torrent_dir);
-    match directory::load_torrents(&config.torrent_dir) {
+    match directory::load_torrents(&config.torrent_dir).await {
         Some(wait_time) => {
             // Create PID file
             let pid_file = write_pid_file().await;
@@ -141,7 +141,7 @@ async fn main() {
 
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed.
 /// It returns the time to wait before anouncing.
-fn add_torrent(path: String) -> u64 {
+async fn add_torrent(path: String) -> u64 {
     let mut interval = 1800u64;
     if path.to_lowercase().ends_with(".torrent") {
         let config = CONFIG.get().expect("Cannot read configuration");
@@ -181,7 +181,7 @@ fn add_torrent(path: String) -> u64 {
             Err(e) => error!("Cannot parse torrent: \t{} {:?}", path, e),
         }
     }
-    json_output::write();
+    json_output::write().await;
     interval
 }
 
