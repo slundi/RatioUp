@@ -76,8 +76,22 @@ pub struct OkTrackerResponse {
     peers: Option<u8>,
 }
 
+pub fn announce_started() -> u64 {
+    info!("Announcing torrent(s) with STARTED event");
+    let list = TORRENTS.read().expect("Cannot get torrent list");
+    let mut wait_time = u64::MAX;
+    for m in list.iter() {
+        let mut t = m.lock().unwrap();
+        t.interval = announce(&mut t, Some(Event::Started));
+        wait_time = wait_time.min(t.interval);
+        info!("Time: {}", wait_time);
+    }
+    wait_time
+}
+
 pub fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
+    info!("Announcing torrent(s) with STOPPED event");
     let list = TORRENTS.read().expect("Cannot get torrent list");
     for m in list.iter() {
         let mut t = m.lock().unwrap();
@@ -193,7 +207,7 @@ fn announce_http(
         .timeout(std::time::Duration::from_secs(60))
         .user_agent(&client.user_agent);
     let built_url = build_url(url, torrent, event, client.key.clone());
-    debug!("Announce HTTP URL {:?}", built_url);
+    info!("Announce HTTP URL {:?}", built_url);
     let mut req = agent
         .build()
         .get(&built_url)

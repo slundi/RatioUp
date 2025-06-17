@@ -118,30 +118,31 @@ async fn main() {
             .spawn(move || run_key_renewer(refresh_every));
     }
 
-    directory::prepare_torrent_folder(&config.torrent_dir);
-    match directory::load_torrents(&config.torrent_dir).await {
-        Some(wait_time) => {
-            let mut pid_file: Option<PathBuf> = None;
-            if config.use_pid_file {
-                // Create PID file
-        pid_file = write_pid_file().await;
-            }
-
-            tokio::spawn(async move {
-                // graceful exit when Ctrl + C / SIGINT
-                tokio::signal::ctrl_c().await.unwrap();
-                info!("Exiting...");
-                announcer::tracker::announce_stopped();
-                if config.use_pid_file && pid_file.is_some() {
-                    remove_pid_file(pid_file).await;
-                }
-                std::process::exit(0);
-            });
-
-            run_announcer(wait_time).await;
-        }
-        None => info!("No torrent, exiting"),
+    directory::prepare_torrent_folder(config.torrent_dir.clone()).await;
+    let count = directory::load_torrents(config.torrent_dir).await;
+    if count == 0 {
+        info!("No torrent, exiting");
+        return;
     }
+    let mut pid_file: Option<PathBuf> = None;
+    if config.use_pid_file {
+        // Create PID file
+        pid_file = write_pid_file().await;
+    }
+    let wait_time = announcer::tracker::announce_started();
+
+    tokio::spawn(async move {
+        // graceful exit when Ctrl + C / SIGINT
+        tokio::signal::ctrl_c().await.unwrap();
+        info!("Exiting...");
+        announcer::tracker::announce_stopped();
+        if config.use_pid_file && pid_file.is_some() {
+            remove_pid_file(pid_file).await;
+        }
+        std::process::exit(0);
+    });
+
+    run_announcer(wait_time).await;
 }
 
 /// Add a torrent to the list. If the filename does not end with .torrent, the file is not processed.
@@ -152,7 +153,7 @@ async fn add_torrent(path: String) -> u64 {
         let config = CONFIG.get().expect("Cannot read configuration");
         let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
         info!("Loading torrent: {path}");
-        let t = torrent::from_file(path.clone());
+        let t = torrent::from_file(path.as_str().into());
         match t {
             Ok(torrent) => {
                 let mut t = CleansedTorrent::from_torrent(torrent);
@@ -227,8 +228,8 @@ mod tests {
         if dir.is_dir() {
             let _ = std::fs::remove_dir(dir.clone());
         }
-        directory::prepare_torrent_folder(&dir.display().to_string());
+        directory::prepare_torrent_folder(dir.clone());
         assert!(dir.is_dir());
-        directory::prepare_torrent_folder(&dir.display().to_string());
+        directory::prepare_torrent_folder(dir);
     }
 }

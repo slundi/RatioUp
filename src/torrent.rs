@@ -10,6 +10,7 @@ use rand::Rng;
 use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
+use std::path::PathBuf;
 use tracing::debug;
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone)]
@@ -347,7 +348,7 @@ impl BasicTorrent {
     }
 }
 
-pub fn from_file(path: String) -> Result<Torrent, serde_bencode::Error> {
+pub fn from_file(path: PathBuf) -> Result<Torrent, serde_bencode::Error> {
     let data = std::fs::read(path).expect("Cannot read torrent file");
     serde_bencode::de::from_bytes::<Torrent>(&data)
 }

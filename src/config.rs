@@ -28,7 +28,7 @@ pub struct Config {
     pub client: String,
     /// Directory where torrents are saved. Default is in the working directory.
     #[serde(skip_serializing)]
-    pub torrent_dir: String,
+    pub torrent_dir: PathBuf,
     #[serde(skip_serializing)]
     pub key_refresh_every: u16,
     /// Output file path for the JSON file.
@@ -48,7 +48,7 @@ impl Default for Config {
             // check_https_certs: false,
             use_pid_file: false,
             numwant: None,
-            torrent_dir: String::from("."),
+            torrent_dir: PathBuf::from("."),
             //client: fake_torrent_client::Client::from(fake_torrent_client::clients::ClientVersion::Qbittorrent_4_4_2),
             key_refresh_every: 0,
             client: String::from("Transmission_3_00"),

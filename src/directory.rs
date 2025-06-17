@@ -1,22 +1,23 @@
 use tracing::{error, info};
+use crate::{TORRENTS, torrent::{from_file, CleansedTorrent}};
+use std::path::PathBuf;
+use std::sync::Mutex;
 
-pub fn prepare_torrent_folder(directory: &String) {
-    if !std::path::Path::new(directory).is_dir() {
-        std::fs::create_dir_all(directory).unwrap_or_else(|_e| {
+pub async fn prepare_torrent_folder(directory: PathBuf) {
+    if !std::path::Path::new(&directory).is_dir() {
+        tokio::fs::create_dir_all(directory.clone()).await.unwrap_or_else(|_e| {
             error!("Cannot create torrent folder directory(ies)");
         });
-        info!("Torrent directory created: {}", directory);
+        info!("Torrent directory created: {}", directory.display());
     }
-    info!("Will load torrents from: {}", directory);
+    info!("Will load torrents from: {}", directory.display());
 }
 
 /// Load torrents from the provided directory.
-///
-/// Returns the next announce time or None if there is no torrent loaded
-pub async fn load_torrents(directory: &String) -> Option<u64> {
-    let paths = std::fs::read_dir(directory).expect("Cannot read torrent directory");
+pub async fn load_torrents(directory: PathBuf) -> u16 {
+    let paths = std::fs::read_dir(&directory).expect("Cannot read torrent directory");
     let mut count = 0u16;
-    let mut next_announce_time = 1800u64;
+    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
     for p in paths {
         let f = p
             .expect("Cannot get torrent path")
@@ -25,15 +26,16 @@ pub async fn load_torrents(directory: &String) -> Option<u64> {
             .into_string()
             .expect("Cannot get file name");
         if f.to_lowercase().ends_with(".torrent") {
-            info!("Adding torrent {f}");
-            next_announce_time = u64::min(next_announce_time, crate::add_torrent(f).await);
-            count += 1;
+            match from_file(f.as_str().into()) {
+                Ok(torrent) => {
+                    list.push(Mutex::new(CleansedTorrent::from_torrent(torrent)));
+                    info!("Adding torrent {f}");
+                    count += 1;
+                }
+                Err(e) => error!("Cannot add torrent {f}")
+            }
         }
     }
     info!("{} torrent(s) loaded", count);
-    if count == 0 {
-        None
-    } else {
-        Some(next_announce_time)
-    }
+    count
 }
