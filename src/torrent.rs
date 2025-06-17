@@ -255,7 +255,7 @@ impl CleansedTorrent {
     }
 
     pub fn uploaded(&mut self, min_speed: u32, available_speed: u32) -> u32 {
-        if self.can_upload() {
+        if self.can_upload() && (0 < min_speed && min_speed <= available_speed) {
             self.next_upload_speed = rand::rng().random_range(min_speed..available_speed);
             self.next_upload_speed
         } else {

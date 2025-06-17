@@ -58,8 +58,12 @@ impl Config {
                 let toml: Result<Config, toml::de::Error> = toml::from_str(&content);
                 match toml {
                     Ok(loaded_config) => {
-                        info!("Configuration loaded successfully from file.");
-                        config = loaded_config;
+                        if loaded_config.is_ok() {
+                            info!("Configuration loaded successfully from file.");
+                            config = loaded_config;
+                        } else {
+                            info!("Using default configuration");
+                        }
                     }
                     Err(e) => {
                         error!("Could not parse TOML: {}", e);
@@ -73,6 +77,25 @@ impl Config {
             }
         };
         config
+    }
+
+    /// Check if the config is OK and log error
+    fn is_ok(&self) -> bool {
+        if self.min_download_rate > self.max_download_rate {
+            error!(
+                "Min download rate ({}) is greater than max download rate ({})",
+                self.min_download_rate, self.max_download_rate
+            );
+            return false;
+        }
+        if self.min_upload_rate > self.max_upload_rate {
+            error!(
+                "Min upload rate ({}) is greater than max upload rate ({})",
+                self.min_upload_rate, self.max_upload_rate
+            );
+            return false;
+        }
+        true
     }
 }
 
