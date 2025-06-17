@@ -18,9 +18,10 @@ pub struct Config {
     pub min_download_rate: u32, //in byte
     pub max_download_rate: u32, //in bytes
 
+    pub use_pid_file: bool,
+
     // /// when announcing on HTTPS tracker, do we check the SSL certificate
     // pub check_https_certs: bool,
-
     /// To set the number of peers we want
     pub numwant: Option<u16>,
     // pub simultaneous_seed: u16, //useful ?
@@ -45,6 +46,7 @@ impl Default for Config {
             min_download_rate: 8192,
             max_download_rate: 16777216, //16*1024*1024
             // check_https_certs: false,
+            use_pid_file: false,
             numwant: None,
             torrent_dir: String::from("."),
             //client: fake_torrent_client::Client::from(fake_torrent_client::clients::ClientVersion::Qbittorrent_4_4_2),

@@ -121,15 +121,20 @@ async fn main() {
     directory::prepare_torrent_folder(&config.torrent_dir);
     match directory::load_torrents(&config.torrent_dir).await {
         Some(wait_time) => {
-            // Create PID file
-            let pid_file = write_pid_file().await;
+            let mut pid_file: Option<PathBuf> = None;
+            if config.use_pid_file {
+                // Create PID file
+        pid_file = write_pid_file().await;
+            }
 
             tokio::spawn(async move {
                 // graceful exit when Ctrl + C / SIGINT
                 tokio::signal::ctrl_c().await.unwrap();
                 info!("Exiting...");
                 announcer::tracker::announce_stopped();
-                remove_pid_file(pid_file).await;
+                if config.use_pid_file && pid_file.is_some() {
+                    remove_pid_file(pid_file).await;
+                }
                 std::process::exit(0);
             });
 

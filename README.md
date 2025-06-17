@@ -55,6 +55,9 @@ client = "Transmission_3_00"
 port = 55555
 numwant = 8
 
+# path will be $XDG_RUNTIME_DIR/ratio_up.pid
+use_pid_file = true
+
 # configure range of speed in bytes for each torrent
 min_upload_rate = 262144
 max_upload_rate = 23068672
