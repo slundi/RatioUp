@@ -1,7 +1,5 @@
 use bytes::{BufMut, BytesMut};
 use fake_torrent_client::Client;
-use rand::Rng;
-use rand::prelude::*;
 use std::{convert::TryInto, net::SocketAddr, time::Duration};
 use tokio::net::UdpSocket;
 use tokio::time::timeout;

@@ -2,7 +2,6 @@
 
 #[macro_use]
 extern crate serde_derive;
-extern crate rand;
 
 use byte_unit::Byte;
 use fake_torrent_client::Client;

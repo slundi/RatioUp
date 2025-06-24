@@ -1,6 +1,5 @@
 use std::str::FromStr;
 
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::{error, info};
@@ -40,7 +39,7 @@ impl Default for Config {
         Config {
             // The port number that the client is listening on. Ports reserved for BitTorrent are typically 6881-6889. Clients may choose to give up if it cannot establish
             // a port within this range. Here ports are random between 49152 and 65534
-            port: rand::rng().random_range(49152..65534),
+            port: fastrand::u16(49152..65534),
             min_upload_rate: 8192,    //8*1024
             max_upload_rate: 2097152, //2048*1024
             min_download_rate: 8192,

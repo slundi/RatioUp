@@ -6,7 +6,6 @@ extern crate serde_bytes;
 
 use hex::ToHex;
 use hmac_sha1_compact::Hash;
-use rand::Rng;
 use serde::Serialize;
 use serde_bencode::ser;
 use serde_bytes::ByteBuf;
@@ -248,7 +247,7 @@ impl CleansedTorrent {
 
     pub fn downloaded(&mut self, min_speed: u32, available_speed: u32) -> u32 {
         if self.can_download() {
-            self.next_download_speed = rand::rng().random_range(min_speed..available_speed);
+            self.next_download_speed = fastrand::u32(min_speed..available_speed);
             self.next_download_speed
         } else {
             0
@@ -257,7 +256,7 @@ impl CleansedTorrent {
 
     pub fn uploaded(&mut self, min_speed: u32, available_speed: u32) -> u32 {
         if self.can_upload() && (0 < min_speed && min_speed <= available_speed) {
-            self.next_upload_speed = rand::rng().random_range(min_speed..available_speed);
+            self.next_upload_speed = fastrand::u32(min_speed..available_speed);
             self.next_upload_speed
         } else {
             0
