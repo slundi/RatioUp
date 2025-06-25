@@ -1,8 +1,5 @@
 #![allow(non_snake_case)]
 
-#[macro_use]
-extern crate serde_derive;
-
 use byte_unit::Byte;
 use fake_torrent_client::Client;
 use std::path::PathBuf;
@@ -12,7 +9,7 @@ use tracing::{self, error, info, warn};
 
 use crate::announcer::scheduler::run as run_announcer;
 use crate::config::Config;
-use crate::torrent::CleansedTorrent;
+use crate::torrent::Torrent;
 
 mod announcer;
 mod config;
@@ -23,7 +20,7 @@ pub mod torrent;
 static STARTED: OnceLock<chrono::DateTime<chrono::Utc>> = OnceLock::new();
 static CONFIG: OnceLock<Config> = OnceLock::new();
 static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
-static TORRENTS: RwLock<Vec<Mutex<CleansedTorrent>>> = RwLock::new(Vec::new()); // TODO: replace with mutex
+static TORRENTS: RwLock<Vec<Mutex<Torrent>>> = RwLock::new(Vec::new()); // TODO: replace with mutex
 
 async fn run_key_renewer(refresh_every: u16) {
     loop {
@@ -71,7 +68,7 @@ fn get_config_from_xdg() -> Option<PathBuf> {
 async fn main() {
     //configure logger
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(tracing::Level::DEBUG)
         .with_level(true)
         .with_target(false)
         .init();
@@ -155,7 +152,7 @@ async fn add_torrent(path: String) -> u64 {
         let t = torrent::from_file(path.as_str().into());
         match t {
             Ok(torrent) => {
-                let mut t = CleansedTorrent::from_torrent(torrent);
+                let mut t = torrent;
 
                 // ignore UDP
                 for url in t.urls.clone() {
@@ -173,7 +170,7 @@ async fn add_torrent(path: String) -> u64 {
                 }
                 for items in list.iter() {
                     let existing = items.lock().unwrap();
-                    if existing.info_hash == t.info_hash {
+                    if existing.info_hash_urlencoded == t.info_hash_urlencoded {
                         info!("Torrent is already in list");
                         return interval;
                     }

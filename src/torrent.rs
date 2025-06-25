@@ -1,18 +1,15 @@
 // https://wiki.theory.org/BitTorrentSpecification#Metainfo_File_Structure
 // https://wiki.theory.org/BitTorrent_Tracker_Protocol
-extern crate serde;
-extern crate serde_bencode;
-extern crate serde_bytes;
-
-use hex::ToHex;
-use hmac_sha1_compact::Hash;
+use bendy::decoding::{FromBencode, Object};
 use serde::Serialize;
-use serde_bencode::ser;
-use serde_bytes::ByteBuf;
+use sha1::{Digest, Sha1};
+use std::collections::HashSet;
 use std::path::PathBuf;
-use tracing::debug;
+use tracing::{debug, error};
 
-#[derive(Debug, PartialEq, Eq, Deserialize, Clone)]
+type BendyResult<T> = Result<T, bendy::decoding::Error>;
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Peer {
     /// A string of length 20 which this peer uses as its id. This field will be `None` for compact peer info.
     pub id: Option<String>,
@@ -22,143 +19,20 @@ pub struct Peer {
     pub port: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
-struct Node(String, i64);
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
-pub struct File {
-    /// a list containing one or more string elements that together represent the path and filename. Each element in the list corresponds to
-    /// either a directory name or (in the case of the final element) the filename. For example, a the file "dir1/dir2/file.ext" would
-    /// consist of three string elements: "dir1", "dir2", and "file.ext". This is encoded as a bencoded list of strings such as l4:dir14:dir28:file.exte
-    pub path: Vec<String>,
-    /// length of the file in bytes (integer)
-    pub length: i64,
-    #[serde(default)]
-    md5sum: Option<String>,
-}
-
-impl File {
-    pub fn get_path_with_separator(&self) -> String {
-        let mut result = String::new();
-        for s in self.path.iter() {
-            result.push('/');
-            result.push_str(s);
-        }
-        result
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
-pub struct Info {
-    /// the filename. This is purely advisory. (string)
-    pub name: String,
-    pieces: ByteBuf,
-    #[serde(rename = "piece length")]
-    pub piece_length: i64,
-    #[serde(default)]
-    md5sum: Option<String>,
-    #[serde(default)]
-    pub length: Option<i64>,
-    /// a list of dictionaries, one for each file.
-    #[serde(default)]
-    pub files: Option<Vec<File>>,
-    #[serde(default)]
-    pub private: Option<u8>,
-    #[serde(default)]
-    pub path: Option<Vec<String>>,
-    #[serde(default, rename = "root hash")]
-    pub root_hash: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
-pub struct Torrent {
-    pub info: Info,
-    /// The announce URL of the tracker
-    #[serde(default)]
-    pub announce: Option<String>,
-    #[serde(default)]
-    nodes: Option<Vec<Node>>,
-    #[serde(default)]
-    pub encoding: Option<String>,
-    #[serde(default)]
-    httpseeds: Option<Vec<String>>,
-    /// (optional) this is an extention to the official specification, offering backwards-compatibility.
-    /// (list of lists of strings). http://bittorrent.org/beps/bep_0012.html
-    #[serde(default, rename = "announce-list")]
-    pub announce_list: Option<Vec<Vec<String>>>,
-    #[serde(default, rename = "creation date")]
-    pub creation_date: Option<i64>,
-    /// (optional) free-form textual comments of the author (string)
-    #[serde(rename = "comment")]
-    pub comment: Option<String>,
-    /// (optional) name and version of the program used to create the .torrent (string)
-    #[serde(default, rename = "created by")]
-    pub created_by: Option<String>,
-}
-
-impl Torrent {
-    pub fn files(&self) -> &Option<Vec<File>> {
-        &self.info.files
-    }
-    pub fn _num_files(&self) -> usize {
-        match self.files() {
-            Some(f) => f.len(),
-            None => 1,
-        }
-    }
-    pub fn total_size(&self) -> usize {
-        if self.files().is_none() {
-            return self.info.length.unwrap_or_default() as usize;
-        }
-        let mut total_size = 0;
-        if let Some(files) = self.files() {
-            for file in files {
-                total_size += file.length;
-            }
-        }
-        total_size as usize
-    }
-
-    pub fn info_hash(&self) -> Option<Vec<u8>> {
-        let result = ser::to_bytes(&self.info);
-        if let Ok(info) = result {
-            return Some(Hash::hash(&info).to_vec());
-        }
-        None
-    }
-
-    pub fn get_urls(&self) -> Vec<String> {
-        let mut urls: Vec<String> = Vec::new();
-        if let Some(url) = self.announce.clone() {
-            urls.push(url);
-        }
-        if let Some(al) = self.announce_list.clone() {
-            for v in al {
-                for s in v {
-                    if !s.is_empty() && !urls.iter().any(|value| value == &s) {
-                        urls.push(s);
-                    }
-                }
-            }
-        }
-        urls
-    }
-}
-
 /// To only keep minimal torrent info in RAM. Info are ised in:
 /// - the announcer (info hash, urls, name in log, sizes, downloaded, uploaded, interval, last_announce, seeders, leechers)
 /// - web UI (info hash, name, size, downloaded, uploaded, seeders, leechers, is private, is a folder, path)
 #[derive(Debug, Serialize, PartialEq, Eq, Clone)]
-pub struct CleansedTorrent {
+pub struct Torrent {
     pub name: String,
-    pub urls: Vec<String>,
-    pub length: usize,
+    pub urls: Vec<String>, // aka. announce_list
+    pub length: u64,
     pub private: bool,
-    pub info_hash: String,
+    // pub info_hash: String,
     /// If we have to virtually download the torrent first, it is the downloaded size in bytes
-    pub downloaded: usize,
+    pub downloaded: u64,
     /// Total of fake uploaded data since the start of RatioUp
-    pub uploaded: usize,
+    pub uploaded: u64,
     /// Last announce to the tracker
     #[serde(skip_serializing)]
     pub last_announce: std::time::Instant,
@@ -178,58 +52,13 @@ pub struct CleansedTorrent {
     pub interval: u64,
     #[serde(skip)]
     pub error_count: u16,
+    // pub creation_date: Option<DateTime<Local>>,
+    // pub comment: Option<String>,
+    // pub created_by: Option<String>,
+    pub encoding: Option<String>,
 }
 
-/// Store only essential information
-#[derive(Debug, Serialize, PartialEq, Eq, Clone)]
-pub struct BasicTorrent {
-    /// the filename. This is purely advisory. (string)
-    pub name: String,
-    //creation_date? (optional) the creation time of the torrent, in standard UNIX epoch format (integer, seconds since 1-Jan-1970 00:00:00 UTC)
-    /// urlencoded 20-byte SHA1 hash of the value of the info key from the Metainfo file. Note that the value will be a bencoded dictionary, given the definition of the info key above.
-    pub info_hash: String,
-    /// number of bytes in each piece (integer)
-    piece_length: usize,
-    /// length of the file in bytes (integer)
-    pub length: usize,
-    /// a list of dictionaries, one for each file.
-    files: Option<Vec<File>>,
-    /// (optional) this field is an integer. If it is set to "1", the client MUST publish its presence to get other peers ONLY via the trackers explicitly described
-    /// in the metainfo file. If this field is set to "0" or is not present, the client may obtain peer from other means, e.g. PEX peer exchange, dht. Here, "private"
-    /// may be read as "no external peer source".
-    ///
-    /// - NOTE: There is much debate surrounding private trackers.
-    /// - The official request for a specification change is here: http://bittorrent.org/beps/bep_0027.html
-    /// - Azureus/Vuze was the first client to respect private trackers, see their wiki (http://wiki.vuze.com/w/Private_torrent) for more details.
-    pub private: bool,
-
-    //Fields used by RatioUp
-    /// Path to the torrent file
-    #[serde(skip_serializing)]
-    pub path: String,
-    /// If we have to virtually download the torrent first, it is the downloaded size in bytes
-    pub downloaded: usize,
-    /// Total of fake uploaded data since the start of RatioUp
-    pub uploaded: usize,
-    /// Last announce to the tracker
-    #[serde(skip_serializing)]
-    pub last_announce: std::time::Instant,
-    /// Number of seeders, it is used on the web UI
-    pub seeders: u16,
-    /// Number of leechers, it is used on the web UI
-    pub leechers: u16,
-    /// It is the next upload speed that will be announced. It is also used for UI display.
-    pub next_upload_speed: u32,
-    /// It is the next download speed that will be announced. It allows to end a complete event earlier than the normal interval, It is also used for UI display.
-    pub next_download_speed: u32,
-    /// Tracker announce URLs built from the config and the torrent. Some variables are still there (key, left, downloaded, uploaded, event)
-    #[serde(skip)]
-    pub urls: Vec<String>,
-    #[serde(skip)]
-    pub error_count: u16,
-}
-
-impl CleansedTorrent {
+impl Torrent {
     /// Tells if we can announce to tracker(s) depending on the last announce
     pub fn shound_announce(&self) -> bool {
         self.last_announce.elapsed().as_secs() >= self.interval
@@ -269,22 +98,144 @@ impl CleansedTorrent {
         self.uploaded(config.min_upload_rate, config.max_upload_rate);
     }
 
-    /// Load essential data from a parsed torrent using the full parsed torrent file. It reduces the RAM use to have smaller data
-    pub fn from_torrent(torrent: Torrent) -> CleansedTorrent {
-        let hash_bytes = torrent.info_hash().expect("Cannot get torrent info hash");
-        let hash = hash_bytes.encode_hex::<String>();
-        //let hash = hash_bytes.???;
-        let private = torrent.info.private.is_some() && torrent.info.private == Some(1);
-        let size = torrent.total_size();
-        let mut t = CleansedTorrent {
-            name: torrent.info.name.clone(),
-            info_hash_urlencoded: String::with_capacity(64),
-            length: size,
+    // /// Load essential data from a parsed torrent using the full parsed torrent file. It reduces the RAM use to have smaller data
+    // pub fn from_torrent(torrent: Torrent) -> Self {
+    //     let hash_bytes = torrent.info_hash().expect("Cannot get torrent info hash");
+    //     let hash = hash_bytes.encode_hex::<String>();
+    //     //let hash = hash_bytes.???;
+    //     let private = torrent.info.private.is_some() && torrent.info.private == Some(1);
+    //     let mut t = Self {
+    //         name: torrent.info.name.clone(),
+    //         info_hash_urlencoded: String::with_capacity(64),
+    //         length: torrent.total_size,
+    //         last_announce: std::time::Instant::now(),
+    //         urls: Vec::new(),
+    //         info_hash: hash,
+    //         private,
+    //         downloaded: torrent.total_size,
+    //         uploaded: 0,
+    //         seeders: 0,
+    //         leechers: 0,
+    //         next_upload_speed: 0,
+    //         next_download_speed: 0,
+    //         interval: 4_294_967_295,
+    //         error_count: 0,
+    //     };
+    //     t.urls = torrent.get_urls();
+    //     t.info_hash_urlencoded = percent_encoding::percent_encode(
+    //         &hash_bytes,
+    //         crate::announcer::tracker::URL_ENCODE_RESERVED,
+    //     )
+    //     .to_string();
+    //     debug!("Torrent: {:?}", t);
+    //     t
+    // }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct File {
+    pub length: u64,
+    pub md5sum: Option<String>,
+    pub path: PathBuf,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Info {
+    pub name: String,
+    pub files: Vec<File>,
+    pub hash: [u8; 20],
+    pub piece_length: u32,
+    pub pieces: Vec<[u8; 20]>,
+    pub private: bool,
+}
+
+// #[derive(Debug, Default, PartialEq, Eq)]
+// pub struct Torrent {
+//     pub info: Info,
+//     pub announce_list: Vec<String>,
+//     // pub creation_date: Option<DateTime<Local>>,
+//     // pub comment: Option<String>,
+//     // pub created_by: Option<String>,
+//     pub encoding: Option<String>,
+//     pub total_size: u64,
+// }
+
+impl FromBencode for Torrent {
+    fn decode_bencode_object(object: Object) -> BendyResult<Self>
+    where
+        Self: Sized,
+    {
+        let mut announce_list = HashSet::new();
+        // let mut creation_date = None;
+        // let mut comment = None;
+        // let mut created_by = None;
+        let mut encoding = None;
+        let mut total_size = 0u64;
+        let mut valid_info = false;
+        let mut name = String::with_capacity(0);
+        let mut private = false;
+        let mut info_hash_urlencoded = String::with_capacity(0);
+
+        let mut dict = object.try_into_dictionary()?;
+        while let Some(pair) = dict.next_pair()? {
+            match pair {
+                (b"info", value) => {
+                    let info2 = Info::decode_bencode_object(value)?;
+                    for file in &info2.files {
+                        total_size += file.length;
+                    }
+                    name = info2.name;
+                    private = info2.private;
+                    info_hash_urlencoded = percent_encoding::percent_encode(
+                        &info2.hash,
+                        crate::announcer::tracker::URL_ENCODE_RESERVED,
+                    ).to_string();
+                    valid_info = true;
+                }
+                (b"announce", value) => {
+                    announce_list.insert(String::decode_bencode_object(value)?);
+                }
+                (b"announce-list", value) => {
+                    let mut list_raw = value.try_into_list()?;
+                    while let Some(value) = list_raw.next_object()? {
+                        let mut tier_list = value.try_into_list()?;
+                        while let Some(value) = tier_list.next_object()? {
+                            announce_list.insert(String::decode_bencode_object(value)?);
+                        }
+                    }
+                }
+                // (b"creation date", value) => {
+                //     creation_date = Some(
+                //         Local
+                //             .timestamp_opt(i64::decode_bencode_object(value)?, 0)
+                //             .unwrap(),
+                //     )
+                // }
+                // (b"comment", value) => comment = Some(String::decode_bencode_object(value)?),
+                // (b"created by", value) => created_by = Some(String::decode_bencode_object(value)?),
+                (b"encoding", value) => encoding = Some(String::decode_bencode_object(value)?),
+                _ => {}
+            }
+        }
+
+        if !valid_info {
+            error!("Decoding Error: Missing info dictionary");
+            std::process::exit(1);
+        }
+        let announce_list = announce_list.into_iter().collect();
+
+        Ok(Self {
+            urls: announce_list,
+            // creation_date,
+            // comment,
+            // created_by,
+            encoding,
+            length: total_size,
+            name,
+            info_hash_urlencoded: info_hash_urlencoded,
             last_announce: std::time::Instant::now(),
-            urls: Vec::new(),
-            info_hash: hash,
             private,
-            downloaded: size,
+            downloaded: total_size,
             uploaded: 0,
             seeders: 0,
             leechers: 0,
@@ -292,74 +243,141 @@ impl CleansedTorrent {
             next_download_speed: 0,
             interval: 4_294_967_295,
             error_count: 0,
-        };
-        t.urls = torrent.get_urls();
-        t.info_hash_urlencoded = percent_encoding::percent_encode(
-            &hash_bytes,
-            crate::announcer::tracker::URL_ENCODE_RESERVED,
-        )
-        .to_string();
-        debug!("Torrent: {:?}", t);
-        t
+        })
     }
 }
 
-impl BasicTorrent {
-    /// Load torrent data required for a detailled view in the web UI
-    pub fn from_torrent(torrent: Torrent, path: String) -> BasicTorrent {
-        let hash_bytes = torrent.info_hash().expect("Cannot get torrent info hash");
-        let hash = hash_bytes.encode_hex::<String>();
-        //let hash = hash_bytes.???;
-        let private = torrent.info.private.is_some() && torrent.info.private == Some(1);
-        let size = torrent.total_size();
-        let mut t = BasicTorrent {
-            path,
-            name: torrent.info.name.clone(),
-            length: size,
-            urls: Vec::new(),
-            info_hash: hash,
-            piece_length: torrent.info.piece_length as usize,
-            private,
-            files: None,
-            downloaded: size,
-            uploaded: 0,
-            seeders: 0,
-            leechers: 0,
-            next_upload_speed: 0,
-            next_download_speed: 0,
-            error_count: 0,
-            last_announce: std::time::Instant::now(),
-        };
-        t.urls = torrent.get_urls();
-        if let Some(files) = torrent.info.files {
-            let mut list: Vec<File> = Vec::with_capacity(files.len());
-            for f in files {
-                list.push(File {
-                    length: f.length,
-                    path: f.path,
-                    md5sum: None,
-                });
+impl FromBencode for Info {
+    fn decode_bencode_object(object: Object) -> BendyResult<Self>
+    where
+        Self: Sized,
+    {
+        let mut name = None;
+        let mut files = None;
+
+        let mut length = None;
+        let mut md5sum = None;
+        let mut private = false;
+
+        let mut piece_length = None;
+        let mut pieces_raw = None;
+
+        let mut dict = object.try_into_dictionary()?;
+        while let Some(pair) = dict.next_pair()? {
+            match pair {
+                (b"piece length", value) => piece_length = Some(u32::decode_bencode_object(value)?),
+                (b"pieces", value) => pieces_raw = Some(value.try_into_bytes()?.to_vec()),
+                (b"name", value) => name = Some(String::decode_bencode_object(value)?),
+                (b"files", value) => files = Some(Vec::decode_bencode_object(value)?),
+                (b"length", value) => length = Some(u64::decode_bencode_object(value)?),
+                (b"md5sum", value) => md5sum = Some(String::decode_bencode_object(value)?),
+                (b"private", value) => {
+                    private = u8::decode_bencode_object(value)? == 1;
+                }
+                _ => {}
             }
-            t.files = Some(list);
         }
-        debug!("Torrent: {:?}", t);
-        t
+
+        if piece_length.is_none() || pieces_raw.is_none() {
+            return Err(bendy::decoding::Error::missing_field(
+                "piece length or pieces",
+            ));
+        }
+        let pl = piece_length.unwrap();
+        let raw = pieces_raw.unwrap();
+        if raw.len() % 20 != 0 {
+            return Err(bendy::decoding::Error::missing_field(
+                "Invalid length for pieces",
+            ));
+        }
+        let mut pieces = vec![];
+        for chunk in raw.chunks_exact(20) {
+            let mut arr = [0u8; 20];
+            arr.copy_from_slice(chunk);
+            pieces.push(arr);
+        }
+
+        let mut hasher = Sha1::new();
+        hasher.update(dict.into_raw()?);
+        let hash = hasher.finalize().into();
+
+        let name = name.expect("Decoding Error: Missing name from torrent info");
+
+        if let Some(files) = files {
+            Ok(Self {
+                name,
+                files,
+                hash,
+                piece_length: pl,
+                pieces,
+                private,
+            })
+        } else {
+            // single-file torrent: use the name as the file path
+            Ok(Self {
+                name: name.clone(),
+                files: vec![File {
+                    length: length.expect("Decoding Error: Missing file length"),
+                    md5sum,
+                    path: PathBuf::from(name.clone()),
+                }],
+                hash,
+                piece_length: pl,
+                pieces,
+                private,
+            })
+        }
     }
 }
 
-pub fn from_file(path: PathBuf) -> Result<Torrent, serde_bencode::Error> {
+impl FromBencode for File {
+    fn decode_bencode_object(object: Object) -> BendyResult<Self>
+    where
+        Self: Sized,
+    {
+        let mut length = None;
+        let mut md5sum = None;
+        let mut path = PathBuf::new();
+
+        let mut dict = object.try_into_dictionary()?;
+        while let Some(pair) = dict.next_pair()? {
+            match pair {
+                (b"length", value) => length = Some(u64::decode_bencode_object(value)?),
+                (b"md5sum", value) => md5sum = Some(String::decode_bencode_object(value)?),
+                (b"path", value) => {
+                    path = Vec::decode_bencode_object(value)?
+                        .into_iter()
+                        .map(|bytes| String::from_utf8(bytes).unwrap())
+                        .collect()
+                }
+                _ => {}
+            }
+        }
+
+        let length = length.expect("Decoding Error: File missing length");
+        debug!("\t{:?} {length}  {}", md5sum, path.display());
+
+        Ok(Self {
+            length,
+            md5sum,
+            path,
+        })
+    }
+}
+
+pub fn from_file(path: PathBuf) -> Result<Torrent, bendy::decoding::Error> {
     let data = std::fs::read(path).expect("Cannot read torrent file");
-    serde_bencode::de::from_bytes::<Torrent>(&data)
+    Torrent::from_bencode(&data)
 }
 
 // TODO: test tracker response "with d8:completei0e10:downloadedi0e10:incompletei1e8:intervali1922e12:min intervali961e5:peers6:<3A><><EFBFBD>m<EFBFBD><6D>e"
 #[cfg(test)]
 mod tests {
-    use crate::torrent::CleansedTorrent;
+    use crate::torrent::Torrent;
 
     #[test]
     fn test_can_download_or_upload() {
-        let mut t = CleansedTorrent {
+        let mut t = Torrent {
             name: String::from("Test torrent"),
             length: 262144,
             private: false,
@@ -393,7 +411,7 @@ mod tests {
 
     #[test]
     fn test_get_average_speeds() {
-        let mut t = CleansedTorrent {
+        let mut t = Torrent {
             name: String::from("Test torrent"),
             length: 262144,
             private: false,

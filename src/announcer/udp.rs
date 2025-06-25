@@ -7,7 +7,7 @@ use tracing::debug;
 use tracing::warn;
 
 use crate::CONFIG;
-use crate::torrent::BasicTorrent;
+use crate::torrent::Torrent;
 
 use super::tracker::Event;
 
@@ -38,7 +38,7 @@ pub async fn get_udp_socket() -> UdpSocket {
 
 async fn announce_udp(
     url: &str,
-    torrent: &mut BasicTorrent,
+    torrent: &mut Torrent,
     client: &Client,
     event: Option<Event>,
 ) -> u64 {

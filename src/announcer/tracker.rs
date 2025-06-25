@@ -4,9 +4,9 @@
 use std::io::Read;
 
 use fake_torrent_client::Client;
+use serde::Deserialize;
 use tracing::{debug, error, info, warn};
-
-use crate::torrent::CleansedTorrent;
+use crate::torrent::Torrent;
 use crate::{CLIENT, TORRENTS};
 
 pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
@@ -108,13 +108,14 @@ pub fn announce_stopped() {
 ///
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
-pub fn announce(torrent: &mut CleansedTorrent, event: Option<Event>) -> u64 {
+pub fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
     let mut interval = 4_294_967_295u64;
     // TODO: prepare announce (uploaded and downloaded if applicable)
     torrent.compute_speeds();
     if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
         debug!("Torrent has {} url(s)", torrent.urls.len());
         for url in torrent.urls.clone() {
+            debug!("\t{}", url);
             if url.to_lowercase().starts_with("udp://") {
                 warn!("UDP tracker not supported (yet): cannot announce");
                 // interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
@@ -149,7 +150,7 @@ pub fn check_and_announce() {
 
 fn announce_http(
     url: &str,
-    torrent: &mut CleansedTorrent,
+    torrent: &mut Torrent,
     client: &Client,
     event: Option<Event>,
 ) -> u64 {
@@ -234,7 +235,7 @@ fn announce_http(
                 "Tracker response: {:?}",
                 String::from_utf8_lossy(&bytes.clone())
             );
-            match serde_bencode::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
+            match bendy::serde::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
                 Ok(tr) => {
                     torrent.seeders = u16::try_from(tr.complete).unwrap();
                     torrent.leechers = u16::try_from(tr.incomplete).unwrap();
@@ -246,7 +247,7 @@ fn announce_http(
                     torrent.last_announce = std::time::Instant::now();
                 }
                 Err(e1) => {
-                    match serde_bencode::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
+                    match bendy::serde::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
                         Ok(tr) => warn!("Cannot announce: {}", tr.reason),
                         Err(e2) => {
                             error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
@@ -277,19 +278,19 @@ fn announce_http(
 /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
 pub fn build_url(
     url: &str,
-    torrent: &mut CleansedTorrent,
+    torrent: &mut Torrent,
     event: Option<Event>,
     key: String,
 ) -> String {
     info!("Torrent {:?}: {}", event, torrent.name);
     //compute downloads and uploads
-    let elapsed: usize = if event == Some(Event::Started) {
+    let elapsed: u64 = if event == Some(Event::Started) {
         0
     } else {
-        torrent.last_announce.elapsed().as_secs() as usize
+        torrent.last_announce.elapsed().as_secs() as u64
     };
-    let uploaded: usize = torrent.next_upload_speed as usize * elapsed;
-    let mut downloaded: usize = torrent.next_download_speed as usize * elapsed;
+    let uploaded: u64 = torrent.next_upload_speed as u64 * elapsed;
+    let mut downloaded: u64 = torrent.next_download_speed as u64 * elapsed;
     if torrent.length <= torrent.downloaded + downloaded {
         downloaded = torrent.length - torrent.downloaded;
     } //do not download more thant the torrent size

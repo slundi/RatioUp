@@ -1,5 +1,5 @@
 use tracing::{error, info};
-use crate::{TORRENTS, torrent::{from_file, CleansedTorrent}};
+use crate::{TORRENTS, torrent::{from_file}};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -28,11 +28,11 @@ pub async fn load_torrents(directory: PathBuf) -> u16 {
         if f.to_lowercase().ends_with(".torrent") {
             match from_file(f.as_str().into()) {
                 Ok(torrent) => {
-                    list.push(Mutex::new(CleansedTorrent::from_torrent(torrent)));
+                    list.push(Mutex::new(torrent));
                     info!("Adding torrent {f}");
                     count += 1;
                 }
-                Err(e) => error!("Cannot add torrent {f}")
+                Err(e) => error!("Cannot add torrent {f}: {e}")
             }
         }
     }

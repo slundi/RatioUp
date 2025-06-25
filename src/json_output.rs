@@ -1,13 +1,13 @@
 use std::{fs, path::Path};
 
 use tracing::error;
-
-use crate::{STARTED, TORRENTS, torrent::CleansedTorrent};
+use serde::Serialize;
+use crate::{STARTED, TORRENTS, torrent::Torrent};
 
 #[derive(Serialize, PartialEq, Debug)]
 struct Output {
     pub started: chrono::DateTime<chrono::Utc>,
-    pub torrents: Vec<CleansedTorrent>,
+    pub torrents: Vec<Torrent>,
 }
 
 impl Default for Output {
@@ -59,7 +59,7 @@ pub async fn write() {
 
 #[cfg(test)]
 mod tests {
-    use crate::{json_output::writable, torrent::CleansedTorrent};
+    use crate::{json_output::writable, torrent::Torrent};
 
     use super::Output;
 
@@ -100,7 +100,7 @@ mod tests {
         );
 
         // case 2: with one torrent
-        data.torrents.push(CleansedTorrent {
+        data.torrents.push(Torrent {
             name: "Test".to_owned(),
             urls: vec!["https://localhost:7777/announce".to_string()],
             length: 123456,
