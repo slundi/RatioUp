@@ -33,5 +33,5 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3"
 
 # bittorrent parsing
-bendy = { version = "0.3", features = ["std", "serde"] }
+bendy = { version = "0.3", features = ["std"] }
 sha1 = "0.10"

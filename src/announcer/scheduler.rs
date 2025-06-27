@@ -16,7 +16,7 @@ pub async fn run(wait_time: u64) {
         }
         debug!("Next announce in {}s", next_interval);
         crate::json_output::write().await;
-        tokio::time::sleep(Duration::from_secs(u64::from(next_interval))).await;
+        tokio::time::sleep(Duration::from_secs(next_interval)).await;
     }
 }
 

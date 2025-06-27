@@ -5,7 +5,7 @@ use serde::Serialize;
 use sha1::{Digest, Sha1};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use tracing::{debug, error};
+use tracing::{error, warn};
 
 type BendyResult<T> = Result<T, bendy::decoding::Error>;
 
@@ -56,6 +56,12 @@ pub struct Torrent {
     // pub comment: Option<String>,
     // pub created_by: Option<String>,
     pub encoding: Option<String>,
+
+    // for tracker response
+    /// (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
+    pub min_interval: Option<u64>,
+    /// A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
+    pub tracker_id: Option<String>,
 }
 
 impl Torrent {
@@ -130,6 +136,24 @@ impl Torrent {
     //     debug!("Torrent: {:?}", t);
     //     t
     // }
+
+    /// Check if there is only UDP URL in the announce list
+    pub fn has_supported_trackers(&self) -> bool {
+        for url in self.urls.iter() {
+            if url.to_lowercase().starts_with("http://")
+                || url.to_lowercase().starts_with("https://")
+            {
+                return true;
+            }
+        }
+        warn!("UDP tracker not supported (yet): skipping torrent");
+        false
+    }
+
+    pub fn from_file(path: PathBuf) -> Result<Self, bendy::decoding::Error> {
+        let data = std::fs::read(path).expect("Cannot read torrent file");
+        Self::from_bencode(&data)
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -189,7 +213,8 @@ impl FromBencode for Torrent {
                     info_hash_urlencoded = percent_encoding::percent_encode(
                         &info2.hash,
                         crate::announcer::tracker::URL_ENCODE_RESERVED,
-                    ).to_string();
+                    )
+                    .to_string();
                     valid_info = true;
                 }
                 (b"announce", value) => {
@@ -232,7 +257,7 @@ impl FromBencode for Torrent {
             encoding,
             length: total_size,
             name,
-            info_hash_urlencoded: info_hash_urlencoded,
+            info_hash_urlencoded,
             last_announce: std::time::Instant::now(),
             private,
             downloaded: total_size,
@@ -243,6 +268,8 @@ impl FromBencode for Torrent {
             next_download_speed: 0,
             interval: 4_294_967_295,
             error_count: 0,
+            min_interval: None,
+            tracker_id: None,
         })
     }
 }
@@ -252,15 +279,15 @@ impl FromBencode for Info {
     where
         Self: Sized,
     {
-        let mut name = None;
-        let mut files = None;
+        let mut name: Option<String> = None;
+        let mut files: Option<Vec<File>> = None;
 
-        let mut length = None;
-        let mut md5sum = None;
+        let mut length: Option<u64> = None;
+        let mut md5sum: Option<String> = None;
         let mut private = false;
 
-        let mut piece_length = None;
-        let mut pieces_raw = None;
+        let mut piece_length: Option<u32> = None;
+        let mut pieces_raw: Option<Vec<u8>> = None;
 
         let mut dict = object.try_into_dictionary()?;
         while let Some(pair) = dict.next_pair()? {
@@ -268,7 +295,13 @@ impl FromBencode for Info {
                 (b"piece length", value) => piece_length = Some(u32::decode_bencode_object(value)?),
                 (b"pieces", value) => pieces_raw = Some(value.try_into_bytes()?.to_vec()),
                 (b"name", value) => name = Some(String::decode_bencode_object(value)?),
-                (b"files", value) => files = Some(Vec::decode_bencode_object(value)?),
+                (b"files", value) => {
+                    files = Some(Vec::decode_bencode_object(value)?);
+                    // files = Some(value.list_or_else(|obj| {
+                    //     // obj.try_into_bytes()?
+                    //     Vec::with_capacity(0)
+                    // }));
+                }
                 (b"length", value) => length = Some(u64::decode_bencode_object(value)?),
                 (b"md5sum", value) => md5sum = Some(String::decode_bencode_object(value)?),
                 (b"private", value) => {
@@ -321,6 +354,7 @@ impl FromBencode for Info {
                     md5sum,
                     path: PathBuf::from(name.clone()),
                 }],
+                // files: Vec::with_capacity(0),
                 hash,
                 piece_length: pl,
                 pieces,
@@ -344,18 +378,19 @@ impl FromBencode for File {
             match pair {
                 (b"length", value) => length = Some(u64::decode_bencode_object(value)?),
                 (b"md5sum", value) => md5sum = Some(String::decode_bencode_object(value)?),
-                (b"path", value) => {
-                    path = Vec::decode_bencode_object(value)?
-                        .into_iter()
-                        .map(|bytes| String::from_utf8(bytes).unwrap())
-                        .collect()
-                }
+                // FIXME:
+                // (b"path", value) => {debug!("File");
+                //     path = Vec::decode_bencode_object(value)?
+                //         .into_iter()
+                //         .map(|bytes| String::from_utf8(bytes).unwrap())
+                //         .collect()
+                // }
                 _ => {}
             }
         }
 
         let length = length.expect("Decoding Error: File missing length");
-        debug!("\t{:?} {length}  {}", md5sum, path.display());
+        // debug!("\t{:?} {length}  {}", md5sum, path.display());
 
         Ok(Self {
             length,
@@ -363,11 +398,6 @@ impl FromBencode for File {
             path,
         })
     }
-}
-
-pub fn from_file(path: PathBuf) -> Result<Torrent, bendy::decoding::Error> {
-    let data = std::fs::read(path).expect("Cannot read torrent file");
-    Torrent::from_bencode(&data)
 }
 
 // TODO: test tracker response "with d8:completei0e10:downloadedi0e10:incompletei1e8:intervali1922e12:min intervali961e5:peers6:<3A><><EFBFBD>m<EFBFBD><6D>e"
@@ -384,7 +414,6 @@ mod tests {
             downloaded: 262144,
             uploaded: 0,
             last_announce: std::time::Instant::now(),
-            info_hash: String::from("01234567"),
             info_hash_urlencoded: String::from("01234567"),
             seeders: 0,
             leechers: 1,
@@ -393,6 +422,9 @@ mod tests {
             interval: 1800,
             urls: Vec::with_capacity(0),
             error_count: 0,
+            encoding: None,
+            min_interval: None,
+            tracker_id: None,
         };
         assert!(!t.can_download());
         assert!(!t.can_upload());
@@ -418,7 +450,6 @@ mod tests {
             downloaded: 262144,
             uploaded: 0,
             last_announce: std::time::Instant::now(),
-            info_hash: String::from("01234567"),
             info_hash_urlencoded: String::from("01234567"),
             seeders: 4,
             leechers: 16,
@@ -427,6 +458,9 @@ mod tests {
             interval: 1800,
             urls: Vec::with_capacity(0),
             error_count: 0,
+            encoding: None,
+            min_interval: None,
+            tracker_id: None,
         };
         let speed = t.downloaded(16, 64);
         assert!(speed > 0);

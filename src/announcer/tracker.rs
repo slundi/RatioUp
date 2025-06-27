@@ -3,11 +3,12 @@
 
 use std::io::Read;
 
+use crate::torrent::{self, Torrent};
+use crate::{CLIENT, TORRENTS};
+use bendy::decoding::{Decoder, FromBencode};
 use fake_torrent_client::Client;
 use serde::Deserialize;
 use tracing::{debug, error, info, warn};
-use crate::torrent::Torrent;
-use crate::{CLIENT, TORRENTS};
 
 pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
     .remove(b'-')
@@ -44,36 +45,6 @@ pub enum Event {
     Completed,
     /// Must be sent to tracker if the client is shutting down gracefully.
     Stopped,
-}
-
-/// The tracker responds with "text/plain" document consisting of a bencoded dictionary
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct FailureTrackerResponse {
-    /// If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
-    #[serde(rename = "failure reason")]
-    pub reason: String,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
-pub struct OkTrackerResponse {
-    /// (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
-    #[serde(default, rename = "warning message")]
-    pub warning_message: Option<String>,
-    /// Interval in seconds that the client should wait between sending regular requests to the tracker
-    pub interval: i64,
-    /// (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
-    #[serde(default, rename = "min interval")]
-    pub min_interval: Option<i64>,
-    /// A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
-    pub tracker_id: Option<String>,
-    /// number of peers with the entire file, i.e. seeders
-    pub complete: i64,
-    /// number of non-seeder peers, aka "leechers"
-    pub incomplete: i64,
-    /// (dictionary model) The value is a list of dictionaries, each with the following keys.
-    /// peers: (binary model) Instead of using the dictionary model described above, the peers value may be a string consisting of multiples of 6 bytes. First 4 bytes are the IP address and last 2 bytes are the port number. All in network (big endian) notation.
-    #[serde(default, skip_deserializing)]
-    peers: Option<u8>,
 }
 
 pub fn announce_started() -> u64 {
@@ -148,12 +119,7 @@ pub fn check_and_announce() {
     }
 }
 
-fn announce_http(
-    url: &str,
-    torrent: &mut Torrent,
-    client: &Client,
-    event: Option<Event>,
-) -> u64 {
+fn announce_http(url: &str, torrent: &mut Torrent, client: &Client, event: Option<Event>) -> u64 {
     // announce parameters are built up in the query string, see:
     // https://www.bittorrent.org/beps/bep_0003.html trackers section
     // let mut query = vec![
@@ -235,23 +201,51 @@ fn announce_http(
                 "Tracker response: {:?}",
                 String::from_utf8_lossy(&bytes.clone())
             );
-            match bendy::serde::from_bytes::<OkTrackerResponse>(&bytes.clone()) {
-                Ok(tr) => {
-                    torrent.seeders = u16::try_from(tr.complete).unwrap();
-                    torrent.leechers = u16::try_from(tr.incomplete).unwrap();
-                    torrent.interval = u64::try_from(tr.interval).unwrap();
-                    info!(
-                        "\tSeeders: {}\tLeechers: {}\t\t\tInterval: {:?}s",
-                        tr.incomplete, tr.complete, tr.interval
-                    );
-                    torrent.last_announce = std::time::Instant::now();
-                }
-                Err(e1) => {
-                    match bendy::serde::from_bytes::<FailureTrackerResponse>(&bytes.clone()) {
-                        Ok(tr) => warn!("Cannot announce: {}", tr.reason),
-                        Err(e2) => {
-                            error!("Cannot process tracker response: {:?}, {:?}", e1, e2)
+            let mut decoder = Decoder::new(&bytes).with_max_depth(2);
+            if let Some(raw) = decoder.next_object().expect("Wrong object") {
+                let mut dict = raw
+                    .try_into_dictionary()
+                    .expect("Unable to create dictionnary");
+                while let Some(pair) = dict.next_pair().expect("Cannot get pair") {
+                    match pair {
+                        // If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
+                        (b"failure reason", value) => {
+                            error!(
+                                "Cannot announce: {:?}",
+                                String::decode_bencode_object(value)
+                            );
+                            break;
                         }
+                        // (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
+                        (b"warning message", value) => {
+                            warn!(
+                                "Announce with warning: {:?}",
+                                String::decode_bencode_object(value)
+                            );
+                        }
+                        // Interval in seconds that the client should wait between sending regular requests to the tracker
+                        (b"interval", value) => {
+                            torrent.interval = u64::decode_bencode_object(value).unwrap()
+                        }
+                        // (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
+                        (b"min interval", value) => {
+                            torrent.min_interval = Some(u64::decode_bencode_object(value).unwrap())
+                        }
+                        // A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
+                        (b"tracker id", value) => {
+                            torrent.tracker_id = Some(String::decode_bencode_object(value).unwrap())
+                        }
+                        // number of peers with the entire file, i.e. seeders (integer)
+                        (b"complete", value) => {
+                            torrent.seeders = u16::decode_bencode_object(value).unwrap()
+                        }
+                        // number of non-seeder peers, aka "leechers" (integer)
+                        (b"incomplete", value) => {
+                            torrent.leechers = u16::decode_bencode_object(value).unwrap()
+                        }
+                        // peers not used
+                        // (b"peers", value) => {}
+                        _ => (),
                     }
                 }
             }
@@ -271,23 +265,23 @@ fn announce_http(
     //     .await?;
     // let resp = serde_bencode::from_bytes(&resp)?;
     // Ok(resp)
+    if let Some(min) = torrent.min_interval {
+        if min > torrent.interval {
+            return min;
+        }
+    }
     torrent.interval
 }
 
 /// Build the HTTP announce URLs for the listed trackers in the torrent file.
 /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
-pub fn build_url(
-    url: &str,
-    torrent: &mut Torrent,
-    event: Option<Event>,
-    key: String,
-) -> String {
+pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: String) -> String {
     info!("Torrent {:?}: {}", event, torrent.name);
     //compute downloads and uploads
     let elapsed: u64 = if event == Some(Event::Started) {
         0
     } else {
-        torrent.last_announce.elapsed().as_secs() as u64
+        torrent.last_announce.elapsed().as_secs()
     };
     let uploaded: u64 = torrent.next_upload_speed as u64 * elapsed;
     let mut downloaded: u64 = torrent.next_download_speed as u64 * elapsed;

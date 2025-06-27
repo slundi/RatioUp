@@ -1,8 +1,8 @@
 use std::{fs, path::Path};
 
-use tracing::error;
-use serde::Serialize;
 use crate::{STARTED, TORRENTS, torrent::Torrent};
+use serde::Serialize;
+use tracing::error;
 
 #[derive(Serialize, PartialEq, Debug)]
 struct Output {
@@ -105,7 +105,6 @@ mod tests {
             urls: vec!["https://localhost:7777/announce".to_string()],
             length: 123456,
             private: true,
-            info_hash: "infohash".to_owned(),
             downloaded: 123456,
             uploaded: 654321,
             last_announce: std::time::Instant::now(),
@@ -116,6 +115,9 @@ mod tests {
             next_download_speed: 0,
             interval: 1800,
             error_count: 0,
+            encoding: None,
+            min_interval: None,
+            tracker_id: None,
         });
         assert_eq!(
             serde_json::to_string(&data).unwrap(),
