@@ -8,6 +8,7 @@ use crate::{CLIENT, TORRENTS};
 use bendy::decoding::{Decoder, FromBencode};
 use fake_torrent_client::Client;
 use tracing::{debug, error, info, warn};
+use url::{Host, Url};
 
 pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
     .remove(b'-')
@@ -69,6 +70,51 @@ pub fn announce_stopped() {
     }
 }
 
+/// Check if the TLD is a ".local" or if the URL scheme is not `udp` but `http` or `https`.
+pub fn is_supprted_url(url_str: &str) -> bool {
+    let parsed_url = match Url::parse(url_str) {
+        Ok(url) => url,
+        Err(e) => {
+            error!("Unable to parse URL: {url_str} {e}");
+            return false;
+        }
+    };
+
+    let scheme = parsed_url.scheme().to_ascii_lowercase();
+    if scheme != "http" && scheme != "https" {
+        warn!("Skipping non HTTP/HTTPS tracker: {url_str}");
+        return false;
+    }
+
+    let host = match parsed_url.host() {
+        Some(h) => h,
+        None => {
+            error!("No host in tracker URL: {url_str}");
+            return false;
+        }
+    };
+
+    match host {
+        Host::Domain(domain_str) => {
+            // For “.local”, a simple split is sufficient, as “.local” is not a “public” TLD managed by the public
+            // suffix list, but a pseudo-TLD for mDNS.
+            let parts: Vec<&str> = domain_str.split('.').collect();
+            if let Some(tld_candidate) = parts.last() {
+                *tld_candidate != "local"
+            } else {
+                // no dot in domain, ex: "localhost" or just "myserver"
+                warn!("Skipping, no dot in domain: {url_str}");
+                false
+            }
+        }
+        // Check the host is not an IP but a domain
+        Host::Ipv4(_) | Host::Ipv6(_) => {
+            error!("Tracker is not a domain but an IP: {url_str}");
+            true
+        }
+    }
+}
+
 /// Sends an announce request to the tracker with the specified parameters.
 ///
 /// This may be used by a torrent to request peers to download from and to
@@ -89,9 +135,9 @@ pub fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
             if url.to_lowercase().starts_with("udp://") {
                 warn!("UDP tracker not supported (yet): cannot announce");
                 // interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
-            } else {
-                interval = announce_http(&url, torrent, client, event);
+                continue;
             }
+            interval = interval.max(announce_http(&url, torrent, client, event));
         }
         info!(
             "Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}",

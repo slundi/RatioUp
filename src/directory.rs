@@ -32,15 +32,18 @@ pub async fn load_torrents(directory: PathBuf) -> u16 {
                         info!("Found torrent {}", path.display());
                         // info!("Found torrent {} {:?}", path.display(), torrent);
                         // TODO: dedup, ignore UDP
-                        if added_hashes.contains(&torrent.info_hash_urlencoded)
-                        {
+                        if torrent.urls.is_empty() {
+                            warn!(
+                                "Skipping torrent because there is no URL (DHT or not supported URLs)"
+                            );
+                            continue;
+                        }
+                        if added_hashes.contains(&torrent.info_hash_urlencoded) {
                             warn!("A torrent with the same hash is already added");
                         } else {
                             added_hashes.push(torrent.info_hash_urlencoded.clone());
-                            if torrent.has_supported_trackers() {
-                                list.push(Mutex::new(torrent));
-                                count += 1;
-                            }
+                            list.push(Mutex::new(torrent));
+                            count += 1;
                         }
                     }
                     Err(e) => error!("Cannot add torrent {}: {e}", path.display()),

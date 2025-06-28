@@ -5,7 +5,9 @@ use serde::Serialize;
 use sha1::{Digest, Sha1};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use tracing::{error, warn};
+use tracing::error;
+
+use crate::announcer::tracker::is_supprted_url;
 
 type BendyResult<T> = Result<T, bendy::decoding::Error>;
 
@@ -136,19 +138,6 @@ impl Torrent {
     //     debug!("Torrent: {:?}", t);
     //     t
     // }
-
-    /// Check if there is only UDP URL in the announce list
-    pub fn has_supported_trackers(&self) -> bool {
-        for url in self.urls.iter() {
-            if url.to_lowercase().starts_with("http://")
-                || url.to_lowercase().starts_with("https://")
-            {
-                return true;
-            }
-        }
-        warn!("UDP tracker not supported (yet): skipping torrent");
-        false
-    }
 
     pub fn from_file(path: PathBuf) -> Result<Self, bendy::decoding::Error> {
         let data = std::fs::read(path).expect("Cannot read torrent file");
@@ -281,10 +270,16 @@ impl FromBencode for Torrent {
             error!("Decoding Error: Missing info dictionary");
             std::process::exit(1);
         }
-        let announce_list = announce_list.into_iter().collect();
+        let mut urls: Vec<String> = Vec::with_capacity(announce_list.len());
+        // TODO: skip UDP and local URLs
+        for url in announce_list.into_iter() {
+            if is_supprted_url(&url) {
+                urls.push(url);
+            }
+        }
 
         Ok(Self {
-            urls: announce_list,
+            urls,
             // creation_date,
             // comment,
             // created_by,
