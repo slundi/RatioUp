@@ -3,10 +3,10 @@ name: Rust CI
 on:
   push:
     branches:
-      - main # Or your default branch like 'master', 'develop'
+      - master
   pull_request:
     branches:
-      - main # Or your default branch
+      - master
 
 jobs:
   test:

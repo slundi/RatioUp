@@ -1,0 +1,31 @@
+name: Dependency Security Audit
+
+on:
+  schedule:
+    - cron: '22 0 * * *'
+  workflow_dispatch: # allow to run manually
+  pull_request: # Optionnal, can be heavy if a lot of PR
+    branches:
+      - main
+      - master
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: cargo audit
+        # env:
+        #   # Optionnal API key for `cargo audit` (non obligatoire)
+        #   # RUSTSEC_GHSA_API_KEY: ${{ secrets.RUSTSEC_GHSA_API_KEY }}
