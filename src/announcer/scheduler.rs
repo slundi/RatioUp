@@ -7,11 +7,13 @@ pub async fn run(wait_time: u64) {
     info!("Starting scheduler");
     let mut next_interval = wait_time;
     loop {
-        let list = TORRENTS.read().expect("Cannot get torrent list");
-        for m in list.iter() {
-            let mut t = m.lock().unwrap();
-            if t.shound_announce() {
-                next_interval = u64::min(next_interval, super::tracker::announce(&mut t, None));
+        {
+            let list = TORRENTS.read().expect("Cannot get torrent list");
+            for m in list.iter() {
+                let mut t = m.lock().unwrap();
+                if t.shound_announce() {
+                    next_interval = u64::min(next_interval, super::tracker::announce(&mut t, None));
+                }
             }
         }
         debug!("Next announce in {}s", next_interval);

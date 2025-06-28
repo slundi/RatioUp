@@ -3,11 +3,10 @@
 
 use std::io::Read;
 
-use crate::torrent::{self, Torrent};
+use crate::torrent::Torrent;
 use crate::{CLIENT, TORRENTS};
 use bendy::decoding::{Decoder, FromBencode};
 use fake_torrent_client::Client;
-use serde::Deserialize;
 use tracing::{debug, error, info, warn};
 
 pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC

@@ -1,23 +1,7 @@
 use std::{fs, path::Path};
 
-use crate::{STARTED, TORRENTS, torrent::Torrent};
-use serde::Serialize;
+use crate::{STARTED, TORRENTS};
 use tracing::error;
-
-#[derive(Serialize, PartialEq, Debug)]
-struct Output {
-    pub started: chrono::DateTime<chrono::Utc>,
-    pub torrents: Vec<Torrent>,
-}
-
-impl Default for Output {
-    fn default() -> Self {
-        Self {
-            started: chrono::offset::Utc::now(),
-            torrents: Vec::new(),
-        }
-    }
-}
 
 /// Check if the given output file is writable.
 pub fn writable(path: &str) -> bool {
@@ -39,19 +23,22 @@ pub fn writable(path: &str) -> bool {
 pub async fn write() {
     let config = crate::CONFIG.get().unwrap();
     if let Some(path) = config.output_stats.clone() {
+        let mut data = String::with_capacity(4096);
+
         // fill data in struct
         let started = *STARTED.get().unwrap();
-        let torrents = TORRENTS.read().expect("Cannot get torrent list");
-        let mut data = Output {
-            started,
-            torrents: Vec::with_capacity(torrents.len()),
-        };
-        for m in torrents.iter() {
-            data.torrents.push(m.lock().unwrap().clone());
+        data.push_str("{\"started\":\"");
+        data.push_str(&started.to_rfc3339());
+
+        data.push_str("\", \"torrents\": [\n");
+        {
+            let torrents = TORRENTS.read().expect("Cannot get torrent list");
+            for m in torrents.iter() {
+                data.push_str(&m.lock().unwrap().to_json());
+            }
         }
-        // write content
-        let content = serde_json::to_string(&data).unwrap();
-        if let Err(e) = tokio::fs::write(path, content.as_bytes()).await {
+        data.push_str("]}");
+        if let Err(e) = tokio::fs::write(path, data.as_bytes()).await {
             error!("Cannot write stat file: {e}");
         }
     }
@@ -59,10 +46,7 @@ pub async fn write() {
 
 #[cfg(test)]
 mod tests {
-    use crate::{json_output::writable, torrent::Torrent};
-
-    use super::Output;
-
+    use crate::json_output::writable;
     #[test]
     fn test_writable() {
         assert!(writable("/dev/null"));
@@ -81,50 +65,5 @@ mod tests {
 
         // case when folder does not exists
         assert!(!writable("/aze/rty/uio/pqs/ratioup.json"));
-    }
-
-    #[test]
-    fn test_serialized_output() {
-        let now = chrono::offset::Utc::now();
-        let mut data = Output {
-            started: now,
-            torrents: Vec::with_capacity(1),
-        };
-        // case 1: no torrent
-        assert_eq!(
-            serde_json::to_string(&data).unwrap(),
-            format!(
-                "{{\"started\":\"{}\",\"torrents\":[]}}",
-                now.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
-            )
-        );
-
-        // case 2: with one torrent
-        data.torrents.push(Torrent {
-            name: "Test".to_owned(),
-            urls: vec!["https://localhost:7777/announce".to_string()],
-            length: 123456,
-            private: true,
-            downloaded: 123456,
-            uploaded: 654321,
-            last_announce: std::time::Instant::now(),
-            info_hash_urlencoded: "hash".to_owned(),
-            seeders: 1,
-            leechers: 2,
-            next_upload_speed: 6789,
-            next_download_speed: 0,
-            interval: 1800,
-            error_count: 0,
-            encoding: None,
-            min_interval: None,
-            tracker_id: None,
-        });
-        assert_eq!(
-            serde_json::to_string(&data).unwrap(),
-            format!(
-                "{{\"started\":\"{}\",\"torrents\":[{{\"name\":\"Test\",\"urls\":[\"https://localhost:7777/announce\"],\"length\":123456,\"private\":true,\"info_hash\":\"infohash\",\"downloaded\":123456,\"uploaded\":654321,\"seeders\":1,\"leechers\":2,\"next_upload_speed\":6789,\"next_download_speed\":0}}]}}",
-                now.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
-            )
-        );
     }
 }

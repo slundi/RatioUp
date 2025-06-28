@@ -154,6 +154,40 @@ impl Torrent {
         let data = std::fs::read(path).expect("Cannot read torrent file");
         Self::from_bencode(&data)
     }
+
+    pub fn to_json(&self) -> String {
+        let mut result = String::with_capacity(256);
+        result.push_str("\t{\"name\": \"");
+        result.push_str(&self.name.replace("\"", "\\\""));
+        result.push_str("\", \"length\": ");
+        result.push_str(&self.length.to_string());
+        result.push_str(", \"private\": ");
+        result.push_str(&self.private.to_string());
+        result.push_str(", \"downloaded\": ");
+        result.push_str(&self.downloaded.to_string());
+        result.push_str(", \"uploaded\": ");
+        result.push_str(&self.uploaded.to_string());
+        result.push_str(", \"seeders\": ");
+        result.push_str(&self.seeders.to_string());
+        result.push_str(", \"leechers\": ");
+        result.push_str(&self.leechers.to_string());
+        result.push_str(", \"next_upload_speed\": ");
+        result.push_str(&self.next_upload_speed.to_string());
+        result.push_str(", \"next_download_speed\": ");
+        result.push_str(&self.next_download_speed.to_string());
+        result.push_str(", \"urls\": [");
+        let count = self.urls.len();
+        for (index, url) in self.urls.iter().enumerate() {
+            result.push_str(&format!("\"{url}\""));
+            if (index + 1) < count {
+                result.push_str(", ");
+            } else {
+                result.push_str("]}\n");
+            }
+        }
+        // TODO: add info hash?
+        result
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
