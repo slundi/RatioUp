@@ -40,9 +40,9 @@ pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::
 pub enum Event {
     /// The first request to tracker must include this value.
     Started,
-    /// Must be sent to the tracker when the client becomes a seeder. Must not be
-    /// present if the client started as a seeder.
-    Completed,
+    // /// Must be sent to the tracker when the client becomes a seeder. Must not be
+    // /// present if the client started as a seeder.
+    // Completed,
     /// Must be sent to tracker if the client is shutting down gracefully.
     Stopped,
 }
@@ -360,7 +360,7 @@ pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: St
             match event {
                 Some(e) => match e {
                     Event::Started => "started",
-                    Event::Completed => "completed",
+                    // Event::Completed => "completed",
                     Event::Stopped => "stopped",
                 },
                 None => "",
