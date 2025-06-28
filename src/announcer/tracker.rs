@@ -151,16 +151,16 @@ pub fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
     interval
 }
 
-/// Check which torrents need to be announced and call the announce fuction when applicable
-pub fn check_and_announce() {
-    let list = TORRENTS.read().expect("Cannot get torrent list");
-    for m in list.iter() {
-        let mut t = m.lock().unwrap();
-        if t.shound_announce() {
-            announce(&mut t, None);
-        }
-    }
-}
+// /// Check which torrents need to be announced and call the announce fuction when applicable
+// pub fn check_and_announce() {
+//     let list = TORRENTS.read().expect("Cannot get torrent list");
+//     for m in list.iter() {
+//         let mut t = m.lock().unwrap();
+//         if t.shound_announce() {
+//             announce(&mut t, None);
+//         }
+//     }
+// }
 
 fn announce_http(url: &str, torrent: &mut Torrent, client: &Client, event: Option<Event>) -> u64 {
     // announce parameters are built up in the query string, see:
