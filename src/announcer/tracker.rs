@@ -16,24 +16,22 @@ pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::
     .remove(b'~')
     .remove(b'.');
 
-// enum ErrorCode {
-//     /// Client request was not a HTTP GET
-//     InvalidRequestType = 100,
-//     MissingInfosash = 101,
-//     MissingPeerId = 102,
-//     MissingPort = 103,
-//     /// infohash is not 20 bytes long.
-//     InvalidInfohash = 150,
-//     /// peerid is not 20 bytes long
-//     InvalidPeerId = 151,
-//     /// Client requested more peers than allowed by tracker
-//     InvalidNumwant = 152,
-//     /// info_hash not found in the database. Sent only by trackers that do not automatically include new hashes into the database.
-//     InfohashNotFound = 200,
-//     /// Client sent an eventless request before the specified time.
-//     ClientSentEventlessRequest = 500,
-//     GenericError = 900,
-// }
+pub fn print_request_error(code: u16) {
+    match code {
+        100 => error!("100 Invalid request, not a GET"),
+        101 => error!("101 Info hash is missing"),
+        102 => error!("102 Peer ID is missing"),
+        103 => error!("103 Port is missing"),
+        150 => error!("150 Info hash is not 20 bytes long"),
+        151 => error!("151 Invalid peer ID"),
+        152 => error!("152 Invalid numwant: requested more peers than allowed by tracker"),
+        // Sent only by trackers that do not automatically include new hashes into the database.
+        200 => error!("200 info_hash not found in the database"),
+        500 => error!("500 Client sent an eventless request before the specified time"),
+        900 => error!("500 Generic error"),
+        _ => error!("Unknown error code: {code}"),
+    }
+}
 
 /// The optional announce event.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -230,7 +228,7 @@ fn announce_http(url: &str, torrent: &mut Torrent, client: &Client, event: Optio
         .fold(req, |req, header| req.set(&header.0, &header.1));
     match req.call() {
         Ok(resp) => {
-            let code = resp.status();
+            print_request_error(resp.status());
             info!(
                 "\tTime since last announce: {}s \t interval: {}",
                 torrent.last_announce.elapsed().as_secs(),
