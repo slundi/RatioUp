@@ -400,7 +400,7 @@ impl FromBencode for File {
     {
         let mut length = None;
         let mut md5sum = None;
-        let mut path = PathBuf::new();
+        // let mut path = PathBuf::new();
 
         let mut dict = object.try_into_dictionary()?;
         while let Some(pair) = dict.next_pair()? {
@@ -424,7 +424,7 @@ impl FromBencode for File {
         Ok(Self {
             length,
             md5sum,
-            path,
+            path: PathBuf::new(),
         })
     }
 }
