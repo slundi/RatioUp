@@ -368,5 +368,16 @@ pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: St
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
+    use super::*;
+
+    #[test]
+    pub fn test_supported_url() {
+        assert!(!is_supprted_url("udp://something/?param=test"));
+        assert!(is_supprted_url("http://localhost/?param=test"));
+        assert!(is_supprted_url("https://localhost/?param=test"));
+        assert!(is_supprted_url("http://another-host/?param=test"));
+        assert!(!is_supprted_url("udp://udp-host.tld/?param=test"));
+        assert!(is_supprted_url("http://some-host.tld/?param=test"));
+        assert!(is_supprted_url("https://some-host.tld/?param=test"));
+    }
 }
