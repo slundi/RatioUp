@@ -138,10 +138,9 @@ pub fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
             interval = interval.max(announce_http(&url, torrent, client, event));
         }
         info!(
-            "Anounced: interval={}, event={:?}, downloaded={}, uploaded={}, seeders={}, leechers={}, torrent={}",
+            "Anounced: interval={}, event={:?}, downloaded=0, uploaded={}, seeders={}, leechers={}, torrent={}",
             torrent.interval,
             event,
-            torrent.downloaded,
             torrent.uploaded,
             torrent.seeders,
             torrent.leechers,
@@ -327,11 +326,6 @@ pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: St
         torrent.last_announce.elapsed().as_secs()
     };
     let uploaded: u64 = torrent.next_upload_speed as u64 * elapsed;
-    let mut downloaded: u64 = torrent.next_download_speed as u64 * elapsed;
-    if torrent.length <= torrent.downloaded + downloaded {
-        downloaded = torrent.length - torrent.downloaded;
-    } //do not download more thant the torrent size
-    torrent.downloaded += downloaded;
 
     //build URL list
     let client = (*CLIENT.read().expect("Cannot read client"))
@@ -344,15 +338,12 @@ pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: St
         .replace("{infohash}", &torrent.info_hash_urlencoded)
         .replace("{key}", &key)
         .replace("{uploaded}", uploaded.to_string().as_str())
-        .replace("{downloaded}", downloaded.to_string().as_str())
+        .replace("{downloaded}", "0")
         .replace("{peerid}", &client.peer_id)
         .replace("{port}", &crate::CONFIG.get().unwrap().port.to_string())
         .replace("{numwant}", &client.num_want.to_string())
         .replace("ipv6={ipv6}", "")
-        .replace(
-            "{left}",
-            (torrent.length - torrent.downloaded).to_string().as_str(),
-        )
+        .replace("{left}", "0")
         .replace(
             "{event}",
             match event {
@@ -365,11 +356,7 @@ pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: St
             },
         );
     info!(
-        "\tDownloaded: {} \t Uploaded: {}",
-        byte_unit::Byte::from_u128(downloaded as u128)
-            .unwrap()
-            .get_appropriate_unit(byte_unit::UnitType::Decimal)
-            .to_string(),
+        "\tUploaded: {}",
         byte_unit::Byte::from_u128(uploaded as u128)
             .unwrap()
             .get_appropriate_unit(byte_unit::UnitType::Decimal)

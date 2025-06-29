@@ -61,8 +61,6 @@ use_pid_file = true
 # configure range of speed in bytes for each torrent
 min_upload_rate = 262144
 max_upload_rate = 23068672
-min_download_rate = 12582912
-max_download_rate = 38797312
 
 # Will load torrent from `XDG_CONFIG_DIR` by default but you can customize it.
 torrent_dir = "./torrents"
@@ -71,20 +69,13 @@ torrent_dir = "./torrents"
 output_stats = "/tmp/RatioUp.json"
 ```
 
-Download and upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes).
-To disable downloads, set `min_download_rate` and `max_download_rate` to 0.
+Upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes). It is only seeding, it does not fake the downloading first.
 
 ## Roadmap
 
-- [x] Log using `tracing`
-- [x] BREAKING CHANGE: use of XDG for the config file. It will no longer be loaded from a `.env`
 - [x] Change delay if different after announcing
-- [x] Torrent clients in a separated library
-- [x] Parse response instead of using REGEX
 - [ ] Display session upload (global & per torrent)
 - [x] Torrents with multiple trackers?
-- [x] Drop torrent files from the web UI
-- [x] BREAKING CHANGE: remove web UI
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
 - [ ] UDP announce URL support
 - [x] Allow to generate a static JSON file with runtime statistics (global and per torrent download & upload, some torrent information), ie: `OUTPUT=/var/www/ratioup.json`
