@@ -10,12 +10,6 @@ use fake_torrent_client::Client;
 use tracing::{debug, error, info, warn};
 use url::{Host, Url};
 
-pub const URL_ENCODE_RESERVED: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
-    .remove(b'-')
-    .remove(b'_')
-    .remove(b'~')
-    .remove(b'.');
-
 pub fn print_request_error(code: u16) {
     match code {
         100 => error!("100 Invalid request, not a GET"),
