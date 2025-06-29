@@ -116,7 +116,7 @@ async fn main() {
         // Create PID file
         pid_file = write_pid_file().await;
     }
-    let wait_time = announcer::tracker::announce_started();
+    let wait_time = announcer::tracker::announce_started().await;
 
     tokio::spawn(async move {
         // graceful exit when Ctrl + C / SIGINT

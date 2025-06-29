@@ -2,11 +2,15 @@
 // based on https://github.com/billyb2/cratetorrent/blob/master/cratetorrent/src/tracker.rs
 
 use std::io::Read;
+use std::net::SocketAddr;
+use std::time::Duration;
 
 use crate::torrent::Torrent;
 use crate::{CLIENT, CONFIG, TORRENTS};
 use bendy::decoding::{Decoder, FromBencode};
 use fake_torrent_client::Client;
+use tokio::net::UdpSocket;
+use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 use url::{Host, Url};
 
@@ -39,26 +43,26 @@ pub enum Event {
     Stopped,
 }
 
-pub fn announce_started() -> u64 {
+pub async fn announce_started() -> u64 {
     info!("Announcing torrent(s) with STARTED event");
     let list = TORRENTS.read().expect("Cannot get torrent list");
     let mut wait_time = u64::MAX;
     for m in list.iter() {
         let mut t = m.lock().unwrap();
-        t.interval = announce(&mut t, Some(Event::Started));
+        t.interval = announce(&mut t, Some(Event::Started)).await;
         wait_time = wait_time.min(t.interval);
         info!("Time: {}", wait_time);
     }
     wait_time
 }
 
-pub fn announce_stopped() {
+pub async fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
     info!("Announcing torrent(s) with STOPPED event");
     let list = TORRENTS.read().expect("Cannot get torrent list");
     for m in list.iter() {
         let mut t = m.lock().unwrap();
-        t.interval = announce(&mut t, Some(Event::Stopped));
+        t.interval = announce(&mut t, Some(Event::Stopped)).await;
     }
 }
 
@@ -71,12 +75,6 @@ pub fn is_supprted_url(url_str: &str) -> bool {
             return false;
         }
     };
-
-    let scheme = parsed_url.scheme().to_ascii_lowercase();
-    if scheme != "http" && scheme != "https" {
-        warn!("Skipping non HTTP/HTTPS tracker: {url_str}");
-        return false;
-    }
 
     let host = match parsed_url.host() {
         Some(h) => h,
@@ -116,7 +114,7 @@ pub fn is_supprted_url(url_str: &str) -> bool {
 ///
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
-pub fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
+pub async fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
     let mut interval = 4_294_967_295u64;
     // TODO: prepare announce (uploaded and downloaded if applicable)
     torrent.compute_speeds();
@@ -127,9 +125,10 @@ pub fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
             if url.to_lowercase().starts_with("udp://") {
                 warn!("UDP tracker not supported (yet): cannot announce");
                 // interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
-                continue;
+                interval = announce_udp(&url, torrent, client, event).await;
+            } else {
+                interval = interval.max(announce_http(&url, torrent, client, event));
             }
-            interval = interval.max(announce_http(&url, torrent, client, event));
         }
         info!(
             "Anounced: interval={}, event={:?}, downloaded=0, uploaded={}, seeders={}, leechers={}, torrent={}",
@@ -309,6 +308,91 @@ fn announce_http(url: &str, torrent: &mut Torrent, client: &Client, event: Optio
     torrent.interval
 }
 
+// Constants for BitTorrent UDP protocol
+const PROTOCOL_ID: u64 = 0x41727101980; // Magic constant
+const ACTION_CONNECT: u32 = 0;
+const ACTION_ANNOUNCE: u32 = 1;
+const ACTION_ERROR: u32 = 3;
+
+pub async fn announce_udp(
+    url: &str,
+    torrent: &mut Torrent,
+    client: &Client,
+    event: Option<Event>,
+) -> u64 {
+    let mut interval = u64::MAX;
+    if let Some((host, port)) = extract_host_port(url) {
+        if let Some((socket, addr)) = lookup_and_bind(&host, port, url).await {
+            get_transaction_id(&socket, &addr).await;
+        }
+    }
+    interval
+}
+
+fn extract_host_port(url: &str) -> Option<(String, u16)> {
+    match Url::parse(url) {
+        Ok(tracker_url) => {
+            let port = tracker_url.port().unwrap_or_else(|| {
+                warn!("Unable to get tracker port from {url}, using 80");
+                80
+            });
+            match tracker_url.clone().host_str() {
+                Some(host) => return Some((String::from(host), port)),
+                None => {
+                    error!("Unable to get host for the UDP tracker: {url}")
+                }
+            };
+        }
+        Err(e) => {
+            error!("Unable to parse UDP URL: {e}");
+        }
+    }
+    None
+}
+
+async fn lookup_and_bind(host: &str, port: u16, url: &str) -> Option<(UdpSocket, SocketAddr)> {
+    match tokio::net::lookup_host(format!("{}:{}", host, port)).await {
+        Ok(mut it) => match it.next() {
+            Some(addr) => match UdpSocket::bind("0.0.0.0:0").await {
+                Ok(socket) => return Some((socket, addr)),
+                Err(e) => error!("Unable to resolve UDP URL {url}: {:?}", e),
+            },
+            None => error!("Invalid UDP URL {url}"),
+        },
+        Err(e) => error!("{e}"),
+    }
+    None
+}
+
+async fn get_transaction_id(socket: &UdpSocket, addr: &SocketAddr) -> Option<()> {
+    let transaction_id_connect = fastrand::u32(0..u32::MAX);
+    let mut connect_request = Vec::with_capacity(16);
+    connect_request.extend_from_slice(&PROTOCOL_ID.to_be_bytes()); // connection_id
+    connect_request.extend_from_slice(&ACTION_CONNECT.to_be_bytes()); // action
+    connect_request.extend_from_slice(&transaction_id_connect.to_be_bytes()); // transaction_id
+    debug!("Sending connect request to {:?}", addr);
+    match socket.send_to(&connect_request, addr).await {
+        Ok(_) => {
+            let mut buf = vec![0u8; 1024]; // response buffer
+            match timeout(Duration::from_secs(15), socket.recv_from(&mut buf)).await {
+                Ok(resp) => match resp {
+                    Ok((len, _)) => {
+                        let response = &buf[..len];
+                        if response.len() < 16 {
+                            error!("Invalid response (too short)");
+                            return None;
+                        }
+                    }
+                    Err(e) => error!("{e}"),
+                },
+                Err(e) => error!("Elapsed connecting: {e}"),
+            }
+            return Some(socket);
+        }
+        Err(e) => error!("Cannot send connect request: {e}"),
+    }
+}
+
 /// Build the HTTP announce URLs for the listed trackers in the torrent file.
 /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
 pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: String) -> String {
@@ -378,8 +462,29 @@ mod tests {
         assert!(is_supprted_url("http://localhost/?param=test"));
         assert!(is_supprted_url("https://localhost/?param=test"));
         assert!(is_supprted_url("http://another-host/?param=test"));
-        assert!(!is_supprted_url("udp://udp-host.tld/?param=test"));
+        assert!(is_supprted_url("udp://udp-host.tld/?param=test"));
         assert!(is_supprted_url("http://some-host.tld/?param=test"));
         assert!(is_supprted_url("https://some-host.tld/?param=test"));
+    }
+
+    #[test]
+    pub fn test_extract_host_port() {
+        assert_eq!(extract_host_port("no URL"), None);
+        assert_eq!(
+            extract_host_port("udp://some-host.tld"),
+            Some((String::from("some-host.tld"), 80))
+        );
+        assert_eq!(
+            extract_host_port("udp://some-host.tld:22222"),
+            Some((String::from("some-host.tld"), 22222))
+        );
+        assert_eq!(
+            extract_host_port("udp://some-host:22222"),
+            Some((String::from("some-host"), 22222))
+        );
+        assert_eq!(
+            extract_host_port("udp://12.34.56.78:22222"),
+            Some((String::from("12.34.56.78"), 22222))
+        );
     }
 }
