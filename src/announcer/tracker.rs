@@ -4,7 +4,7 @@
 use std::io::Read;
 
 use crate::torrent::Torrent;
-use crate::{CLIENT, TORRENTS};
+use crate::{CLIENT, CONFIG, TORRENTS};
 use bendy::decoding::{Decoder, FromBencode};
 use fake_torrent_client::Client;
 use tracing::{debug, error, info, warn};
@@ -328,9 +328,17 @@ pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: St
     let uploaded: u64 = torrent.next_upload_speed as u64 * elapsed;
 
     //build URL list
-    let client = (*CLIENT.read().expect("Cannot read client"))
+    let client = (*CLIENT.read().expect("Cannot access client"))
         .clone()
         .unwrap();
+    let mut port = 55555u16;
+    let mut numwant = 80u16;
+    if let Some(config) = CONFIG.get() {
+        port = config.port;
+        if let Some(nw) = config.numwant {
+            numwant = nw;
+        }
+    }
     let mut result = String::from(url);
     result.push('?');
     result.push_str(&client.query);
@@ -340,8 +348,8 @@ pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: St
         .replace("{uploaded}", uploaded.to_string().as_str())
         .replace("{downloaded}", "0")
         .replace("{peerid}", &client.peer_id)
-        .replace("{port}", &crate::CONFIG.get().unwrap().port.to_string())
-        .replace("{numwant}", &client.num_want.to_string())
+        .replace("{port}", &port.to_string())
+        .replace("{numwant}", &numwant.to_string())
         .replace("ipv6={ipv6}", "")
         .replace("{left}", "0")
         .replace(
