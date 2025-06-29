@@ -357,13 +357,13 @@ pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: St
                 None => "",
             },
         );
-    info!(
-        "\tUploaded: {}",
-        byte_unit::Byte::from_u128(uploaded as u128)
-            .unwrap()
-            .get_appropriate_unit(byte_unit::UnitType::Decimal)
-            .to_string()
-    );
+    // info!(
+    //     "\tUploaded: {}",
+    //     byte_unit::Byte::from_u128(uploaded as u128)
+    //         .unwrap()
+    //         .get_appropriate_unit(byte_unit::UnitType::Decimal)
+    //         .to_string()
+    // );
     info!("\tAnnonce at: {}", url);
     result
 }
