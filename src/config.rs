@@ -1,19 +1,17 @@
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tracing::{error, info};
+use toml::Value;
+use tracing::{error, info, warn};
 
 // use crate::json_output;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// torrent port
-    #[serde(skip_serializing)]
     pub port: u16,
-    pub min_upload_rate: u32,   //in byte
-    pub max_upload_rate: u32,   //in byte
+    pub min_upload_rate: u32, //in byte
+    pub max_upload_rate: u32, //in byte
 
     pub use_pid_file: bool,
 
@@ -24,9 +22,7 @@ pub struct Config {
     // pub simultaneous_seed: u16, //useful ?
     pub client: String,
     /// Directory where torrents are saved. Default is in the working directory.
-    #[serde(skip_serializing)]
     pub torrent_dir: PathBuf,
-    #[serde(skip_serializing)]
     pub key_refresh_every: u16,
     /// Output file path for the JSON file.
     /// You may want somethink like `/var/www/ratio_up.json` to expose it on your web server.
@@ -57,19 +53,99 @@ impl Config {
         let mut config = Config::default();
         match result {
             Ok(content) => {
-                let toml: Result<Config, toml::de::Error> = toml::from_str(&content);
-                match toml {
-                    Ok(loaded_config) => {
-                        if loaded_config.is_ok() {
-                            info!("Configuration loaded successfully from file.");
-                            config = loaded_config;
+                let config_value: Value = match toml::from_str(&content) {
+                    Ok(val) => val,
+                    Err(e) => {
+                        error!("Cannot load config file: {e}");
+                        return config;
+                    }
+                };
+
+                let root_table = match config_value {
+                    Value::Table(table) => table,
+                    _ => {
+                        error!("Invalid type in config file");
+                        return config;
+                    }
+                };
+
+                if let Some(client) = root_table.get("client") {
+                    if let Some(client) = client.as_str() {
+                        config.client = String::from(client);
+                    } else {
+                        error!("Client is not a string");
+                    }
+                }
+
+                if let Some(port) = root_table.get("port") {
+                    if let Some(port) = port.as_integer() {
+                        if !(1..=65535).contains(&port) {
+                            error!("Invalid port");
                         } else {
-                            info!("Using default configuration");
+                            config.port = port as u16;
+                        }
+                    } else {
+                        error!("port is not an integer");
+                    }
+                };
+
+                if let Some(numwant) = root_table.get("numwant") {
+                    if let Some(numwant) = numwant.as_integer() {
+                        if !(1..=65535).contains(&numwant) {
+                            error!("Invalid numwant");
+                        } else {
+                            config.numwant = Some(numwant as u16);
+                        }
+                    } else {
+                        error!("numwant is not an integer");
+                    }
+                };
+
+                if let Some(pid) = root_table.get("use_pid_file") {
+                    if let Some(pid) = pid.as_bool() {
+                        config.use_pid_file = pid;
+                    } else {
+                        error!("use_pid_file is not an integer");
+                    }
+                    match bool::from_str(&pid.to_string()) {
+                        Ok(value) => config.use_pid_file = value,
+                        Err(e) => {
+                            error!("Invalid use_pid: {e}");
+                            return config;
                         }
                     }
-                    Err(e) => {
-                        error!("Could not parse TOML: {}", e);
-                        info!("Using default configuration");
+                }
+
+                if let Some(speed) = root_table.get("min_upload_rate") {
+                    if let Some(value) = speed.as_integer() {
+                        config.min_upload_rate = value as u32;
+                    } else {
+                        error!("Invalid min upload rate");
+                        return config;
+                    }
+                }
+                if let Some(speed) = root_table.get("max_upload_rate") {
+                    if let Some(value) = speed.as_integer() {
+                        config.max_upload_rate = value as u32;
+                    } else {
+                        error!("Invalid max upload rate");
+                        return config;
+                    }
+                }
+
+                if let Some(dir) = root_table.get("torrent_dir") {
+                    if let Some(dir) = dir.as_str() {
+                        config.torrent_dir = PathBuf::from(dir);
+                    } else {
+                        error!("Invalid torrent_dir");
+                    }
+                }
+
+                if let Some(value) = root_table.get("output_stats") {
+                    if let Some(path) = value.as_str() {
+                        config.output_stats = Some(PathBuf::from(path));
+                    } else {
+                        error!("Invalid output_stats");
                     }
                 }
             }
@@ -78,29 +154,37 @@ impl Config {
                 info!("Using default configuration");
             }
         };
+
+        if !config.speeds_ok() {
+            warn!(
+                "Min upload rate ({}) is greater than max upload rate ({}), switching values",
+                config.min_upload_rate, config.max_upload_rate
+            );
+            std::mem::swap(&mut config.min_upload_rate, &mut config.max_upload_rate);
+        }
+
         config
     }
 
-    /// Check if the config is OK and log error
-    fn is_ok(&self) -> bool {
-        if self.min_upload_rate > self.max_upload_rate {
-            error!(
-                "Min upload rate ({}) is greater than max upload rate ({})",
-                self.min_upload_rate, self.max_upload_rate
-            );
-            return false;
-        }
-        true
+    fn speeds_ok(&self) -> bool {
+        self.min_upload_rate <= self.max_upload_rate
     }
 }
 
 /// Init the client from the configuration and returns the interval to refresh client key if applicable
 pub fn init_client(config: &Config) -> Option<u16> {
     let mut client = fake_torrent_client::Client::default();
-    client.build(
-        fake_torrent_client::clients::ClientVersion::from_str(&config.client)
-            .expect("Wrong client"),
-    );
+    match fake_torrent_client::clients::ClientVersion::from_str(&config.client) {
+        Ok(selected) => {
+            client.build(selected);
+        }
+        Err(e) => {
+            error!(
+                "Client {} does not exist, using default one: {e}",
+                config.client
+            );
+        }
+    }
     info!(
         "Client {} (key: {}, peer ID:{})",
         client.name, client.key, client.peer_id
@@ -109,4 +193,23 @@ pub fn init_client(config: &Config) -> Option<u16> {
     let mut guard = crate::CLIENT.write().unwrap();
     *guard = Some(client);
     key_interval
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::Config;
+
+    #[test]
+    fn test_speed_ok() {
+        let mut cfg = Config::default();
+        assert!(cfg.speeds_ok());
+
+        cfg.min_upload_rate = 8192;
+        cfg.max_upload_rate = 8192;
+        assert!(cfg.speeds_ok());
+
+        cfg.min_upload_rate = 8192;
+        cfg.max_upload_rate = 4096;
+        assert!(!cfg.speeds_ok());
+    }
 }

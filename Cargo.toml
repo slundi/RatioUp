@@ -12,7 +12,6 @@ udp = ["dep:bytes", "dep:reqwest"]
 [dependencies]
 fastrand = "2.3"
 bytes = { version = "1.10.1", optional = true }
-serde = { version = "1.0.219", features = ["derive"] }
 chrono = { version = "0.4.41", features = ["serde"] }
 ureq = { version = "2", features = ["charset", "gzip"] }
 tokio = { version = "1.45", features = ["full"] }
