@@ -21,7 +21,6 @@ sanitize-filename = "0.6"
 byte-unit = "5"
 url = "2.5.4"
 reqwest = { version = "0.12", features = ["blocking", "rustls-tls", "gzip", "brotli", "deflate"], optional = true }
-percent-encoding = "2"
 fake-torrent-client = "0.9.9"
 
 xdg = "3.0"
