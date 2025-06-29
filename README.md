@@ -20,6 +20,11 @@ Because  I don't have much time to work on this project, I've decided to minimiz
 It will simply load torrents from a given path before "seeding". I'll generate a static webpage/JSON to display stats
 of the torrent files (the previous web UI was overkill).
 
+## Repositories
+
+* [Codeberg](https://codeberg.org/slundi/RatioUp/): up to date sources
+* [Github](https://github.com/slundi/RatioUp) (mirror): for community tickets, publishing releases, repo backup
+
 ## Installation
 
 ```shell
@@ -34,8 +39,6 @@ git clone https://github.com/slundi/RatioUp.git && cd RatioUp
 # Build the program for your arch
 cargo build --release
 ln -s target/release/RatioUp
-
-# Edit the .env file according to your needs (nano .env)
 
 # Run RatioUp everytime your machine reboot/startup
 echo "@reboot cd $(pwd) && $(pwd)/RatioUp" | crontab -
