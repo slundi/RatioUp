@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - release
+    tags: ["*"]
   # pull_request:
   #   branches:
   #     - main
@@ -41,7 +42,25 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          target: ${{ matrix.target }} # Installe la cible de compilation
+          target: ${{ matrix.target }}
+
+      - name: Install ARMv7 cross-compiler (arm-linux-gnueabihf)
+        # run if target is arm-unknown-linux-gnueabihf
+        if: matrix.target == 'arm-unknown-linux-gnueabihf'
+        run: |
+          sudo apt-get update
+          # `gcc-arm-linux-gnueabihf` fournit le compilateur spécifique
+          # Ou `crossbuild-essential-armhf` pour un ensemble plus complet d'outils
+          sudo apt-get install -y gcc-arm-linux-gnueabihf
+
+      - name: Install AArch64 cross-compiler (aarch64-linux-gnu)
+        # run if target is aarch64-unknown-linux-gnu
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          # `gcc-aarch64-linux-gnu` fournit le compilateur spécifique
+          # Ou `crossbuild-essential-arm64` pour un ensemble plus complet d'outils
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Build release binary for ${{ matrix.target }}
         run: cargo build --release --target ${{ matrix.target }}
@@ -54,3 +73,7 @@ jobs:
           path: target/${{ matrix.target }}/release/${{ github.event.repository.name }} # adapt path/name
           # For Windows, add .exe:
           # path: target/${{ matrix.target }}/release/${{ github.event.repository.name }}${{ startsWith(matrix.target, 'x86_64-pc-windows') && '.exe' || '' }}
+
+# https://docs.github.com/en/actions/how-tos/use-cases-and-examples/building-and-testing/building-and-testing-rust
+# https://rakhim.exotext.com/how-to-build-and-publish-multi-platform-rust-binaries
+# https://www.qovery.com/blog/how-to-make-rust-multi-arch-release-easy/
