@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use tracing::error;
 
 use crate::announcer::tracker::is_supprted_url;
+use crate::utils::percent_encoding;
 
 type BendyResult<T> = Result<T, bendy::decoding::Error>;
 
@@ -396,33 +397,6 @@ impl FromBencode for File {
     }
 }
 
-pub fn percent_encoding(input: &[u8]) -> String {
-    let mut encoded_string = String::new();
-    let hex_chars = [
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F',
-    ];
-
-    for &byte in input {
-        // Vérifie si l'octet est un caractère "unreserved" (RFC 3986)
-        if byte.is_ascii_digit()
-            || byte.is_ascii_lowercase()
-            || byte.is_ascii_uppercase()
-            || byte == b'.'
-            || byte == b'-'
-            || byte == b'_'
-            || byte == b'~'
-        {
-            encoded_string.push(byte as char); // add as char
-        } else {
-            // encode to %XX
-            encoded_string.push('%');
-            encoded_string.push(hex_chars[((byte >> 4) & 0xf) as usize]);
-            encoded_string.push(hex_chars[(byte & 0xf) as usize]);
-        }
-    }
-    encoded_string
-}
-
 // TODO: test tracker response "with d8:completei0e10:downloadedi0e10:incompletei1e8:intervali1922e12:min intervali961e5:peers6:<3A><><EFBFBD>m<EFBFBD><6D>e"
 #[cfg(test)]
 mod tests {
@@ -485,31 +459,4 @@ mod tests {
         let speed = t.uploaded(16, 64);
         assert!((16..=64).contains(&speed));
     }
-
-    #[test]
-    fn test_percent_encoding_example() {
-        let input =
-            b"\x12\x34\x56\x78\x9a\xbc\xde\xf1\x23\x45\x67\x89\xab\xcd\xef\x12\x34\x56\x78\x9a";
-        let expected = "%124Vx%9A%BC%DE%F1%23Eg%89%AB%CD%EF%124Vx%9A";
-
-        let result = percent_encoding(input);
-        assert_eq!(result, expected);
-
-        let input_unreserved = b"abc.DEF-012_~";
-        assert_eq!(percent_encoding(input_unreserved), "abc.DEF-012_~");
-
-        let input_reserved = b"Hello World! #@$%^&";
-        assert_eq!(
-            percent_encoding(input_reserved),
-            "Hello%20World%21%20%23%40%24%25%5E%26"
-        );
-
-        let input_non_ascii = "éàç".as_bytes(); // En UTF-8: [0xC3, 0xA9, 0xC3, 0xE0, 0xC3, 0xA7]
-        assert_eq!(percent_encoding(input_non_ascii), "%C3%A9%C3%A0%C3%A7");
-
-        let input_null = b"null\x00byte";
-        assert_eq!(percent_encoding(input_null), "null%00byte");
-    }
-
-    // [181, 7, 198, 150, 79, 250, 63, 170, 170, 26, 163, 172, 45, 66, 45, 57, 169, 201, 226, 70] => b507c6964ffa3faaaa1aa3ac2d422d39a9c9e246
 }
