@@ -89,17 +89,11 @@ async fn main() {
     };
 
     info!(
-        "Bandwidth: \u{2191} {} - {}    \u{2193} {} - {}",
+        "Upload bandwidth: \u{2191} {} - {}",
         Byte::from_u64(u64::from(config.min_upload_rate))
             .get_appropriate_unit(byte_unit::UnitType::Decimal)
             .to_string(),
         Byte::from_u64(u64::from(config.max_upload_rate))
-            .get_appropriate_unit(byte_unit::UnitType::Decimal)
-            .to_string(),
-        Byte::from_u64(u64::from(config.min_download_rate))
-            .get_appropriate_unit(byte_unit::UnitType::Decimal)
-            .to_string(),
-        Byte::from_u64(u64::from(config.max_download_rate))
             .get_appropriate_unit(byte_unit::UnitType::Decimal)
             .to_string(),
     );

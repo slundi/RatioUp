@@ -31,8 +31,6 @@ pub struct Torrent {
     pub length: u64,
     pub private: bool,
     // pub info_hash: String,
-    /// If we have to virtually download the torrent first, it is the downloaded size in bytes
-    pub downloaded: u64,
     /// Total of fake uploaded data since the start of RatioUp
     pub uploaded: u64,
     /// Last announce to the tracker
@@ -47,8 +45,6 @@ pub struct Torrent {
     pub leechers: u16,
     /// It is the next upload speed that will be announced. It is also used for UI display.
     pub next_upload_speed: u32,
-    /// It is the next download speed that will be announced. It allows to end a complete event earlier than the normal interval, It is also used for UI display.
-    pub next_download_speed: u32,
     /// Current interval after the last annouce
     #[serde(skip)]
     pub interval: u64,
@@ -77,20 +73,6 @@ impl Torrent {
         (self.seeders > 0 && self.leechers > 0) || self.leechers > 1
     }
 
-    /// Tells if we can download (need leechers or seeders)
-    pub fn can_download(&self) -> bool {
-        self.seeders > 0 || self.leechers > 1
-    }
-
-    pub fn downloaded(&mut self, min_speed: u32, available_speed: u32) -> u32 {
-        if self.can_download() {
-            self.next_download_speed = fastrand::u32(min_speed..available_speed);
-            self.next_download_speed
-        } else {
-            0
-        }
-    }
-
     pub fn uploaded(&mut self, min_speed: u32, available_speed: u32) -> u32 {
         if self.can_upload() && (0 < min_speed && min_speed <= available_speed) {
             self.next_upload_speed = fastrand::u32(min_speed..available_speed);
@@ -102,7 +84,6 @@ impl Torrent {
 
     pub fn compute_speeds(&mut self) {
         let config = crate::CONFIG.get().unwrap();
-        self.downloaded(config.min_download_rate, config.max_download_rate);
         self.uploaded(config.min_upload_rate, config.max_upload_rate);
     }
 
@@ -152,8 +133,6 @@ impl Torrent {
         result.push_str(&self.length.to_string());
         result.push_str(", \"private\": ");
         result.push_str(&self.private.to_string());
-        result.push_str(", \"downloaded\": ");
-        result.push_str(&self.downloaded.to_string());
         result.push_str(", \"uploaded\": ");
         result.push_str(&self.uploaded.to_string());
         result.push_str(", \"seeders\": ");
@@ -162,8 +141,6 @@ impl Torrent {
         result.push_str(&self.leechers.to_string());
         result.push_str(", \"next_upload_speed\": ");
         result.push_str(&self.next_upload_speed.to_string());
-        result.push_str(", \"next_download_speed\": ");
-        result.push_str(&self.next_download_speed.to_string());
         result.push_str(", \"urls\": [");
         let count = self.urls.len();
         for (index, url) in self.urls.iter().enumerate() {
@@ -289,12 +266,10 @@ impl FromBencode for Torrent {
             info_hash_urlencoded,
             last_announce: std::time::Instant::now(),
             private,
-            downloaded: total_size,
             uploaded: 0,
             seeders: 0,
             leechers: 0,
             next_upload_speed: 0,
-            next_download_speed: 0,
             interval: 4_294_967_295,
             error_count: 0,
             min_interval: None,
@@ -440,14 +415,12 @@ mod tests {
             name: String::from("Test torrent"),
             length: 262144,
             private: false,
-            downloaded: 262144,
             uploaded: 0,
             last_announce: std::time::Instant::now(),
             info_hash_urlencoded: String::from("01234567"),
             seeders: 0,
             leechers: 1,
             next_upload_speed: 0,
-            next_download_speed: 0,
             interval: 1800,
             urls: Vec::with_capacity(0),
             error_count: 0,
@@ -455,18 +428,14 @@ mod tests {
             min_interval: None,
             tracker_id: None,
         };
-        assert!(!t.can_download());
         assert!(!t.can_upload());
         t.leechers = 5;
-        assert!(t.can_download());
         assert!(t.can_upload());
         t.leechers = 0;
         t.seeders = 1;
-        assert!(t.can_download());
         assert!(!t.can_upload());
         t.seeders = 4;
         t.leechers = 8;
-        assert!(t.can_download());
         assert!(t.can_upload());
     }
 
@@ -476,14 +445,12 @@ mod tests {
             name: String::from("Test torrent"),
             length: 262144,
             private: false,
-            downloaded: 262144,
             uploaded: 0,
             last_announce: std::time::Instant::now(),
             info_hash_urlencoded: String::from("01234567"),
             seeders: 4,
             leechers: 16,
             next_upload_speed: 0,
-            next_download_speed: 0,
             interval: 1800,
             urls: Vec::with_capacity(0),
             error_count: 0,
@@ -491,13 +458,10 @@ mod tests {
             min_interval: None,
             tracker_id: None,
         };
-        let speed = t.downloaded(16, 64);
-        assert!(speed > 0);
         let speed = t.uploaded(16, 64);
         assert!(speed > 0);
         t.interval = 1;
         std::thread::sleep(std::time::Duration::from_secs(2));
-        let speed = t.downloaded(16, 64);
         assert!((16..=64).contains(&speed));
         let speed = t.uploaded(16, 64);
         assert!((16..=64).contains(&speed));

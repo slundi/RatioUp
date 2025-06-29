@@ -14,8 +14,6 @@ pub struct Config {
     pub port: u16,
     pub min_upload_rate: u32,   //in byte
     pub max_upload_rate: u32,   //in byte
-    pub min_download_rate: u32, //in byte
-    pub max_download_rate: u32, //in bytes
 
     pub use_pid_file: bool,
 
@@ -42,8 +40,6 @@ impl Default for Config {
             port: fastrand::u16(49152..65534),
             min_upload_rate: 8192,    //8*1024
             max_upload_rate: 2097152, //2048*1024
-            min_download_rate: 8192,
-            max_download_rate: 16777216, //16*1024*1024
             // check_https_certs: false,
             use_pid_file: false,
             numwant: None,
@@ -87,13 +83,6 @@ impl Config {
 
     /// Check if the config is OK and log error
     fn is_ok(&self) -> bool {
-        if self.min_download_rate > self.max_download_rate {
-            error!(
-                "Min download rate ({}) is greater than max download rate ({})",
-                self.min_download_rate, self.max_download_rate
-            );
-            return false;
-        }
         if self.min_upload_rate > self.max_upload_rate {
             error!(
                 "Min upload rate ({}) is greater than max upload rate ({})",
