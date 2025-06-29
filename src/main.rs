@@ -1,11 +1,11 @@
 #![allow(non_snake_case)]
 
-use byte_unit::Byte;
 use fake_torrent_client::Client;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock, RwLock};
 use tokio::time::Duration;
 use tracing::{self, info, warn};
+use utils::format_bytes;
 
 use crate::announcer::scheduler::run as run_announcer;
 use crate::config::Config;
@@ -16,6 +16,7 @@ mod config;
 mod directory;
 pub mod json_output;
 pub mod torrent;
+mod utils;
 
 static STARTED: OnceLock<chrono::DateTime<chrono::Utc>> = OnceLock::new();
 static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -90,12 +91,8 @@ async fn main() {
 
     info!(
         "Upload bandwidth: \u{2191} {} - {}",
-        Byte::from_u64(u64::from(config.min_upload_rate))
-            .get_appropriate_unit(byte_unit::UnitType::Decimal)
-            .to_string(),
-        Byte::from_u64(u64::from(config.max_upload_rate))
-            .get_appropriate_unit(byte_unit::UnitType::Decimal)
-            .to_string(),
+        format_bytes(config.min_upload_rate),
+        format_bytes(config.max_upload_rate)
     );
 
     CONFIG.get_or_init(|| config.clone());
