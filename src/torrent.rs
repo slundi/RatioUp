@@ -1,7 +1,6 @@
 // https://wiki.theory.org/BitTorrentSpecification#Metainfo_File_Structure
 // https://wiki.theory.org/BitTorrent_Tracker_Protocol
 use bendy::decoding::{FromBencode, Object};
-use serde::Serialize;
 use sha1::{Digest, Sha1};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -24,7 +23,7 @@ pub struct Peer {
 /// To only keep minimal torrent info in RAM. Info are ised in:
 /// - the announcer (info hash, urls, name in log, sizes, downloaded, uploaded, interval, last_announce, seeders, leechers)
 /// - web UI (info hash, name, size, downloaded, uploaded, seeders, leechers, is private, is a folder, path)
-#[derive(Debug, Serialize, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Torrent {
     pub name: String,
     pub urls: Vec<String>, // aka. announce_list
@@ -34,10 +33,8 @@ pub struct Torrent {
     /// Total of fake uploaded data since the start of RatioUp
     pub uploaded: u64,
     /// Last announce to the tracker
-    #[serde(skip_serializing)]
     pub last_announce: std::time::Instant,
     /// URL encoded hash thet is used to build the tracker query
-    #[serde(skip_serializing)]
     pub info_hash_urlencoded: String,
     /// Number of seeders, it is used on the web UI
     pub seeders: u16,
@@ -46,9 +43,7 @@ pub struct Torrent {
     /// It is the next upload speed that will be announced. It is also used for UI display.
     pub next_upload_speed: u32,
     /// Current interval after the last annouce
-    #[serde(skip)]
     pub interval: u64,
-    #[serde(skip)]
     pub error_count: u16,
     // pub creation_date: Option<DateTime<Local>>,
     // pub comment: Option<String>,
