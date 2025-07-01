@@ -172,7 +172,7 @@ impl Config {
 }
 
 /// Init the client from the configuration and returns the interval to refresh client key if applicable
-pub fn init_client(config: &Config) -> Option<u16> {
+pub async fn init_client(config: &Config) -> Option<u16> {
     let mut client = fake_torrent_client::Client::default();
     match fake_torrent_client::clients::ClientVersion::from_str(&config.client) {
         Ok(selected) => {
@@ -190,7 +190,7 @@ pub fn init_client(config: &Config) -> Option<u16> {
         client.name, client.key, client.peer_id
     );
     let key_interval = client.key_refresh_every;
-    let mut guard = crate::CLIENT.write().unwrap();
+    let mut guard = crate::CLIENT.write().await;
     *guard = Some(client);
     key_interval
 }

@@ -32,9 +32,9 @@ pub async fn write() {
 
         data.push_str("\", \"torrents\": [\n");
         {
-            let torrents = TORRENTS.read().expect("Cannot get torrent list");
+            let torrents = TORRENTS.read().await;
             for m in torrents.iter() {
-                data.push_str(&m.lock().unwrap().to_json());
+                data.push_str(&m.lock().await.to_json());
             }
         }
         data.push_str("]}");

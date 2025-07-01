@@ -2,9 +2,9 @@
 
 use fake_torrent_client::Client;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock, RwLock};
+use tokio::sync::{Mutex, OnceCell, RwLock};
 use tokio::time::Duration;
-use tracing::{self, info, warn};
+use tracing::{self, error, info, warn};
 use utils::format_bytes;
 
 use crate::announcer::scheduler::run as run_announcer;
@@ -18,14 +18,14 @@ pub mod json_output;
 pub mod torrent;
 mod utils;
 
-static STARTED: OnceLock<chrono::DateTime<chrono::Utc>> = OnceLock::new();
-static CONFIG: OnceLock<Config> = OnceLock::new();
-static CLIENT: RwLock<Option<Client>> = RwLock::new(None);
-static TORRENTS: RwLock<Vec<Mutex<Torrent>>> = RwLock::new(Vec::new()); // TODO: replace with mutex
+static STARTED: OnceCell<chrono::DateTime<chrono::Utc>> = OnceCell::const_new();
+static CONFIG: OnceCell<Config> = OnceCell::const_new();
+static CLIENT: RwLock<Option<Client>> = RwLock::const_new(None);
+static TORRENTS: RwLock<Vec<Mutex<Torrent>>> = RwLock::const_new(Vec::new()); // TODO: replace with mutex
 
 async fn run_key_renewer(refresh_every: u16) {
     loop {
-        if let Some(client) = &mut *CLIENT.write().expect("Cannot read client") {
+        if let Some(client) = &mut *CLIENT.write().await {
             client.generate_key();
         }
         // std::thread::sleep(Duration::from_secs(u64::from(refresh_every)));
@@ -95,11 +95,17 @@ async fn main() {
         format_bytes(config.max_upload_rate)
     );
 
-    CONFIG.get_or_init(|| config.clone());
-    STARTED.set(chrono::offset::Utc::now()).unwrap();
+    if let Err(e) = CONFIG.set(config.clone()) {
+        error!("Cannot set config: {e}");
+        return;
+    }
+    if let Err(e) = STARTED.set(chrono::offset::Utc::now()) {
+        error!("Cannot set start time: {e}");
+        return;
+    }
 
     // schedule client refresh key if applicable
-    if let Some(refresh_every) = config::init_client(&config) {
+    if let Some(refresh_every) = config::init_client(&config).await {
         let _ = std::thread::Builder::new()
             .name("ratioup-key-renewer".to_owned())
             .spawn(move || run_key_renewer(refresh_every));
@@ -122,7 +128,7 @@ async fn main() {
         // graceful exit when Ctrl + C / SIGINT
         tokio::signal::ctrl_c().await.unwrap();
         info!("Exiting...");
-        announcer::tracker::announce_stopped();
+        announcer::tracker::announce_stopped().await;
         if config.use_pid_file && pid_file.is_some() {
             remove_pid_file(pid_file).await;
         }

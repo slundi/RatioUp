@@ -8,9 +8,9 @@ pub async fn run(wait_time: u64) {
     let mut next_interval = wait_time;
     loop {
         {
-            let list = TORRENTS.read().expect("Cannot get torrent list");
+            let list = TORRENTS.read().await;
             for m in list.iter() {
-                let mut t = m.lock().unwrap();
+                let mut t = m.lock().await;
                 if t.shound_announce() {
                     next_interval = u64::min(next_interval, super::tracker::announce(&mut t, None).await);
                 }
