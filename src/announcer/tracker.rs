@@ -2,11 +2,13 @@
 // based on https://github.com/billyb2/cratetorrent/blob/master/cratetorrent/src/tracker.rs
 
 use std::io::Read;
+use std::time::Duration;
 
 use crate::torrent::Torrent;
 use crate::{CLIENT, CONFIG, TORRENTS};
 use bendy::decoding::{Decoder, FromBencode};
 use fake_torrent_client::Client;
+use reqwest::Client as ReqwestClient;
 use tracing::{debug, error, info, warn};
 use url::{Host, Url};
 
@@ -23,7 +25,7 @@ pub fn print_request_error(code: u16) {
         200 => error!("200 info_hash not found in the database"),
         500 => error!("500 Client sent an eventless request before the specified time"),
         900 => error!("500 Generic error"),
-        _ => error!("Unknown error code: {code}"),
+        _ => warn!("Unknown error code: {code}"),
     }
 }
 
@@ -39,26 +41,26 @@ pub enum Event {
     Stopped,
 }
 
-pub fn announce_started() -> u64 {
+pub async fn announce_started() -> u64 {
     info!("Announcing torrent(s) with STARTED event");
     let list = TORRENTS.read().expect("Cannot get torrent list");
     let mut wait_time = u64::MAX;
     for m in list.iter() {
         let mut t = m.lock().unwrap();
-        t.interval = announce(&mut t, Some(Event::Started));
+        t.interval = announce(&mut t, Some(Event::Started)).await;
         wait_time = wait_time.min(t.interval);
         info!("Time: {}", wait_time);
     }
     wait_time
 }
 
-pub fn announce_stopped() {
+pub async fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
     info!("Announcing torrent(s) with STOPPED event");
     let list = TORRENTS.read().expect("Cannot get torrent list");
     for m in list.iter() {
         let mut t = m.lock().unwrap();
-        t.interval = announce(&mut t, Some(Event::Stopped));
+        t.interval = announce(&mut t, Some(Event::Stopped)).await;
     }
 }
 
@@ -116,7 +118,7 @@ pub fn is_supprted_url(url_str: &str) -> bool {
 ///
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
-pub fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
+pub async fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
     let mut interval = 4_294_967_295u64;
     // TODO: prepare announce (uploaded and downloaded if applicable)
     torrent.compute_speeds();
@@ -129,7 +131,7 @@ pub fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
                 // interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
                 continue;
             }
-            interval = interval.max(announce_http(&url, torrent, client, event));
+            interval = interval.max(announce_http(&url, torrent, client, event).await);
         }
         info!(
             "Anounced: interval={}, event={:?}, downloaded=0, uploaded={}, seeders={}, leechers={}, torrent={}",
@@ -155,7 +157,12 @@ pub fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
 //     }
 // }
 
-fn announce_http(url: &str, torrent: &mut Torrent, client: &Client, event: Option<Event>) -> u64 {
+async fn announce_http(
+    url: &str,
+    torrent: &mut Torrent,
+    client: &Client,
+    event: Option<Event>,
+) -> u64 {
     // announce parameters are built up in the query string, see:
     // https://www.bittorrent.org/beps/bep_0003.html trackers section
     // let mut query = vec![
@@ -206,38 +213,49 @@ fn announce_http(url: &str, torrent: &mut Torrent, client: &Client, event: Optio
     // );
 
     let query = client.get_query();
-    let agent = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(60))
-        .user_agent(&client.user_agent);
+    let reqwest_client = ReqwestClient::builder()
+        .user_agent(&client.user_agent)
+        .timeout(Duration::from_secs(60)) // Timeout pour la connexion et la lecture
+        .build()
+        .expect("Failed to build reqwest client");
+
     let built_url = build_url(url, torrent, event, client.key.clone());
     info!("Announce HTTP URL {:?}", built_url);
-    let mut req = agent
-        .build()
-        .get(&built_url)
-        .timeout(std::time::Duration::from_secs(90));
-    req = query
-        .1
-        .into_iter()
-        .fold(req, |req, header| req.set(&header.0, &header.1));
-    match req.call() {
+
+    let mut request_builder = reqwest_client.get(&built_url);
+
+    let (url_template, headers_to_set) = client.get_query();
+    for (name, value) in headers_to_set {
+        request_builder = request_builder.header(&name, &value);
+    }
+
+    match request_builder.send().await {
         Ok(resp) => {
-            print_request_error(resp.status());
+            print_request_error(resp.status().as_u16());
             info!(
                 "\tTime since last announce: {}s \t interval: {}",
                 torrent.last_announce.elapsed().as_secs(),
                 torrent.interval
             );
-            let mut bytes: Vec<u8> = Vec::with_capacity(2048);
-            resp.into_reader()
-                .take(1024)
-                .read_to_end(&mut bytes)
-                .expect("Cannot read response");
-            //we start to check if the tracker has returned an error message, if yes, we will reannounce later
+
+            // read response body
+            let bytes = match resp.bytes().await {
+                Ok(b) => b,
+                Err(e) => {
+                    error!("Failed to read response bytes: {:?}", e);
+                    return torrent.interval; // return current interval
+                }
+            };
+            let bytes_vec = bytes.to_vec(); //convert Bytes to Vec<u8>
+
+            // we start to check if the tracker has returned an error message, if yes, we will reannounce later
             debug!(
                 "Tracker response: {:?}",
-                String::from_utf8_lossy(&bytes.clone())
+                String::from_utf8_lossy(&bytes_vec)
             );
-            let mut decoder = Decoder::new(&bytes).with_max_depth(2);
+
+            // Bencode decoding
+            let mut decoder = Decoder::new(&bytes_vec).with_max_depth(2);
             if let Some(raw) = decoder.next_object().expect("Wrong object") {
                 let mut dict = raw
                     .try_into_dictionary()
@@ -248,7 +266,7 @@ fn announce_http(url: &str, torrent: &mut Torrent, client: &Client, event: Optio
                         (b"failure reason", value) => {
                             error!(
                                 "Cannot announce: {:?}",
-                                String::decode_bencode_object(value)
+                                String::decode_bencode_object(value).unwrap_or_default()
                             );
                             break;
                         }
@@ -256,51 +274,41 @@ fn announce_http(url: &str, torrent: &mut Torrent, client: &Client, event: Optio
                         (b"warning message", value) => {
                             warn!(
                                 "Announce with warning: {:?}",
-                                String::decode_bencode_object(value)
+                                String::decode_bencode_object(value).unwrap_or_default()
                             );
                         }
                         // Interval in seconds that the client should wait between sending regular requests to the tracker
                         (b"interval", value) => {
-                            torrent.interval = u64::decode_bencode_object(value).unwrap()
+                            torrent.interval =
+                                u64::decode_bencode_object(value).unwrap_or(torrent.interval);
                         }
                         // (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
                         (b"min interval", value) => {
-                            torrent.min_interval = Some(u64::decode_bencode_object(value).unwrap())
+                            torrent.min_interval =
+                                Some(u64::decode_bencode_object(value).unwrap_or_default());
                         }
                         // A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
                         (b"tracker id", value) => {
-                            torrent.tracker_id = Some(String::decode_bencode_object(value).unwrap())
+                            torrent.tracker_id =
+                                Some(String::decode_bencode_object(value).unwrap_or_default());
                         }
                         // number of peers with the entire file, i.e. seeders (integer)
                         (b"complete", value) => {
-                            torrent.seeders = u16::decode_bencode_object(value).unwrap()
+                            torrent.seeders = u16::decode_bencode_object(value).unwrap_or_default();
                         }
                         // number of non-seeder peers, aka "leechers" (integer)
                         (b"incomplete", value) => {
-                            torrent.leechers = u16::decode_bencode_object(value).unwrap()
+                            torrent.leechers =
+                                u16::decode_bencode_object(value).unwrap_or_default();
                         }
-                        // peers not used
-                        // (b"peers", value) => {}
+                        // (b"peers", value) => {} // Gérer les pairs ici si nécessaire
                         _ => (),
                     }
                 }
             }
-            // TODO: check response code
         }
         Err(err) => error!("Cannot announce: {:?}", err),
     }
-    // send request
-    // let resp = self
-    //     .client
-    //     .get(&url)
-    //     .query(&query)
-    //     .send()
-    //     .await?
-    //     .error_for_status()?
-    //     .bytes()
-    //     .await?;
-    // let resp = serde_bencode::from_bytes(&resp)?;
-    // Ok(resp)
     if let Some(min) = torrent.min_interval {
         if min > torrent.interval {
             return min;

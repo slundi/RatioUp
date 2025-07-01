@@ -12,7 +12,7 @@ pub async fn run(wait_time: u64) {
             for m in list.iter() {
                 let mut t = m.lock().unwrap();
                 if t.shound_announce() {
-                    next_interval = u64::min(next_interval, super::tracker::announce(&mut t, None));
+                    next_interval = u64::min(next_interval, super::tracker::announce(&mut t, None).await);
                 }
             }
         }
