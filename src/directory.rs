@@ -1,6 +1,6 @@
 use crate::{TORRENTS, torrent::Torrent};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 pub async fn prepare_torrent_folder(directory: PathBuf) {
@@ -21,7 +21,7 @@ pub async fn prepare_torrent_folder(directory: PathBuf) {
 pub async fn load_torrents(directory: PathBuf) -> u16 {
     let paths = std::fs::read_dir(&directory).expect("Cannot read torrent directory");
     let mut count = 0u16;
-    let list = &mut *TORRENTS.write().expect("Cannot get torrent list");
+    let list = &mut *TORRENTS.write().await;
     let mut added_hashes: Vec<String> = Vec::new();
     for p in paths {
         let path = p.expect("Cannot get torrent path").path();

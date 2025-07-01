@@ -1,7 +1,6 @@
 // https://xbtt.sourceforge.net/udp_tracker_protocol.html
 // based on https://github.com/billyb2/cratetorrent/blob/master/cratetorrent/src/tracker.rs
 
-use std::io::Read;
 use std::time::Duration;
 
 use crate::torrent::Torrent;
@@ -43,10 +42,10 @@ pub enum Event {
 
 pub async fn announce_started() -> u64 {
     info!("Announcing torrent(s) with STARTED event");
-    let list = TORRENTS.read().expect("Cannot get torrent list");
+    let list = TORRENTS.read().await;
     let mut wait_time = u64::MAX;
     for m in list.iter() {
-        let mut t = m.lock().unwrap();
+        let mut t = m.lock().await;
         t.interval = announce(&mut t, Some(Event::Started)).await;
         wait_time = wait_time.min(t.interval);
         info!("Time: {}", wait_time);
@@ -57,9 +56,9 @@ pub async fn announce_started() -> u64 {
 pub async fn announce_stopped() {
     // TODO: compute uploaded and downloaded then announce
     info!("Announcing torrent(s) with STOPPED event");
-    let list = TORRENTS.read().expect("Cannot get torrent list");
+    let list = TORRENTS.read().await;
     for m in list.iter() {
-        let mut t = m.lock().unwrap();
+        let mut t = m.lock().await;
         t.interval = announce(&mut t, Some(Event::Stopped)).await;
     }
 }
@@ -122,7 +121,7 @@ pub async fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
     let mut interval = 4_294_967_295u64;
     // TODO: prepare announce (uploaded and downloaded if applicable)
     torrent.compute_speeds();
-    if let Some(client) = &*CLIENT.read().expect("Cannot read client") {
+    if let Some(client) = &*CLIENT.read().await {
         debug!("Torrent has {} url(s)", torrent.urls.len());
         for url in torrent.urls.clone() {
             debug!("\t{}", url);
@@ -219,7 +218,7 @@ async fn announce_http(
         .build()
         .expect("Failed to build reqwest client");
 
-    let built_url = build_url(url, torrent, event, client.key.clone());
+    let built_url = build_url(url, torrent, event, client.key.clone()).await;
     info!("Announce HTTP URL {:?}", built_url);
 
     let mut request_builder = reqwest_client.get(&built_url);
@@ -319,7 +318,7 @@ async fn announce_http(
 
 /// Build the HTTP announce URLs for the listed trackers in the torrent file.
 /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
-pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: String) -> String {
+pub async fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: String) -> String {
     info!("Torrent {:?}: {}", event, torrent.name);
     //compute downloads and uploads
     let elapsed: u64 = if event == Some(Event::Started) {
@@ -330,7 +329,7 @@ pub fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: St
     let uploaded: u64 = torrent.next_upload_speed as u64 * elapsed;
 
     //build URL list
-    let client = (*CLIENT.read().expect("Cannot access client"))
+    let client = (*CLIENT.read().await)
         .clone()
         .unwrap();
     let mut port = 55555u16;
