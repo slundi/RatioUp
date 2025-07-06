@@ -211,19 +211,21 @@ async fn announce_http(
     //     peer_id = percent_encoding::percent_encode(&params.peer_id, URL_ENCODE_RESERVED),
     // );
 
-    let query = client.get_query();
     let reqwest_client = ReqwestClient::builder()
         .user_agent(&client.user_agent)
         .timeout(Duration::from_secs(60)) // Timeout pour la connexion et la lecture
         .build()
         .expect("Failed to build reqwest client");
 
+    let (url_template, headers_to_set) = client.get_query();
+    let mut full_url = String::from(url);
+    full_url.push('?');
+    full_url.push_str(&url_template);
     let built_url = build_url(url, torrent, event, client.key.clone()).await;
-    info!("Announce HTTP URL {:?}", built_url);
+    info!("Announce HTTP URL {built_url}");
 
     let mut request_builder = reqwest_client.get(&built_url);
 
-    let (url_template, headers_to_set) = client.get_query();
     for (name, value) in headers_to_set {
         request_builder = request_builder.header(&name, &value);
     }

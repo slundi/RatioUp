@@ -48,6 +48,12 @@ pub fn percent_encoding(input: &[u8]) -> String {
     encoded_string
 }
 
+pub fn get_sha1(input: &[u8]) -> [u8; 20] {
+    let mut m = sha1_smol::Sha1::new();
+    m.update(input);
+    m.digest().bytes()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,5 +119,21 @@ mod tests {
         assert_eq!(percent_encoding(input_null), "null%00byte");
     }
 
-    // [181, 7, 198, 150, 79, 250, 63, 170, 170, 26, 163, 172, 45, 66, 45, 57, 169, 201, 226, 70] => b507c6964ffa3faaaa1aa3ac2d422d39a9c9e246
+    #[test]
+    fn test_sha1() {
+        let input = b"Hello World!";
+        let mut m = sha1_smol::Sha1::new();
+        m.update(input);
+        let sha1 = get_sha1(input);
+        let digest = m.digest();
+        assert_eq!(digest.bytes(), sha1);
+        
+        println!("SHA: {digest}");
+        assert_eq!(
+            sha1,
+            *b"\x2e\xf7\xbd\xe6\x08\xce\x54\x04\xe9\x7d\x5f\x04\x2f\x95\xf8\x9f\x1c\x23\x28\x71" 
+        );
+    }
+
+    // [181, 7, 198, 150, 79, 250, 63, 170, 170, 26, 163, 172, 45, 66, 45, 57, 169, 201, 226, 70] => should be b507c6964ffa3faaaa1aa3ac2d422d39a9c9e246
 }
