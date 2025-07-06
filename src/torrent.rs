@@ -1,10 +1,9 @@
 // https://wiki.theory.org/BitTorrentSpecification#Metainfo_File_Structure
 // https://wiki.theory.org/BitTorrent_Tracker_Protocol
 use bendy::decoding::{FromBencode, Object};
-use sha1::{Digest, Sha1};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::announcer::tracker::is_supprted_url;
 use crate::utils::percent_encoding;
@@ -35,6 +34,7 @@ pub struct Torrent {
     pub uploaded: u64,
     /// Last announce to the tracker
     pub last_announce: std::time::Instant,
+    pub info_hash: [u8; 20],
     /// URL encoded hash thet is used to build the tracker query
     pub info_hash_urlencoded: String,
     /// Number of seeders, it is used on the web UI
@@ -163,7 +163,6 @@ pub struct File {
 pub struct Info {
     pub name: String,
     pub files: Vec<File>,
-    pub hash: [u8; 20],
     pub piece_length: u32,
     pub pieces: Vec<[u8; 20]>,
     pub private: bool,
@@ -200,14 +199,21 @@ impl FromBencode for Torrent {
         while let Some(pair) = dict.next_pair()? {
             match pair {
                 (b"info", value) => {
-                    let info2 = Info::decode_bencode_object(value)?;
-                    for file in &info2.files {
-                        total_size += file.length;
-                    }
-                    name = info2.name;
-                    private = info2.private;
-                    tracing::debug!("Info hash: {:?}", info2.hash);
-                    info_hash_urlencoded = percent_encoding(&info2.hash).to_string();
+                    let bytes = value.try_into_dictionary()?.into_raw()?;
+
+                    let hash: [u8; 20] = crate::utils::get_sha1(bytes);
+                    debug!("Hash: {:?}", String::from_utf8_lossy(&hash));
+
+                    let mut decoder: bendy::decoding::Decoder = bendy::decoding::Decoder::new(bytes);
+
+                    // let info2: Info = Info::decode_bencode_object(decoder.next_object()?.unwrap().)?;
+                    // for file in &info2.files {
+                    //     total_size += file.length;
+                    // }
+                    // name = info2.name;
+                    // private = info2.private;
+                    tracing::debug!("Info hash: {:?}", hash);
+                    info_hash_urlencoded = percent_encoding(&hash).to_string();
                     valid_info = true;
                 }
                 (b"announce", value) => {
@@ -256,6 +262,7 @@ impl FromBencode for Torrent {
             encoding,
             length: total_size,
             name,
+            info_hash: [0; 20],
             info_hash_urlencoded,
             last_announce: std::time::Instant::now(),
             private,
@@ -327,17 +334,12 @@ impl FromBencode for Info {
             pieces.push(arr);
         }
 
-        let mut hasher = Sha1::new();
-        hasher.update(dict.into_raw()?);
-        let hash = hasher.finalize().into();
-
         let name = name.expect("Decoding Error: Missing name from torrent info");
 
         if let Some(files) = files {
             Ok(Self {
                 name,
                 files,
-                hash,
                 piece_length: pl,
                 pieces,
                 private,
@@ -352,7 +354,6 @@ impl FromBencode for Info {
                     path: PathBuf::from(name.clone()),
                 }],
                 // files: Vec::with_capacity(0),
-                hash,
                 piece_length: pl,
                 pieces,
                 private,
@@ -410,6 +411,7 @@ mod tests {
             private: false,
             uploaded: 0,
             last_announce: std::time::Instant::now(),
+            info_hash: [0; 20],
             info_hash_urlencoded: String::from("01234567"),
             seeders: 0,
             leechers: 1,
@@ -440,6 +442,7 @@ mod tests {
             private: false,
             uploaded: 0,
             last_announce: std::time::Instant::now(),
+            info_hash: [0; 20],
             info_hash_urlencoded: String::from("01234567"),
             seeders: 4,
             leechers: 16,
