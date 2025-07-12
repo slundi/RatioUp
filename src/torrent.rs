@@ -40,15 +40,15 @@ impl From<BencodeDecoderError> for TorrentError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Peer {
-    /// A string of length 20 which this peer uses as its id. This field will be `None` for compact peer info.
-    pub id: Option<String>,
-    /// peer's IP address either IPv6 (hexed) or IPv4 (dotted quad) or DNS name (string)
-    pub ip: String,
-    /// peer's port number
-    pub port: i64,
-}
+// #[derive(Debug, PartialEq, Eq, Clone)]
+// pub struct Peer {
+//     /// A string of length 20 which this peer uses as its id. This field will be `None` for compact peer info.
+//     pub id: Option<String>,
+//     /// peer's IP address either IPv6 (hexed) or IPv4 (dotted quad) or DNS name (string)
+//     pub ip: String,
+//     /// peer's port number
+//     pub port: i64,
+// }
 
 /// To only keep minimal torrent info in RAM. Info are ised in:
 /// - the announcer (info hash, urls, name in log, sizes, downloaded, uploaded, interval, last_announce, seeders, leechers)
