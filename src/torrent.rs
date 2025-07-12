@@ -1,14 +1,44 @@
 // https://wiki.theory.org/BitTorrentSpecification#Metainfo_File_Structure
 // https://wiki.theory.org/BitTorrent_Tracker_Protocol
-use bendy::decoding::{FromBencode, Object};
-use std::collections::HashSet;
+use std::fmt;
 use std::path::PathBuf;
-use tracing::{debug, error};
+use std::time::Instant;
 
-use crate::announcer::tracker::is_supprted_url;
-use crate::utils::percent_encoding;
+use crate::announcer::tracker::is_supported_url;
+use crate::bencode::{BencodeDecoder, BencodeDecoderError, BencodeValue, encode_bencode_value};
+use crate::utils::{get_sha1, percent_encoding};
 
-type BendyResult<T> = Result<T, bendy::decoding::Error>;
+/// Errors that can occur when parsing a Torrent struct from Bencode.
+#[derive(Debug)]
+pub enum TorrentError {
+    BencodeError(BencodeDecoderError),
+    MissingField(&'static str),
+    InvalidFieldType(&'static str),
+    ParseError(String), // For general parsing issues (e.g., string to u64)
+    Utf8ConversionError(&'static str),
+}
+
+// Implement the Display trait for TorrentError
+impl fmt::Display for TorrentError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TorrentError::BencodeError(e) => write!(f, "Bencode decoding error: {:?}", e),
+            TorrentError::MissingField(field) => write!(f, "Missing required field: {}", field),
+            TorrentError::InvalidFieldType(field) => write!(f, "Invalid type for field: {}", field),
+            TorrentError::ParseError(msg) => write!(f, "Parsing error: {}", msg),
+            TorrentError::Utf8ConversionError(field) => {
+                write!(f, "UTF-8 conversion error for field: {}", field)
+            }
+        }
+    }
+}
+
+// Convert BencodeDecoderError to TorrentError
+impl From<BencodeDecoderError> for TorrentError {
+    fn from(err: BencodeDecoderError) -> Self {
+        TorrentError::BencodeError(err)
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Peer {
@@ -116,9 +146,9 @@ impl Torrent {
     //     t
     // }
 
-    pub fn from_file(path: PathBuf) -> Result<Self, bendy::decoding::Error> {
+    pub fn from_file(path: PathBuf) -> Result<Self, TorrentError> {
         let data = std::fs::read(path).expect("Cannot read torrent file");
-        Self::from_bencode(&data)
+        Self::from_bencode_bytes(&data)
     }
 
     pub fn to_json(&self) -> String {
@@ -150,250 +180,177 @@ impl Torrent {
         // TODO: add info hash?
         result
     }
-}
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct File {
-    pub length: u64,
-    pub md5sum: Option<String>,
-    pub path: PathBuf,
-}
+    /// Parses a raw bencoded .torrent file byte slice into a Torrent struct.
+    ///
+    /// This function decodes the Bencode structure, extracts relevant fields,
+    /// calculates the info hash, and initializes default values for other fields.
+    ///
+    /// # Arguments
+    /// * `bencode_data` - A byte slice containing the full bencoded .torrent file content.
+    ///
+    /// # Returns
+    /// A `Result` which is `Ok(Torrent)` on success or `Err(TorrentError)` on failure.
+    pub fn from_bencode_bytes(bencode_data: &[u8]) -> Result<Self, TorrentError> {
+        let mut decoder = BencodeDecoder::new(bencode_data);
+        let top_level_dict = match decoder.decode()? {
+            BencodeValue::Dictionary(dict) => dict,
+            _ => {
+                return Err(TorrentError::InvalidFieldType(
+                    "Top-level is not a dictionary",
+                ));
+            }
+        };
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct Info {
-    pub name: String,
-    pub files: Vec<File>,
-    pub piece_length: u32,
-    pub pieces: Vec<[u8; 20]>,
-    pub private: bool,
-}
-
-// #[derive(Debug, Default, PartialEq, Eq)]
-// pub struct Torrent {
-//     pub info: Info,
-//     pub announce_list: Vec<String>,
-//     // pub creation_date: Option<DateTime<Local>>,
-//     // pub comment: Option<String>,
-//     // pub created_by: Option<String>,
-//     pub encoding: Option<String>,
-//     pub total_size: u64,
-// }
-
-impl FromBencode for Torrent {
-    fn decode_bencode_object(object: Object) -> BendyResult<Self>
-    where
-        Self: Sized,
-    {
-        let mut announce_list = HashSet::new();
-        // let mut creation_date = None;
-        // let mut comment = None;
-        // let mut created_by = None;
-        let mut encoding = None;
-        let mut total_size = 0u64;
-        let mut valid_info = false;
-        let mut name = String::with_capacity(0);
-        let mut private = false;
-        let mut info_hash_urlencoded = String::with_capacity(0);
-
-        let mut dict = object.try_into_dictionary()?;
-        while let Some(pair) = dict.next_pair()? {
-            match pair {
-                (b"info", value) => {
-                    let bytes = value.try_into_dictionary()?.into_raw()?;
-
-                    let hash: [u8; 20] = crate::utils::get_sha1(bytes);
-                    debug!("Hash: {:?}", String::from_utf8_lossy(&hash));
-
-                    let mut decoder: bendy::decoding::Decoder = bendy::decoding::Decoder::new(bytes);
-
-                    // let info2: Info = Info::decode_bencode_object(decoder.next_object()?.unwrap().)?;
-                    // for file in &info2.files {
-                    //     total_size += file.length;
-                    // }
-                    // name = info2.name;
-                    // private = info2.private;
-                    tracing::debug!("Info hash: {:?}", hash);
-                    info_hash_urlencoded = percent_encoding(&hash).to_string();
-                    valid_info = true;
-                }
-                (b"announce", value) => {
-                    announce_list.insert(String::decode_bencode_object(value)?);
-                }
-                (b"announce-list", value) => {
-                    let mut list_raw = value.try_into_list()?;
-                    while let Some(value) = list_raw.next_object()? {
-                        let mut tier_list = value.try_into_list()?;
-                        while let Some(value) = tier_list.next_object()? {
-                            announce_list.insert(String::decode_bencode_object(value)?);
+        // --- Extract announce URLs ---
+        let mut urls = Vec::new();
+        // Try to get 'announce-list' first (multi-tracker)
+        if let Some(BencodeValue::List(announce_list_bencode)) =
+            top_level_dict.get(b"announce-list".as_ref())
+        {
+            for tier in announce_list_bencode {
+                if let BencodeValue::List(tier_urls) = tier {
+                    for url_bencode in tier_urls {
+                        if let BencodeValue::ByteString(url_bytes) = url_bencode {
+                            let url_str = std::str::from_utf8(url_bytes)
+                                .map_err(|_| {
+                                    TorrentError::Utf8ConversionError("announce-list URL")
+                                })?
+                                .to_string();
+                            if !urls.contains(&url_str) && is_supported_url(&url_str) {
+                                // Avoid duplicates
+                                urls.push(url_str);
+                            }
                         }
                     }
                 }
-                // (b"creation date", value) => {
-                //     creation_date = Some(
-                //         Local
-                //             .timestamp_opt(i64::decode_bencode_object(value)?, 0)
-                //             .unwrap(),
-                //     )
-                // }
-                // (b"comment", value) => comment = Some(String::decode_bencode_object(value)?),
-                // (b"created by", value) => created_by = Some(String::decode_bencode_object(value)?),
-                (b"encoding", value) => encoding = Some(String::decode_bencode_object(value)?),
-                _ => {}
             }
         }
 
-        if !valid_info {
-            error!("Decoding Error: Missing info dictionary");
-            std::process::exit(1);
-        }
-        let mut urls: Vec<String> = Vec::with_capacity(announce_list.len());
-        // TODO: skip UDP and local URLs
-        for url in announce_list.into_iter() {
-            if is_supprted_url(&url) {
-                urls.push(url);
+        // Try to get 'announce' (single tracker), add if not already in urls
+        if let Some(BencodeValue::ByteString(announce_bytes)) =
+            top_level_dict.get(b"announce".as_ref())
+        {
+            let announce_str = std::str::from_utf8(announce_bytes)
+                .map_err(|_| TorrentError::Utf8ConversionError("announce URL"))?
+                .to_string();
+            if !urls.contains(&announce_str) && is_supported_url(&announce_str) {
+                // Avoid duplicates
+                urls.push(announce_str);
             }
         }
 
-        Ok(Self {
-            urls,
-            // creation_date,
-            // comment,
-            // created_by,
-            encoding,
-            length: total_size,
+        if urls.is_empty() {
+            return Err(TorrentError::MissingField("announce or announce-list"));
+        }
+
+        // --- Extract 'info' dictionary and calculate info_hash ---
+        // `info_bytes_slice` is `&BencodeValue`
+        let info_bytes_slice = top_level_dict
+            .get(b"info".as_ref())
+            .ok_or(TorrentError::MissingField("info"))?;
+
+        // Ensure info_bytes_slice is indeed a dictionary before proceeding
+        let info_dict_map = match info_bytes_slice {
+            BencodeValue::Dictionary(dict) => dict, // `dict` here is `&BTreeMap`
+            _ => return Err(TorrentError::InvalidFieldType("info is not a dictionary")),
+        };
+
+        let mut encoder_buf = Vec::new();
+        // Pass the reference to the info dictionary directly to the encoder.
+        // `info_bytes_slice` is already `&BencodeValue`.
+        encode_bencode_value(info_bytes_slice, &mut encoder_buf)?;
+        let info_bencoded_raw = encoder_buf;
+
+        let info_hash: [u8; 20] = get_sha1(&info_bencoded_raw);
+        let info_hash_urlencoded = percent_encoding(&info_hash);
+
+        // --- Decode 'info' dictionary content ---
+        // `info_dict_map` is already `&BTreeMap` from the match above, so we can use it directly.
+
+        let name_bytes = info_dict_map
+            .get(b"name".as_ref())
+            .ok_or(TorrentError::MissingField("info.name"))?;
+        let name = match name_bytes {
+            BencodeValue::ByteString(b) => std::str::from_utf8(b)
+                .map_err(|_| TorrentError::Utf8ConversionError("info.name"))?
+                .to_string(),
+            _ => return Err(TorrentError::InvalidFieldType("info.name")),
+        };
+
+        let mut total_length: u64 = 0;
+        let mut is_private = false;
+        let mut encoding_option: Option<String> = None;
+
+        // Handle 'length' for single-file torrents
+        if let Some(BencodeValue::Integer(len)) = info_dict_map.get(b"length".as_ref()) {
+            if *len < 0 {
+                return Err(TorrentError::ParseError(
+                    "info.length is negative".to_string(),
+                ));
+            }
+            total_length = *len as u64;
+        }
+
+        // Handle 'files' for multi-file torrents
+        if let Some(BencodeValue::List(files)) = info_dict_map.get(b"files".as_ref()) {
+            total_length = 0; // Reset if 'files' is present, sum up
+            for file_entry in files {
+                if let BencodeValue::Dictionary(file_dict) = file_entry {
+                    if let Some(BencodeValue::Integer(file_len)) = file_dict.get(b"length".as_ref())
+                    {
+                        if *file_len < 0 {
+                            return Err(TorrentError::ParseError(
+                                "file.length is negative".to_string(),
+                            ));
+                        }
+                        total_length += *file_len as u64;
+                    } else {
+                        return Err(TorrentError::MissingField(
+                            "file.length in multi-file torrent",
+                        ));
+                    }
+                } else {
+                    return Err(TorrentError::InvalidFieldType(
+                        "file entry in multi-file torrent",
+                    ));
+                }
+            }
+        }
+
+        // Handle 'private' flag
+        if let Some(BencodeValue::Integer(private_val)) = info_dict_map.get(b"private".as_ref()) {
+            is_private = *private_val == 1;
+        }
+
+        // Handle 'encoding'
+        if let Some(BencodeValue::ByteString(encoding_bytes)) =
+            top_level_dict.get(b"encoding".as_ref())
+        {
+            encoding_option = Some(
+                std::str::from_utf8(encoding_bytes)
+                    .map_err(|_| TorrentError::Utf8ConversionError("encoding"))?
+                    .to_string(),
+            );
+        }
+
+        Ok(Torrent {
             name,
-            info_hash: [0; 20],
+            urls,
+            length: total_length,
+            private: is_private,
+            uploaded: 0,                   // Default value
+            last_announce: Instant::now(), // Default value
+            info_hash,
             info_hash_urlencoded,
-            last_announce: std::time::Instant::now(),
-            private,
-            uploaded: 0,
-            seeders: 0,
-            leechers: 0,
-            next_upload_speed: 0,
-            interval: 4_294_967_295,
-            error_count: 0,
-            min_interval: None,
-            tracker_id: None,
-        })
-    }
-}
-
-impl FromBencode for Info {
-    fn decode_bencode_object(object: Object) -> BendyResult<Self>
-    where
-        Self: Sized,
-    {
-        let mut name: Option<String> = None;
-        let mut files: Option<Vec<File>> = None;
-
-        let mut length: Option<u64> = None;
-        let mut md5sum: Option<String> = None;
-        let mut private = false;
-
-        let mut piece_length: Option<u32> = None;
-        let mut pieces_raw: Option<Vec<u8>> = None;
-
-        let mut dict = object.try_into_dictionary()?;
-        while let Some(pair) = dict.next_pair()? {
-            match pair {
-                (b"piece length", value) => piece_length = Some(u32::decode_bencode_object(value)?),
-                (b"pieces", value) => pieces_raw = Some(value.try_into_bytes()?.to_vec()),
-                (b"name", value) => name = Some(String::decode_bencode_object(value)?),
-                (b"files", value) => {
-                    files = Some(Vec::decode_bencode_object(value)?);
-                    // files = Some(value.list_or_else(|obj| {
-                    //     // obj.try_into_bytes()?
-                    //     Vec::with_capacity(0)
-                    // }));
-                }
-                (b"length", value) => length = Some(u64::decode_bencode_object(value)?),
-                (b"md5sum", value) => md5sum = Some(String::decode_bencode_object(value)?),
-                (b"private", value) => {
-                    private = u8::decode_bencode_object(value)? == 1;
-                }
-                _ => {}
-            }
-        }
-
-        if piece_length.is_none() || pieces_raw.is_none() {
-            return Err(bendy::decoding::Error::missing_field(
-                "piece length or pieces",
-            ));
-        }
-        let pl = piece_length.unwrap();
-        let raw = pieces_raw.unwrap();
-        if raw.len() % 20 != 0 {
-            return Err(bendy::decoding::Error::missing_field(
-                "Invalid length for pieces",
-            ));
-        }
-        let mut pieces = vec![];
-        for chunk in raw.chunks_exact(20) {
-            let mut arr = [0u8; 20];
-            arr.copy_from_slice(chunk);
-            pieces.push(arr);
-        }
-
-        let name = name.expect("Decoding Error: Missing name from torrent info");
-
-        if let Some(files) = files {
-            Ok(Self {
-                name,
-                files,
-                piece_length: pl,
-                pieces,
-                private,
-            })
-        } else {
-            // single-file torrent: use the name as the file path
-            Ok(Self {
-                name: name.clone(),
-                files: vec![File {
-                    length: length.expect("Decoding Error: Missing file length"),
-                    md5sum,
-                    path: PathBuf::from(name.clone()),
-                }],
-                // files: Vec::with_capacity(0),
-                piece_length: pl,
-                pieces,
-                private,
-            })
-        }
-    }
-}
-
-impl FromBencode for File {
-    fn decode_bencode_object(object: Object) -> BendyResult<Self>
-    where
-        Self: Sized,
-    {
-        let mut length = None;
-        let mut md5sum = None;
-        // let mut path = PathBuf::new();
-
-        let mut dict = object.try_into_dictionary()?;
-        while let Some(pair) = dict.next_pair()? {
-            match pair {
-                (b"length", value) => length = Some(u64::decode_bencode_object(value)?),
-                (b"md5sum", value) => md5sum = Some(String::decode_bencode_object(value)?),
-                // FIXME:
-                // (b"path", value) => {debug!("File");
-                //     path = Vec::decode_bencode_object(value)?
-                //         .into_iter()
-                //         .map(|bytes| String::from_utf8(bytes).unwrap())
-                //         .collect()
-                // }
-                _ => {}
-            }
-        }
-
-        let length = length.expect("Decoding Error: File missing length");
-        // debug!("\t{:?} {length}  {}", md5sum, path.display());
-
-        Ok(Self {
-            length,
-            md5sum,
-            path: PathBuf::new(),
+            seeders: 0,           // Default value
+            leechers: 0,          // Default value
+            next_upload_speed: 0, // Default value
+            interval: 0,          // Default value
+            error_count: 0,       // Default value
+            encoding: encoding_option,
+            min_interval: None, // Default value (from tracker response, not torrent file)
+            tracker_id: None,   // Default value (from tracker response, not torrent file)
         })
     }
 }
