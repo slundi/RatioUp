@@ -1,32 +1,31 @@
 // https://xbtt.sourceforge.net/udp_tracker_protocol.html
-// based on https://github.com/billyb2/cratetorrent/blob/master/cratetorrent/src/tracker.rs
 
 use std::time::Duration;
 
+use crate::bencode::{BencodeDecoder, BencodeValue};
 use crate::torrent::Torrent;
 use crate::{CLIENT, CONFIG, TORRENTS};
-use bendy::decoding::{Decoder, FromBencode};
 use fake_torrent_client::Client;
 use reqwest::Client as ReqwestClient;
 use tracing::{debug, error, info, warn};
 use url::{Host, Url};
 
-pub fn print_request_error(code: u16) {
-    match code {
-        100 => error!("100 Invalid request, not a GET"),
-        101 => error!("101 Info hash is missing"),
-        102 => error!("102 Peer ID is missing"),
-        103 => error!("103 Port is missing"),
-        150 => error!("150 Info hash is not 20 bytes long"),
-        151 => error!("151 Invalid peer ID"),
-        152 => error!("152 Invalid numwant: requested more peers than allowed by tracker"),
-        // Sent only by trackers that do not automatically include new hashes into the database.
-        200 => error!("200 info_hash not found in the database"),
-        500 => error!("500 Client sent an eventless request before the specified time"),
-        900 => error!("500 Generic error"),
-        _ => warn!("Unknown error code: {code}"),
-    }
-}
+// pub fn print_request_error(code: u16) {
+//     match code {
+//         100 => error!("100 Invalid request, not a GET"),
+//         101 => error!("101 Info hash is missing"),
+//         102 => error!("102 Peer ID is missing"),
+//         103 => error!("103 Port is missing"),
+//         150 => error!("150 Info hash is not 20 bytes long"),
+//         151 => error!("151 Invalid peer ID"),
+//         152 => error!("152 Invalid numwant: requested more peers than allowed by tracker"),
+//         // Sent only by trackers that do not automatically include new hashes into the database.
+//         200 => error!("200 info_hash not found in the database"),
+//         500 => error!("500 Client sent an eventless request before the specified time"),
+//         900 => error!("500 Generic error"),
+//         _ => warn!("Unknown error code: {code}"),
+//     }
+// }
 
 /// The optional announce event.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -46,7 +45,7 @@ pub async fn announce_started() -> u64 {
     let mut wait_time = u64::MAX;
     for m in list.iter() {
         let mut t = m.lock().await;
-        t.interval = announce(&mut t, Some(Event::Started)).await;
+        announce(&mut t, Some(Event::Started)).await;
         wait_time = wait_time.min(t.interval);
         info!("Time: {}", wait_time);
     }
@@ -59,12 +58,12 @@ pub async fn announce_stopped() {
     let list = TORRENTS.read().await;
     for m in list.iter() {
         let mut t = m.lock().await;
-        t.interval = announce(&mut t, Some(Event::Stopped)).await;
+        announce(&mut t, Some(Event::Stopped)).await;
     }
 }
 
 /// Check if the TLD is a ".local" or if the URL scheme is not `udp` but `http` or `https`.
-pub fn is_supprted_url(url_str: &str) -> bool {
+pub fn is_supported_url(url_str: &str) -> bool {
     let parsed_url = match Url::parse(url_str) {
         Ok(url) => url,
         Err(e) => {
@@ -117,8 +116,7 @@ pub fn is_supprted_url(url_str: &str) -> bool {
 ///
 /// The tracker may not be contacted more often than the minimum interval
 /// returned in the first announce response.
-pub async fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
-    let mut interval = 4_294_967_295u64;
+pub async fn announce(torrent: &mut Torrent, event: Option<Event>) {
     // TODO: prepare announce (uploaded and downloaded if applicable)
     torrent.compute_speeds();
     if let Some(client) = &*CLIENT.read().await {
@@ -130,7 +128,7 @@ pub async fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
                 // interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
                 continue;
             }
-            interval = interval.max(announce_http(&url, torrent, client, event).await);
+            announce_http(&url, torrent, client, event).await;
         }
         info!(
             "Anounced: interval={}, event={:?}, downloaded=0, uploaded={}, seeders={}, leechers={}, torrent={}",
@@ -142,7 +140,6 @@ pub async fn announce(torrent: &mut Torrent, event: Option<Event>) -> u64 {
             torrent.name
         );
     }
-    interval
 }
 
 // /// Check which torrents need to be announced and call the announce fuction when applicable
@@ -232,7 +229,7 @@ async fn announce_http(
 
     match request_builder.send().await {
         Ok(resp) => {
-            print_request_error(resp.status().as_u16());
+            let status = resp.status().as_u16();
             info!(
                 "\tTime since last announce: {}s \t interval: {}",
                 torrent.last_announce.elapsed().as_secs(),
@@ -256,56 +253,71 @@ async fn announce_http(
             );
 
             // Bencode decoding
-            let mut decoder = Decoder::new(&bytes_vec).with_max_depth(2);
-            if let Some(raw) = decoder.next_object().expect("Wrong object") {
-                let mut dict = raw
-                    .try_into_dictionary()
-                    .expect("Unable to create dictionnary");
-                while let Some(pair) = dict.next_pair().expect("Cannot get pair") {
-                    match pair {
-                        // If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
-                        (b"failure reason", value) => {
-                            error!(
-                                "Cannot announce: {:?}",
-                                String::decode_bencode_object(value).unwrap_or_default()
-                            );
-                            break;
+            let mut decoder = BencodeDecoder::new(&bytes_vec);
+            match decoder.decode() {
+                Ok(bv) => {
+                    match bv {
+                        BencodeValue::Dictionary(dict) => {
+                            if let Some(BencodeValue::ByteString(msg)) =
+                                dict.get(b"failure reason".as_ref())
+                            {
+                                // If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
+                                error!("Cannot announce: {:?}", std::str::from_utf8(msg));
+                            } else if let Some(BencodeValue::ByteString(msg)) =
+                                dict.get(b"warning message".as_ref())
+                            {
+                                // (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
+                                warn!("Announce with warning: {:?}", std::str::from_utf8(msg));
+                            } else {
+                                // good response
+                                // Interval in seconds that the client should wait between sending regular requests to the tracker
+                                if let Some(BencodeValue::Integer(interval)) =
+                                    dict.get(b"interval".as_ref())
+                                {
+                                    torrent.interval = *interval as u64;
+                                }
+
+                                // (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
+                                if let Some(BencodeValue::Integer(mi)) =
+                                    dict.get(b"min interval".as_ref())
+                                {
+                                    torrent.min_interval = Some(*mi as u64);
+                                }
+
+                                // A string that the client should send back on its next announcements. If absent and
+                                // a previous announce sent a tracker id, do not discard the old value; keep using it.
+                                if let Some(BencodeValue::ByteString(tid)) =
+                                    dict.get(b"tracker_id".as_ref())
+                                {
+                                    match std::str::from_utf8(tid) {
+                                        Ok(tracker_id) => {
+                                            torrent.tracker_id = Some(tracker_id.to_string())
+                                        }
+                                        Err(e) => error!("Unable to decode tracker_id: {:?}", e),
+                                    }
+                                }
+
+                                // number of peers with the entire file, i.e. seeders (integer)
+                                if let Some(BencodeValue::Integer(value)) =
+                                    dict.get(b"complete".as_ref())
+                                {
+                                    torrent.seeders = *value as u16;
+                                }
+
+                                // number of peers with the entire file, i.e. seeders (integer)
+                                if let Some(BencodeValue::Integer(value)) =
+                                    dict.get(b"incomplete".as_ref())
+                                {
+                                    torrent.leechers = *value as u16;
+                                }
+
+                                // b"peers" not handled
+                            }
                         }
-                        // (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
-                        (b"warning message", value) => {
-                            warn!(
-                                "Announce with warning: {:?}",
-                                String::decode_bencode_object(value).unwrap_or_default()
-                            );
-                        }
-                        // Interval in seconds that the client should wait between sending regular requests to the tracker
-                        (b"interval", value) => {
-                            torrent.interval =
-                                u64::decode_bencode_object(value).unwrap_or(torrent.interval);
-                        }
-                        // (optional) Minimum announce interval. If present clients must not reannounce more frequently than this.
-                        (b"min interval", value) => {
-                            torrent.min_interval =
-                                Some(u64::decode_bencode_object(value).unwrap_or_default());
-                        }
-                        // A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
-                        (b"tracker id", value) => {
-                            torrent.tracker_id =
-                                Some(String::decode_bencode_object(value).unwrap_or_default());
-                        }
-                        // number of peers with the entire file, i.e. seeders (integer)
-                        (b"complete", value) => {
-                            torrent.seeders = u16::decode_bencode_object(value).unwrap_or_default();
-                        }
-                        // number of non-seeder peers, aka "leechers" (integer)
-                        (b"incomplete", value) => {
-                            torrent.leechers =
-                                u16::decode_bencode_object(value).unwrap_or_default();
-                        }
-                        // (b"peers", value) => {} // Gérer les pairs ici si nécessaire
-                        _ => (),
+                        _ => error!("Response is not a dictionary"),
                     }
                 }
+                Err(e) => error!("Bad response with HTTP status {status}: {:?}", e),
             }
         }
         Err(err) => error!("Cannot announce: {:?}", err),
@@ -320,7 +332,12 @@ async fn announce_http(
 
 /// Build the HTTP announce URLs for the listed trackers in the torrent file.
 /// It prepares the annonce query by replacing variables (port, numwant, ...) with the computed values
-pub async fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, key: String) -> String {
+pub async fn build_url(
+    url: &str,
+    torrent: &mut Torrent,
+    event: Option<Event>,
+    key: String,
+) -> String {
     info!("Torrent {:?}: {}", event, torrent.name);
     //compute downloads and uploads
     let elapsed: u64 = if event == Some(Event::Started) {
@@ -331,9 +348,7 @@ pub async fn build_url(url: &str, torrent: &mut Torrent, event: Option<Event>, k
     let uploaded: u64 = torrent.next_upload_speed as u64 * elapsed;
 
     //build URL list
-    let client = (*CLIENT.read().await)
-        .clone()
-        .unwrap();
+    let client = (*CLIENT.read().await).clone().unwrap();
     let mut port = 55555u16;
     let mut numwant = 80u16;
     if let Some(config) = CONFIG.get() {
@@ -383,12 +398,12 @@ mod tests {
 
     #[test]
     pub fn test_supported_url() {
-        assert!(!is_supprted_url("udp://something/?param=test"));
-        assert!(is_supprted_url("http://localhost/?param=test"));
-        assert!(is_supprted_url("https://localhost/?param=test"));
-        assert!(is_supprted_url("http://another-host/?param=test"));
-        assert!(!is_supprted_url("udp://udp-host.tld/?param=test"));
-        assert!(is_supprted_url("http://some-host.tld/?param=test"));
-        assert!(is_supprted_url("https://some-host.tld/?param=test"));
+        assert!(!is_supported_url("udp://something/?param=test"));
+        assert!(is_supported_url("http://localhost/?param=test"));
+        assert!(is_supported_url("https://localhost/?param=test"));
+        assert!(is_supported_url("http://another-host/?param=test"));
+        assert!(!is_supported_url("udp://udp-host.tld/?param=test"));
+        assert!(is_supported_url("http://some-host.tld/?param=test"));
+        assert!(is_supported_url("https://some-host.tld/?param=test"));
     }
 }

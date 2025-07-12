@@ -12,6 +12,7 @@ use crate::config::Config;
 use crate::torrent::Torrent;
 
 mod announcer;
+pub mod bencode;
 mod config;
 mod directory;
 pub mod json_output;
@@ -69,7 +70,7 @@ fn get_config_from_xdg() -> Option<PathBuf> {
 async fn main() {
     //configure logger
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .with_level(true)
         .with_target(false)
         .init();
