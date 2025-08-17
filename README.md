@@ -80,6 +80,6 @@ Upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes). It is 
 - [ ] Display session upload (global & per torrent)
 - [x] Torrents with multiple trackers?
 - [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
-- [ ] UDP announce URL support
+- [x] UDP announce URL support
 - [x] Allow to generate a static JSON file with runtime statistics (global and per torrent download & upload, some torrent information), ie: `OUTPUT=/var/www/ratioup.json`
 - [ ] Generate a fancy web page, if nobody is helping me for it, it will never be done

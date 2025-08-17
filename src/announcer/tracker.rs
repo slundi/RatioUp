@@ -1,5 +1,3 @@
-// https://xbtt.sourceforge.net/udp_tracker_protocol.html
-
 use std::time::Duration;
 
 use crate::bencode::{BencodeDecoder, BencodeValue};
@@ -28,10 +26,11 @@ use url::{Host, Url};
 // }
 
 /// The optional announce event.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     /// The first request to tracker must include this value.
-    Started,
+    Started = 2,
     // /// Must be sent to the tracker when the client becomes a seeder. Must not be
     // /// present if the client started as a seeder.
     // Completed,
@@ -62,7 +61,7 @@ pub async fn announce_stopped() {
     }
 }
 
-/// Check if the TLD is a ".local" or if the URL scheme is not `udp` but `http` or `https`.
+/// Check if the TLD is a ".local".
 pub fn is_supported_url(url_str: &str) -> bool {
     let parsed_url = match Url::parse(url_str) {
         Ok(url) => url,
@@ -71,12 +70,6 @@ pub fn is_supported_url(url_str: &str) -> bool {
             return false;
         }
     };
-
-    let scheme = parsed_url.scheme().to_ascii_lowercase();
-    if scheme != "http" && scheme != "https" {
-        warn!("Skipping non HTTP/HTTPS tracker: {url_str}");
-        return false;
-    }
 
     let host = match parsed_url.host() {
         Some(h) => h,
@@ -126,6 +119,7 @@ pub async fn announce(torrent: &mut Torrent, event: Option<Event>) {
             if url.to_lowercase().starts_with("udp://") {
                 warn!("UDP tracker not supported (yet): cannot announce");
                 // interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
+                crate::announcer::udp::announce_udp(&url, torrent, client, event).await;
                 continue;
             }
             announce_http(&url, torrent, client, event).await;
@@ -218,7 +212,7 @@ async fn announce_http(
     let mut full_url = String::from(url);
     full_url.push('?');
     full_url.push_str(&url_template);
-    let built_url = build_url(url, torrent, event, client.key.clone()).await;
+    let built_url = build_url(url, torrent, event, client.key.clone().to_string()).await;
     info!("Announce HTTP URL {built_url}");
 
     let mut request_builder = reqwest_client.get(&built_url);
