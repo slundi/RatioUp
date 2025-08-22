@@ -4,7 +4,9 @@ authors = ["slundi"]
 version = "1.3.0"
 edition = "2024"
 homepage = "https://codeberg.org/slundi/RatioUp"
-keywords = ["torrent", "ratio", "cli"]
+keywords = ["torrent", "ratio", "upload", "cli"]
+license = "MIT"
+description = "CLI tool to fake your torrent upload in order to increase your ratio."
 
 [dependencies]
 fastrand = "2.3"
