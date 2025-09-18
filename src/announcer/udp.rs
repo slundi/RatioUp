@@ -209,10 +209,10 @@ impl UdpTracker {
     }
 
     fn generate_transaction_id(&self) -> u32 {
-        SystemTime::now()
+        let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as u32
+            .unwrap();
+        (now.as_secs() as u32).wrapping_add(now.subsec_nanos())
     }
 }
 
@@ -248,14 +248,20 @@ pub async fn announce_udp(url: &str, torrent: &mut Torrent, client: &Client, eve
                     };
 
                     match tracker.announce(&request).await {
-                        Ok(response) => torrent.uploaded += uploaded,
+                        Ok(response) => {
+                            torrent.uploaded += uploaded;
+                            torrent.min_interval = Some((response.interval as u64).max(1800));
+                        }
                         Err(e) => error!("{:?}", e),
                     }
                 }
                 Err(e) => error!("{:?}", e),
             }
         }
-        Err(e) => error!("Cannot parse URL {url} with {generated_url}: {e}"),
+        Err(e) => {
+            torrent.min_interval = Some(1800);
+            error!("Cannot parse URL {url} with {generated_url}: {e}");
+        },
     }
 }
 

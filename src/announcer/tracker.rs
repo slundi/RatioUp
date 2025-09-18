@@ -79,6 +79,10 @@ pub fn is_supported_url(url_str: &str) -> bool {
         }
     };
 
+    if parsed_url.scheme() == "udp" {
+        return false;
+    }
+
     match host {
         Host::Domain(domain_str) => {
             // For “.local”, a simple split is sufficient, as “.local” is not a “public” TLD managed by the public
@@ -120,9 +124,9 @@ pub async fn announce(torrent: &mut Torrent, event: Option<Event>) {
                 warn!("UDP tracker not supported (yet): cannot announce");
                 // interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
                 crate::announcer::udp::announce_udp(&url, torrent, client, event).await;
-                continue;
+            } else {
+                announce_http(&url, torrent, client, event).await;
             }
-            announce_http(&url, torrent, client, event).await;
         }
         info!(
             "Anounced: interval={}, event={:?}, downloaded=0, uploaded={}, seeders={}, leechers={}, torrent={}",
@@ -210,7 +214,7 @@ async fn announce_http(
 
     let (url_template, headers_to_set) = client.get_query();
     let mut full_url = String::from(url);
-    full_url.push('?');
+    full_url.push(if full_url.contains('?') { '&' } else { '?' });
     full_url.push_str(&url_template);
     let built_url = build_url(url, torrent, event, client.key.clone().to_string()).await;
     info!("Announce HTTP URL {built_url}");
