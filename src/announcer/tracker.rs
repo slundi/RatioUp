@@ -210,7 +210,7 @@ async fn announce_http(
 
     let (url_template, headers_to_set) = client.get_query();
     let mut full_url = String::from(url);
-    full_url.push('?');
+    full_url.push(if full_url.contains('?') { '&' } else { '?' });
     full_url.push_str(&url_template);
     let built_url = build_url(url, torrent, event, client.key.clone().to_string()).await;
     info!("Announce HTTP URL {built_url}");

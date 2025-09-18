@@ -1,7 +1,7 @@
 [package]
 name = "RatioUp"
 authors = ["slundi"]
-version = "1.3.0"
+version = "1.3.1"
 edition = "2024"
 homepage = "https://codeberg.org/slundi/RatioUp"
 keywords = ["torrent", "ratio", "upload", "cli"]
