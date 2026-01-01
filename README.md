@@ -70,6 +70,10 @@ torrent_dir = "./torrents"
 
 # If given, it will output stats in a JSON file that you can use in a webserver to track what is happening.
 output_stats = "/tmp/RatioUp.json"
+
+# Web UI configuration
+http_port = 8080
+http_bind_address = "0.0.0.0"
 ```
 
 Upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes). It is only seeding, it does not fake the downloading first.

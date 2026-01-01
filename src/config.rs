@@ -27,6 +27,10 @@ pub struct Config {
     /// Output file path for the JSON file.
     /// You may want somethink like `/var/www/ratio_up.json` to expose it on your web server.
     pub output_stats: Option<PathBuf>,
+    /// Web UI port
+    pub http_port: u16,
+    /// Web UI bind address
+    pub http_bind_address: String,
 }
 impl Default for Config {
     fn default() -> Self {
@@ -42,8 +46,11 @@ impl Default for Config {
             torrent_dir: PathBuf::from("."),
             //client: fake_torrent_client::Client::from(fake_torrent_client::clients::ClientVersion::Qbittorrent_4_4_2),
             // key_refresh_every: 0,
-            client: String::from("Transmission_3_00"),
+            client: String::from("Qbittorrent_4_4_2"),
             output_stats: None,
+            // Web UI defaults
+            http_port: 8080,
+            http_bind_address: String::from("0.0.0.0"),
         }
     }
 }

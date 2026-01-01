@@ -18,6 +18,7 @@ mod directory;
 pub mod json_output;
 pub mod torrent;
 mod utils;
+mod web;
 
 static STARTED: OnceCell<chrono::DateTime<chrono::Utc>> = OnceCell::const_new();
 static CONFIG: OnceCell<Config> = OnceCell::const_new();
@@ -136,7 +137,11 @@ async fn main() {
         std::process::exit(0);
     });
 
-    run_announcer(wait_time).await;
+    // Run the web server and the announcer concurrently
+    tokio::select! {
+        _ = web::run_web_server() => {},
+        _ = run_announcer(wait_time) => {},
+    }
 }
 
 async fn write_pid_file() -> Option<PathBuf> {

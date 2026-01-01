@@ -1,5 +1,6 @@
 // https://wiki.theory.org/BitTorrentSpecification#Metainfo_File_Structure
 // https://wiki.theory.org/BitTorrent_Tracker_Protocol
+use serde::Serialize;
 use std::fmt;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -7,6 +8,20 @@ use std::time::Instant;
 use crate::announcer::tracker::is_supported_url;
 use crate::bencode::{BencodeDecoder, BencodeDecoderError, BencodeValue, encode_bencode_value};
 use crate::utils::{get_sha1, percent_encoding};
+
+#[derive(Serialize)]
+pub struct TorrentJson {
+    name: String,
+    length: u64,
+    private: bool,
+    uploaded: u64,
+    seeders: u16,
+    leechers: u16,
+    next_upload_speed: u32,
+    interval: u64,
+    last_announce_sec: u64,
+    urls: Vec<String>,
+}
 
 /// Errors that can occur when parsing a Torrent struct from Bencode.
 #[derive(Debug)]
@@ -151,34 +166,24 @@ impl Torrent {
         Self::from_bencode_bytes(&data)
     }
 
-    pub fn to_json(&self) -> String {
-        let mut result = String::with_capacity(256);
-        result.push_str("\t{\"name\": \"");
-        result.push_str(&self.name.replace("\"", "\\\""));
-        result.push_str("\", \"length\": ");
-        result.push_str(&self.length.to_string());
-        result.push_str(", \"private\": ");
-        result.push_str(&self.private.to_string());
-        result.push_str(", \"uploaded\": ");
-        result.push_str(&self.uploaded.to_string());
-        result.push_str(", \"seeders\": ");
-        result.push_str(&self.seeders.to_string());
-        result.push_str(", \"leechers\": ");
-        result.push_str(&self.leechers.to_string());
-        result.push_str(", \"next_upload_speed\": ");
-        result.push_str(&self.next_upload_speed.to_string());
-        result.push_str(", \"urls\": [");
-        let count = self.urls.len();
-        for (index, url) in self.urls.iter().enumerate() {
-            result.push_str(&format!("\"{url}\""));
-            if (index + 1) < count {
-                result.push_str(", ");
-            } else {
-                result.push_str("]}\n");
-            }
+    pub fn to_json_struct(&self) -> TorrentJson {
+        TorrentJson {
+            name: self.name.clone(),
+            length: self.length.clone(),
+            private: self.private.clone(),
+            uploaded: self.uploaded.clone(),
+            seeders: self.seeders.clone(),
+            leechers: self.leechers.clone(),
+            next_upload_speed: self.next_upload_speed.clone(),
+            interval: self.interval.clone(),
+            last_announce_sec: self.last_announce.elapsed().as_secs(),
+            urls: self.urls.clone(),
         }
-        // TODO: add info hash?
-        result
+    }
+
+    pub fn to_json(&self) -> String {
+        let dto = self.to_json_struct();
+        serde_json::to_string(&dto).expect("serialize torrent")
     }
 
     /// Parses a raw bencoded .torrent file byte slice into a Torrent struct.
@@ -346,7 +351,7 @@ impl Torrent {
             seeders: 0,           // Default value
             leechers: 0,          // Default value
             next_upload_speed: 0, // Default value
-            interval: 0,          // Default value
+            interval: 5,          // Do not use 0 to avoid flooding in case of misbehaving tracker
             error_count: 0,       // Default value
             encoding: encoding_option,
             min_interval: None, // Default value (from tracker response, not torrent file)
