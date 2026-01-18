@@ -356,7 +356,7 @@ pub async fn build_url(
         }
     }
     let mut result = String::from(url);
-    result.push('?');
+    result.push(if result.contains('?') { '&' } else { '?' });
     result.push_str(&client.query);
     let result = result
         .replace("{infohash}", &torrent.info_hash_urlencoded)
