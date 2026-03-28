@@ -2,7 +2,7 @@
 pkgs.mkShell {
   inputsFrom = with pkgs; [
     # openssl
-    libressl_3_7
+    libressl
 
     llvmPackages.bintools
     rustc
@@ -10,7 +10,7 @@ pkgs.mkShell {
 
   buildInputs = with pkgs; [
     # openssl
-    libressl_3_7
+    libressl
     pkg-config
 
     llvmPackages.bintools
@@ -29,7 +29,7 @@ pkgs.mkShell {
 
   packages = with pkgs; [
     # openssl
-    libressl_3_7
+    libressl
     pkg-config
     llvmPackages.bintools
     rustc
