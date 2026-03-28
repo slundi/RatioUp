@@ -1,27 +1,33 @@
-name: Cross Compile
+name: Release
 
 on:
   push:
-    branches:
-      - release
-    tags: ["*"]
-  # pull_request:
-  #   branches:
-  #     - main
-  #     - master
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: RatioUp
 
 jobs:
-  cross-compile:
-    name: Build for ${{ matrix.target }}
+  # Linux builds using cross for ARM targets
+  build-linux:
+    name: Build Linux ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu # Linux 64-bit
-          - aarch64-unknown-linux-gnu # Linux ARM64
-          - arm-unknown-linux-gnueabihf # Linux ARMv7 (Raspberry Pi)
-          - x86_64-pc-windows-msvc # Windows 64-bit
-          - x86_64-apple-darwin # macOS (nécessite un runner macOS)
+        include:
+          - target: x86_64-unknown-linux-gnu
+            use_cross: false
+          - target: i686-unknown-linux-gnu
+            use_cross: true
+          - target: aarch64-unknown-linux-gnu
+            use_cross: true
+          - target: armv7-unknown-linux-gnueabihf
+            use_cross: true
+          - target: arm-unknown-linux-gnueabihf
+            use_cross: true
 
     steps:
       - name: Checkout code
@@ -39,41 +45,143 @@ jobs:
             ${{ runner.os }}-cargo-${{ matrix.target }}-
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ matrix.target }}
+          targets: ${{ matrix.target }}
 
-      - name: Install ARMv7 cross-compiler (arm-linux-gnueabihf)
-        # run if target is arm-unknown-linux-gnueabihf
-        if: matrix.target == 'arm-unknown-linux-gnueabihf'
-        run: |
-          sudo apt-get update
-          # `gcc-arm-linux-gnueabihf` fournit le compilateur spécifique
-          # Ou `crossbuild-essential-armhf` pour un ensemble plus complet d'outils
-          sudo apt-get install -y gcc-arm-linux-gnueabihf
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
-      - name: Install AArch64 cross-compiler (aarch64-linux-gnu)
-        # run if target is aarch64-unknown-linux-gnu
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          # `gcc-aarch64-linux-gnu` fournit le compilateur spécifique
-          # Ou `crossbuild-essential-arm64` pour un ensemble plus complet d'outils
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Build with cross
+        if: matrix.use_cross
+        run: cross build --release --target ${{ matrix.target }}
 
-      - name: Build release binary for ${{ matrix.target }}
+      - name: Build native
+        if: "!matrix.use_cross"
         run: cargo build --release --target ${{ matrix.target }}
 
-      # Optionnel : to archive binaries
-      - name: Upload artifacts
+      - name: Package binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czvf ../../../${{ env.BINARY_NAME }}-${{ matrix.target }}.tar.gz ${{ env.BINARY_NAME }}
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event.repository.name }}-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/${{ github.event.repository.name }} # adapt path/name
-          # For Windows, add .exe:
-          # path: target/${{ matrix.target }}/release/${{ github.event.repository.name }}${{ startsWith(matrix.target, 'x86_64-pc-windows') && '.exe' || '' }}
+          name: ${{ env.BINARY_NAME }}-${{ matrix.target }}
+          path: ${{ env.BINARY_NAME }}-${{ matrix.target }}.tar.gz
 
-# https://docs.github.com/en/actions/how-tos/use-cases-and-examples/building-and-testing/building-and-testing-rust
-# https://rakhim.exotext.com/how-to-build-and-publish-multi-platform-rust-binaries
-# https://www.qovery.com/blog/how-to-make-rust-multi-arch-release-easy/
+  # Windows build
+  build-windows:
+    name: Build Windows x86_64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-x86_64-pc-windows-msvc-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-x86_64-pc-windows-msvc-
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package binary
+        shell: pwsh
+        run: |
+          Compress-Archive -Path target/release/${{ env.BINARY_NAME }}.exe -DestinationPath ${{ env.BINARY_NAME }}-x86_64-pc-windows-msvc.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-x86_64-pc-windows-msvc
+          path: ${{ env.BINARY_NAME }}-x86_64-pc-windows-msvc.zip
+
+  # macOS builds (Intel and Apple Silicon)
+  build-macos:
+    name: Build macOS ${{ matrix.target }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czvf ../../../${{ env.BINARY_NAME }}-${{ matrix.target }}.tar.gz ${{ env.BINARY_NAME }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-${{ matrix.target }}
+          path: ${{ env.BINARY_NAME }}-${{ matrix.target }}.tar.gz
+
+  # Create GitHub Release and upload all binaries
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec mv {} release/ \;
+          ls -la release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
