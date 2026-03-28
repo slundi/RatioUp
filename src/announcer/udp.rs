@@ -227,9 +227,7 @@ impl UdpTracker {
     }
 
     fn generate_transaction_id(&self) -> u32 {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         (now.as_secs() as u32).wrapping_add(now.subsec_nanos())
     }
 }
@@ -331,7 +329,10 @@ pub async fn announce_udp(url: &str, torrent: &mut Torrent, client: &Client, eve
 
             info!(
                 "UDP announce OK: interval={}, seeders={}, leechers={}, peers={}",
-                response.interval, response.seeders, response.leechers, response.peers.len()
+                response.interval,
+                response.seeders,
+                response.leechers,
+                response.peers.len()
             );
         }
         Err(e) => {

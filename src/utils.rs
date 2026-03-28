@@ -134,11 +134,11 @@ mod tests {
         let sha1 = get_sha1(input);
         let digest = m.digest();
         assert_eq!(digest.bytes(), sha1);
-        
+
         println!("SHA: {digest}");
         assert_eq!(
             sha1,
-            *b"\x2e\xf7\xbd\xe6\x08\xce\x54\x04\xe9\x7d\x5f\x04\x2f\x95\xf8\x9f\x1c\x23\x28\x71" 
+            *b"\x2e\xf7\xbd\xe6\x08\xce\x54\x04\xe9\x7d\x5f\x04\x2f\x95\xf8\x9f\x1c\x23\x28\x71"
         );
     }
 
