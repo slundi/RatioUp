@@ -86,6 +86,9 @@ pub struct Torrent {
     pub min_interval: Option<u64>,
     /// A string that the client should send back on its next announcements. If absent and a previous announce sent a tracker id, do not discard the old value; keep using it.
     pub tracker_id: Option<String>,
+
+    /// Source file path (used for file watcher to identify torrents on removal)
+    pub source_path: Option<PathBuf>,
 }
 
 impl Torrent {
@@ -147,8 +150,10 @@ impl Torrent {
     // }
 
     pub fn from_file(path: PathBuf) -> Result<Self, TorrentError> {
-        let data = std::fs::read(path).expect("Cannot read torrent file");
-        Self::from_bencode_bytes(&data)
+        let data = std::fs::read(&path).expect("Cannot read torrent file");
+        let mut torrent = Self::from_bencode_bytes(&data)?;
+        torrent.source_path = Some(path);
+        Ok(torrent)
     }
 
     pub fn to_json(&self) -> String {
@@ -351,6 +356,7 @@ impl Torrent {
             encoding: encoding_option,
             min_interval: None, // Default value (from tracker response, not torrent file)
             tracker_id: None,   // Default value (from tracker response, not torrent file)
+            source_path: None,  // Set by from_file() if loaded from disk
         })
     }
 }
@@ -379,6 +385,7 @@ mod tests {
             encoding: None,
             min_interval: None,
             tracker_id: None,
+            source_path: None,
         };
         assert!(!t.can_upload());
         t.leechers = 5;
@@ -410,6 +417,7 @@ mod tests {
             encoding: None,
             min_interval: None,
             tracker_id: None,
+            source_path: None,
         };
         let speed = t.uploaded(16, 64);
         assert!(speed > 0);

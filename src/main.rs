@@ -18,6 +18,7 @@ mod directory;
 pub mod json_output;
 pub mod torrent;
 mod utils;
+mod watcher;
 
 static STARTED: OnceCell<chrono::DateTime<chrono::Utc>> = OnceCell::const_new();
 static CONFIG: OnceCell<Config> = OnceCell::const_new();
@@ -122,6 +123,12 @@ async fn main() {
         pid_file = write_pid_file().await;
     }
     let wait_time = announcer::tracker::announce_started().await;
+
+    // Start file watcher for dynamic torrent management
+    let watch_dir = CONFIG.get().unwrap().torrent_dir.clone();
+    tokio::spawn(async move {
+        watcher::watch_directory(watch_dir).await;
+    });
 
     tokio::spawn(async move {
         // graceful exit when Ctrl + C / SIGINT
