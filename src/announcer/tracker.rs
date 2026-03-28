@@ -261,13 +261,16 @@ async fn announce_http(
                             {
                                 // If present, then no other keys may be present. The value is a human-readable error message as to why the request failed
                                 error!("Cannot announce: {:?}", std::str::from_utf8(msg));
-                            } else if let Some(BencodeValue::ByteString(msg)) =
-                                dict.get(b"warning message".as_ref())
-                            {
-                                // (new, optional) Similar to failure reason, but the response still gets processed normally. The warning message is shown just like an error.
-                                warn!("Announce with warning: {:?}", std::str::from_utf8(msg));
+                                torrent.error_count += 1;
                             } else {
-                                // good response
+                                // Check for warning message (response still gets processed normally)
+                                if let Some(BencodeValue::ByteString(msg)) =
+                                    dict.get(b"warning message".as_ref())
+                                {
+                                    warn!("Announce with warning: {:?}", std::str::from_utf8(msg));
+                                }
+
+                                // Process response fields
                                 // Interval in seconds that the client should wait between sending regular requests to the tracker
                                 if let Some(BencodeValue::Integer(interval)) =
                                     dict.get(b"interval".as_ref())
@@ -302,7 +305,7 @@ async fn announce_http(
                                     torrent.seeders = *value as u16;
                                 }
 
-                                // number of peers with the entire file, i.e. seeders (integer)
+                                // number of leechers (integer)
                                 if let Some(BencodeValue::Integer(value)) =
                                     dict.get(b"incomplete".as_ref())
                                 {
@@ -310,6 +313,10 @@ async fn announce_http(
                                 }
 
                                 // b"peers" not handled
+
+                                // Reset last_announce and error_count on successful response
+                                torrent.last_announce = std::time::Instant::now();
+                                torrent.error_count = 0;
                             }
                         }
                         _ => error!("Response is not a dictionary"),
