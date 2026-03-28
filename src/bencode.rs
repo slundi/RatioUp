@@ -192,202 +192,272 @@ pub fn encode_bencode_value(
     Ok(())
 }
 
-// trait BencodeDictExt {
-//     fn get_as_bytes(&self, key: &str) -> Option<&Vec<u8>>;
-//     fn get_as_string(&self, key: &str) -> Option<String>;
-//     fn get_as_integer(&self, key: &str) -> Option<i64>;
-//     fn get_as_list(&self, key: &str) -> Option<&Vec<BencodeValue>>;
-//     fn get_as_dict(&self, key: &str) -> Option<&BTreeMap<Vec<u8>, BencodeValue>>;
-// }
-
-// impl BencodeDictExt for BTreeMap<Vec<u8>, BencodeValue> {
-//     fn get_as_bytes(&self, key: &str) -> Option<&Vec<u8>> {
-//         self.get(key.as_bytes()).and_then(|v| {
-//             if let BencodeValue::ByteString(b) = v {
-//                 Some(b)
-//             } else {
-//                 None
-//             }
-//         })
-//     }
-
-//     fn get_as_string(&self, key: &str) -> Option<String> {
-//         self.get_as_bytes(key)
-//             .and_then(|b| str::from_utf8(b).ok().map(|s| s.to_string()))
-//     }
-
-//     fn get_as_integer(&self, key: &str) -> Option<i64> {
-//         self.get(key.as_bytes()).and_then(|v| {
-//             if let BencodeValue::Integer(i) = v {
-//                 Some(*i)
-//             } else {
-//                 None
-//             }
-//         })
-//     }
-
-//     fn get_as_list(&self, key: &str) -> Option<&Vec<BencodeValue>> {
-//         self.get(key.as_bytes()).and_then(|v| {
-//             if let BencodeValue::List(l) = v {
-//                 Some(l)
-//             } else {
-//                 None
-//             }
-//         })
-//     }
-
-//     fn get_as_dict(&self, key: &str) -> Option<&BTreeMap<Vec<u8>, BencodeValue>> {
-//         self.get(key.as_bytes()).and_then(|v| {
-//             if let BencodeValue::Dictionary(d) = v {
-//                 Some(d)
-//             } else {
-//                 None
-//             }
-//         })
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
-    // use crate::{torrent::Torrent, utils::{get_sha1, percent_encoding}};
+    use super::*;
 
-    // use super::*;
+    // Helper to create a BencodeValue::ByteString
+    fn bstring(s: &[u8]) -> BencodeValue {
+        BencodeValue::ByteString(s.to_vec())
+    }
 
-    // // Helper to create a simple BencodeValue::Dictionary from a Vec of key-value pairs
-    // fn bdict(pairs: Vec<(&[u8], BencodeValue)>) -> BencodeValue {
-    //     let mut map = BTreeMap::new();
-    //     for (key, value) in pairs {
-    //         map.insert(key.to_vec(), value);
-    //     }
-    //     BencodeValue::Dictionary(map)
-    // }
+    // Helper to create a BencodeValue::Integer
+    fn bint(i: i64) -> BencodeValue {
+        BencodeValue::Integer(i)
+    }
 
-    // // Helper to create a BencodeValue::List
-    // fn blist(items: Vec<BencodeValue>) -> BencodeValue {
-    //     BencodeValue::List(items)
-    // }
+    // --- Decoder Tests ---
 
-    // // Helper to create a BencodeValue::ByteString
-    // fn bstring(s: &[u8]) -> BencodeValue {
-    //     BencodeValue::ByteString(s.to_vec())
-    // }
+    #[test]
+    fn test_decode_integer_positive() {
+        let mut decoder = BencodeDecoder::new(b"i42e");
+        assert_eq!(decoder.decode().unwrap(), bint(42));
+    }
 
-    // // Helper to create a BencodeValue::Integer
-    // fn bint(i: i64) -> BencodeValue {
-    //     BencodeValue::Integer(i)
-    // }
+    #[test]
+    fn test_decode_integer_negative() {
+        let mut decoder = BencodeDecoder::new(b"i-42e");
+        assert_eq!(decoder.decode().unwrap(), bint(-42));
+    }
 
-    // #[test]
-    // fn test_decode_torrent_single_file() {
-    //     // Example from a simplified single-file .torrent structure
-    //     let bencode_data = b"d8:announce30:http://tracker.example.com/announce4:info29:d6:lengthi1234e4:name4:testee";
-    //     let torrent = Torrent::from_bencode_bytes(bencode_data).unwrap();
+    #[test]
+    fn test_decode_integer_zero() {
+        let mut decoder = BencodeDecoder::new(b"i0e");
+        assert_eq!(decoder.decode().unwrap(), bint(0));
+    }
 
-    //     assert_eq!(torrent.name, "test");
-    //     assert_eq!(torrent.urls, vec!["http://tracker.example.com/announce"]);
-    //     assert_eq!(torrent.length, 1234);
-    //     assert!(!torrent.private); // Default if not present
-    //     assert_eq!(torrent.uploaded, 0); // Default
-    //     assert_eq!(torrent.seeders, 0); // Default
-    //     assert_eq!(torrent.leechers, 0); // Default
-    //     assert_eq!(torrent.next_upload_speed, 0); // Default
-    //     assert_eq!(torrent.interval, 0); // Default
-    //     assert_eq!(torrent.error_count, 0); // Default
-    //     assert_eq!(torrent.encoding, None); // Default
+    #[test]
+    fn test_decode_byte_string() {
+        let mut decoder = BencodeDecoder::new(b"4:spam");
+        assert_eq!(decoder.decode().unwrap(), bstring(b"spam"));
+    }
 
-    //     // Test info_hash calculation (SHA1 of 'd6:lengthi1234e4:name4:testee')
-    //     let expected_info_hash = get_sha1(b"d6:lengthi1234e4:name4:testee");
-    //     assert_eq!(torrent.info_hash, expected_info_hash);
-    //     assert_eq!(
-    //         torrent.info_hash_urlencoded,
-    //         percent_encoding(&expected_info_hash).to_string()
-    //     );
-    // }
+    #[test]
+    fn test_decode_byte_string_empty() {
+        let mut decoder = BencodeDecoder::new(b"0:");
+        assert_eq!(decoder.decode().unwrap(), bstring(b""));
+    }
 
-    // #[test]
-    // fn test_decode_torrent_multi_file() {
-    //     // Simplified multi-file .torrent example
-    //     let bencode_data = b"d8:announce30:http://tracker.example.com/announce4:info90:d5:filesl\
-    //         d6:lengthi100e4:pathl4:file1ee\
-    //         d6:lengthi200e4:pathl4:file2ee\
-    //         e4:name4:my_filesee";
-    //     let torrent = Torrent::from_bencode_bytes(bencode_data).unwrap();
+    #[test]
+    fn test_decode_byte_string_binary() {
+        // Binary data that isn't valid UTF-8
+        let mut decoder = BencodeDecoder::new(b"3:\xff\xfe\xfd");
+        assert_eq!(decoder.decode().unwrap(), bstring(b"\xff\xfe\xfd"));
+    }
 
-    //     assert_eq!(torrent.name, "my_files");
-    //     assert_eq!(torrent.urls, vec!["http://tracker.example.com/announce"]);
-    //     assert_eq!(torrent.length, 300); // 100 + 200
-    //     assert!(!torrent.private);
+    #[test]
+    fn test_decode_list_empty() {
+        let mut decoder = BencodeDecoder::new(b"le");
+        assert_eq!(decoder.decode().unwrap(), BencodeValue::List(vec![]));
+    }
 
-    //     // Test info_hash calculation
-    //     let expected_info_hash_raw = b"d5:filesl\
-    //         d6:lengthi100e4:pathl4:file1ee\
-    //         d6:lengthi200e4:pathl4:file2ee\
-    //         e4:name4:my_filesee";
-    //     let expected_info_hash = get_sha1(expected_info_hash_raw);
-    //     assert_eq!(torrent.info_hash, expected_info_hash);
-    // }
+    #[test]
+    fn test_decode_list_integers() {
+        let mut decoder = BencodeDecoder::new(b"li1ei2ei3ee");
+        assert_eq!(
+            decoder.decode().unwrap(),
+            BencodeValue::List(vec![bint(1), bint(2), bint(3)])
+        );
+    }
 
-    // #[test]
-    // fn test_decode_torrent_announce_list() {
-    //     let bencode_data = b"d8:announce30:http://tracker.example.com/announce13:announce-listll31:http://tracker1.com/announceel31:http://tracker2.com/announceee4:info29:d6:lengthi100e4:name4:testee";
-    //     let torrent = Torrent::from_bencode_bytes(bencode_data).unwrap();
+    #[test]
+    fn test_decode_list_mixed() {
+        let mut decoder = BencodeDecoder::new(b"l4:spami42ee");
+        assert_eq!(
+            decoder.decode().unwrap(),
+            BencodeValue::List(vec![bstring(b"spam"), bint(42)])
+        );
+    }
 
-    //     assert_eq!(torrent.urls.len(), 3);
-    //     assert!(
-    //         torrent
-    //             .urls
-    //             .contains(&"http://tracker.example.com/announce".to_string())
-    //     );
-    //     assert!(
-    //         torrent
-    //             .urls
-    //             .contains(&"http://tracker1.com/announce".to_string())
-    //     );
-    //     assert!(
-    //         torrent
-    //             .urls
-    //             .contains(&"http://tracker2.com/announce".to_string())
-    //     );
-    //     assert_eq!(torrent.length, 100);
-    // }
+    #[test]
+    fn test_decode_list_nested() {
+        let mut decoder = BencodeDecoder::new(b"lli1ei2eeli3ei4eee");
+        assert_eq!(
+            decoder.decode().unwrap(),
+            BencodeValue::List(vec![
+                BencodeValue::List(vec![bint(1), bint(2)]),
+                BencodeValue::List(vec![bint(3), bint(4)])
+            ])
+        );
+    }
 
-    // #[test]
-    // fn test_decode_torrent_private_flag() {
-    //     let bencode_data = b"d8:announce30:http://tracker.example.com/announce4:info24:d6:lengthi123e7:privatei1e4:name4:testee";
-    //     let torrent = Torrent::from_bencode_bytes(bencode_data).unwrap();
-    //     assert!(torrent.private);
+    #[test]
+    fn test_decode_dictionary_empty() {
+        let mut decoder = BencodeDecoder::new(b"de");
+        assert_eq!(
+            decoder.decode().unwrap(),
+            BencodeValue::Dictionary(BTreeMap::new())
+        );
+    }
 
-    //     let bencode_data_public = b"d8:announce30:http://tracker.example.com/announce4:info24:d6:lengthi123e7:privatei0e4:name4:testee";
-    //     let torrent_public = Torrent::from_bencode_bytes(bencode_data_public).unwrap();
-    //     assert!(!torrent_public.private);
-    // }
+    #[test]
+    fn test_decode_dictionary_simple() {
+        let mut decoder = BencodeDecoder::new(b"d3:bar4:spam3:fooi42ee");
+        let result = decoder.decode().unwrap();
+        if let BencodeValue::Dictionary(dict) = result {
+            assert_eq!(dict.get(b"bar".as_ref()), Some(&bstring(b"spam")));
+            assert_eq!(dict.get(b"foo".as_ref()), Some(&bint(42)));
+        } else {
+            panic!("Expected dictionary");
+        }
+    }
 
-    // #[test]
-    // fn test_decode_torrent_encoding() {
-    //     let bencode_data = b"d8:announce30:http://tracker.example.com/announce8:encoding6:UTF-84:info16:d6:lengthi1234e4:name4:testee";
-    //     let torrent = Torrent::from_bencode_bytes(bencode_data).unwrap();
-    //     assert_eq!(torrent.encoding, Some("UTF-8".to_string()));
-    // }
+    #[test]
+    fn test_decode_dictionary_nested() {
+        let mut decoder = BencodeDecoder::new(b"d5:innerd3:keyi123eee");
+        let result = decoder.decode().unwrap();
+        if let BencodeValue::Dictionary(dict) = result {
+            if let Some(BencodeValue::Dictionary(inner)) = dict.get(b"inner".as_ref()) {
+                assert_eq!(inner.get(b"key".as_ref()), Some(&bint(123)));
+            } else {
+                panic!("Expected inner dictionary");
+            }
+        } else {
+            panic!("Expected dictionary");
+        }
+    }
 
-    // #[test]
-    // fn test_decode_torrent_missing_info() {
-    //     let bencode_data = b"d8:announce30:http://tracker.example.com/announcee";
-    //     let err = Torrent::from_bencode_bytes(bencode_data).unwrap_err();
-    //     if let TorrentError::MissingField(field) = err {
-    //         assert_eq!(field, "info");
-    //     } else {
-    //         panic!("Expected MissingField error, got {:?}", err);
-    //     }
-    // }
+    #[test]
+    fn test_decode_tracker_response() {
+        // Typical tracker response
+        let data = b"d8:completei15e10:incompletei3e8:intervali1800ee";
+        let mut decoder = BencodeDecoder::new(data);
+        let result = decoder.decode().unwrap();
+        if let BencodeValue::Dictionary(dict) = result {
+            assert_eq!(dict.get(b"complete".as_ref()), Some(&bint(15)));
+            assert_eq!(dict.get(b"incomplete".as_ref()), Some(&bint(3)));
+            assert_eq!(dict.get(b"interval".as_ref()), Some(&bint(1800)));
+        } else {
+            panic!("Expected dictionary");
+        }
+    }
 
-    // #[test]
-    // fn test_decode_torrent_invalid_name_type() {
-    //     let bencode_data = b"d8:announce30:http://tracker.example.com/announce4:info16:d6:lengthi1234e4:namei123ee"; // name is an int
-    //     let err = Torrent::from_bencode_bytes(bencode_data).unwrap_err();
-    //     if let TorrentError::InvalidFieldType(field) = err {
-    //         assert_eq!(field, "info.name");
-    //     } else {
-    //         panic!("Expected InvalidFieldType error, got {:?}", err);
-    //     }
-    // }
+    #[test]
+    fn test_decode_failure_reason() {
+        let data = b"d14:failure reason17:Torrent not founde";
+        let mut decoder = BencodeDecoder::new(data);
+        let result = decoder.decode().unwrap();
+        if let BencodeValue::Dictionary(dict) = result {
+            assert_eq!(
+                dict.get(b"failure reason".as_ref()),
+                Some(&bstring(b"Torrent not found"))
+            );
+        } else {
+            panic!("Expected dictionary");
+        }
+    }
+
+    #[test]
+    fn test_decode_error_unexpected_end() {
+        let mut decoder = BencodeDecoder::new(b"i42");
+        assert!(matches!(
+            decoder.decode(),
+            Err(BencodeDecoderError::UnexpectedEndOfInput)
+        ));
+    }
+
+    #[test]
+    fn test_decode_error_invalid_format() {
+        let mut decoder = BencodeDecoder::new(b"x");
+        assert!(matches!(
+            decoder.decode(),
+            Err(BencodeDecoderError::InvalidFormat)
+        ));
+    }
+
+    #[test]
+    fn test_decode_error_string_truncated() {
+        let mut decoder = BencodeDecoder::new(b"10:short");
+        assert!(matches!(
+            decoder.decode(),
+            Err(BencodeDecoderError::UnexpectedEndOfInput)
+        ));
+    }
+
+    // --- Encoder Tests ---
+
+    #[test]
+    fn test_encode_integer() {
+        let mut buffer = Vec::new();
+        encode_bencode_value(&bint(42), &mut buffer).unwrap();
+        assert_eq!(buffer, b"i42e");
+    }
+
+    #[test]
+    fn test_encode_integer_negative() {
+        let mut buffer = Vec::new();
+        encode_bencode_value(&bint(-123), &mut buffer).unwrap();
+        assert_eq!(buffer, b"i-123e");
+    }
+
+    #[test]
+    fn test_encode_byte_string() {
+        let mut buffer = Vec::new();
+        encode_bencode_value(&bstring(b"hello"), &mut buffer).unwrap();
+        assert_eq!(buffer, b"5:hello");
+    }
+
+    #[test]
+    fn test_encode_byte_string_empty() {
+        let mut buffer = Vec::new();
+        encode_bencode_value(&bstring(b""), &mut buffer).unwrap();
+        assert_eq!(buffer, b"0:");
+    }
+
+    #[test]
+    fn test_encode_list() {
+        let mut buffer = Vec::new();
+        let list = BencodeValue::List(vec![bint(1), bstring(b"two")]);
+        encode_bencode_value(&list, &mut buffer).unwrap();
+        assert_eq!(buffer, b"li1e3:twoe");
+    }
+
+    #[test]
+    fn test_encode_dictionary() {
+        let mut buffer = Vec::new();
+        let mut dict = BTreeMap::new();
+        dict.insert(b"cow".to_vec(), bstring(b"moo"));
+        dict.insert(b"spam".to_vec(), bstring(b"eggs"));
+        encode_bencode_value(&BencodeValue::Dictionary(dict), &mut buffer).unwrap();
+        // BTreeMap ensures keys are sorted: "cow" < "spam"
+        assert_eq!(buffer, b"d3:cow3:moo4:spam4:eggse");
+    }
+
+    // --- Roundtrip Tests ---
+
+    #[test]
+    fn test_roundtrip_integer() {
+        let original = bint(999);
+        let mut buffer = Vec::new();
+        encode_bencode_value(&original, &mut buffer).unwrap();
+        let mut decoder = BencodeDecoder::new(&buffer);
+        assert_eq!(decoder.decode().unwrap(), original);
+    }
+
+    #[test]
+    fn test_roundtrip_string() {
+        let original = bstring(b"test data");
+        let mut buffer = Vec::new();
+        encode_bencode_value(&original, &mut buffer).unwrap();
+        let mut decoder = BencodeDecoder::new(&buffer);
+        assert_eq!(decoder.decode().unwrap(), original);
+    }
+
+    #[test]
+    fn test_roundtrip_complex() {
+        let mut inner_dict = BTreeMap::new();
+        inner_dict.insert(b"pieces".to_vec(), bstring(b"\x00\x01\x02\x03"));
+        inner_dict.insert(b"length".to_vec(), bint(12345));
+
+        let mut outer_dict = BTreeMap::new();
+        outer_dict.insert(b"announce".to_vec(), bstring(b"http://tracker.example.com"));
+        outer_dict.insert(b"info".to_vec(), BencodeValue::Dictionary(inner_dict));
+
+        let original = BencodeValue::Dictionary(outer_dict);
+        let mut buffer = Vec::new();
+        encode_bencode_value(&original, &mut buffer).unwrap();
+
+        let mut decoder = BencodeDecoder::new(&buffer);
+        assert_eq!(decoder.decode().unwrap(), original);
+    }
 }
