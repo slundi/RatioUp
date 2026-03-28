@@ -3,6 +3,20 @@ use tracing::{debug, info};
 use crate::TORRENTS;
 use tokio::time::Duration;
 
+/// Add jitter (±5%) to an interval to prevent thundering herd effect.
+/// Multiple torrents with similar intervals will announce at slightly different times.
+fn add_jitter(interval: u64) -> u64 {
+    if interval < 20 {
+        // Don't add jitter to very short intervals
+        return interval;
+    }
+    // Calculate 5% of the interval
+    let jitter_range = interval / 20; // 5%
+    // Random offset between -jitter_range and +jitter_range
+    let offset = fastrand::u64(0..=jitter_range * 2);
+    interval.saturating_sub(jitter_range).saturating_add(offset)
+}
+
 pub async fn run(wait_time: u64) {
     info!("Starting scheduler");
     loop {
@@ -24,7 +38,7 @@ pub async fn run(wait_time: u64) {
             if min_interval == u64::MAX || min_interval == 0 {
                 wait_time
             } else {
-                min_interval
+                add_jitter(min_interval)
             }
         };
         debug!("Next announce in {}s", next_interval);
@@ -86,3 +100,54 @@ pub async fn run(wait_time: u64) {
 //         // TODO: schedule next announce
 //     }
 // }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_add_jitter_short_interval() {
+        // Short intervals should not have jitter
+        assert_eq!(add_jitter(10), 10);
+        assert_eq!(add_jitter(19), 19);
+        assert_eq!(add_jitter(0), 0);
+    }
+
+    #[test]
+    fn test_add_jitter_bounds() {
+        // Test that jitter stays within ±5% bounds
+        let interval = 1000u64;
+        let min_expected = 950; // -5%
+        let max_expected = 1050; // +5%
+
+        for _ in 0..100 {
+            let result = add_jitter(interval);
+            assert!(
+                result >= min_expected && result <= max_expected,
+                "Jitter {} out of bounds [{}, {}]",
+                result,
+                min_expected,
+                max_expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_add_jitter_typical_tracker_interval() {
+        // Typical tracker interval of 1800s (30 minutes)
+        let interval = 1800u64;
+        let min_expected = 1710; // -5%
+        let max_expected = 1890; // +5%
+
+        for _ in 0..100 {
+            let result = add_jitter(interval);
+            assert!(
+                result >= min_expected && result <= max_expected,
+                "Jitter {} out of bounds [{}, {}]",
+                result,
+                min_expected,
+                max_expected
+            );
+        }
+    }
+}
