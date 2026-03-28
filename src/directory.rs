@@ -25,29 +25,29 @@ pub async fn load_torrents(directory: PathBuf) -> u16 {
     let mut added_hashes: Vec<String> = Vec::new();
     for p in paths {
         let path = p.expect("Cannot get torrent path").path();
-        if let Some(extension) = path.clone().extension() {
-            if extension.eq_ignore_ascii_case("torrent") {
-                match Torrent::from_file(path.clone()) {
-                    Ok(torrent) => {
-                        info!("Found torrent {}", path.display());
-                        // info!("Found torrent {} {:?}", path.display(), torrent);
-                        // TODO: dedup, ignore UDP
-                        if torrent.urls.is_empty() {
-                            warn!(
-                                "Skipping torrent because there is no URL (DHT or not supported URLs)"
-                            );
-                            continue;
-                        }
-                        if added_hashes.contains(&torrent.info_hash_urlencoded) {
-                            warn!("A torrent with the same hash is already added");
-                        } else {
-                            added_hashes.push(torrent.info_hash_urlencoded.clone());
-                            list.push(Mutex::new(torrent));
-                            count += 1;
-                        }
+        if let Some(extension) = path.clone().extension()
+            && extension.eq_ignore_ascii_case("torrent")
+        {
+            match Torrent::from_file(path.clone()) {
+                Ok(torrent) => {
+                    info!("Found torrent {}", path.display());
+                    // info!("Found torrent {} {:?}", path.display(), torrent);
+                    // TODO: dedup, ignore UDP
+                    if torrent.urls.is_empty() {
+                        warn!(
+                            "Skipping torrent because there is no URL (DHT or not supported URLs)"
+                        );
+                        continue;
                     }
-                    Err(e) => error!("Cannot add torrent {}: {e}", path.display()),
+                    if added_hashes.contains(&torrent.info_hash_urlencoded) {
+                        warn!("A torrent with the same hash is already added");
+                    } else {
+                        added_hashes.push(torrent.info_hash_urlencoded.clone());
+                        list.push(Mutex::new(torrent));
+                        count += 1;
+                    }
                 }
+                Err(e) => error!("Cannot add torrent {}: {e}", path.display()),
             }
         }
     }

@@ -320,10 +320,10 @@ async fn announce_http(
         }
         Err(err) => error!("Cannot announce: {:?}", err),
     }
-    if let Some(min) = torrent.min_interval {
-        if min > torrent.interval {
-            return min;
-        }
+    if let Some(min) = torrent.min_interval
+        && min > torrent.interval
+    {
+        return min;
     }
     torrent.interval
 }
