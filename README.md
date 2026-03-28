@@ -69,17 +69,8 @@ max_upload_rate = 23068672
 torrent_dir = "./torrents"
 
 # If given, it will output stats in a JSON file that you can use in a webserver to track what is happening.
+# Copy www/index.html in the same folder as RatioUp.json if you want to see stats
 output_stats = "/tmp/RatioUp.json"
 ```
 
 Upload rates are in bytes (ie: 16MB = 16 x 1024 x 1024 = 16777216 bytes). It is only seeding, it does not fake the downloading first.
-
-## Roadmap
-
-- [x] Change delay if different after announcing
-- [ ] Display session upload (global & per torrent)
-- [x] Torrents with multiple trackers?
-- [ ] Further testings (I use *rtorrent* and *qBittorrent*, other clients may not work properly)
-- [x] UDP announce URL support
-- [x] Allow to generate a static JSON file with runtime statistics (global and per torrent download & upload, some torrent information), ie: `OUTPUT=/var/www/ratioup.json`
-- [ ] Generate a fancy web page, if nobody is helping me for it, it will never be done

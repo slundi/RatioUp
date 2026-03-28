@@ -30,7 +30,20 @@ pub async fn write() {
         data.push_str("{\"started\":\"");
         data.push_str(&started.to_rfc3339());
 
-        data.push_str("\", \"torrents\": [\n");
+        // Add client info
+        data.push_str("\",\"client\":\"");
+        if let Some(client) = &*crate::CLIENT.read().await {
+            data.push_str(&client.name);
+        }
+
+        // Add bandwidth info
+        data.push_str("\",\"min_upload_rate\":");
+        data.push_str(&config.min_upload_rate.to_string());
+        data.push_str(",\"max_upload_rate\":");
+        data.push_str(&config.max_upload_rate.to_string());
+
+        data.push_str(",\"torrents\":[\n");
+        let mut total_uploaded: u64 = 0;
         {
             let torrents = TORRENTS.read().await;
             let mut first = true;
@@ -40,10 +53,14 @@ pub async fn write() {
                 } else {
                     data.push(',');
                 }
-                data.push_str(&m.lock().await.to_json());
+                let t = m.lock().await;
+                total_uploaded += t.uploaded;
+                data.push_str(&t.to_json());
             }
         }
-        data.push_str("\n]}");
+        data.push_str("\n],\"total_uploaded\":");
+        data.push_str(&total_uploaded.to_string());
+        data.push('}');
         if let Err(e) = tokio::fs::write(path, data.as_bytes()).await {
             error!("Cannot write stat file: {e}");
         }

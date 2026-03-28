@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RatioUp Stats</title>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f5;
+            --bg-card: #ffffff;
+            --text-primary: #1a1a1a;
+            --text-secondary: #666666;
+            --border-color: #e0e0e0;
+            --accent-color: #3b82f6;
+            --success-color: #22c55e;
+            --warning-color: #f59e0b;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #0f3460;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --border-color: #2a2a4a;
+            --accent-color: #60a5fa;
+            --success-color: #4ade80;
+            --warning-color: #fbbf24;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 20px 0;
+            margin-bottom: 30px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .logo-emoji {
+            font-size: 2rem;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 25px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--accent-color);
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .theme-toggle {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.3s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--accent-color);
+        }
+
+        .info-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .info-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .info-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .info-card-emoji {
+            font-size: 1.5rem;
+        }
+
+        .info-card-title {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .info-card-value {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .table-container {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .table-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .refresh-info {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: var(--bg-secondary);
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        th:hover {
+            background-color: var(--border-color);
+        }
+
+        th.sorted-asc::after {
+            content: ' ▲';
+            font-size: 0.7rem;
+        }
+
+        th.sorted-desc::after {
+            content: ' ▼';
+            font-size: 0.7rem;
+        }
+
+        tr:hover {
+            background-color: var(--bg-secondary);
+        }
+
+        .torrent-name {
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .torrent-icon {
+            margin-right: 8px;
+        }
+
+        .number-cell {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .seeder-count {
+            color: var(--success-color);
+            font-weight: 600;
+        }
+
+        .leecher-count {
+            color: var(--warning-color);
+            font-weight: 600;
+        }
+
+        .private-badge {
+            background-color: var(--accent-color);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-left: 8px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            text-align: center;
+            padding: 40px;
+            color: #ef4444;
+        }
+
+        .speed-range {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px 20px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        footer a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .header-stats {
+                justify-content: center;
+            }
+
+            th, td {
+                padding: 10px 8px;
+                font-size: 0.85rem;
+            }
+
+            .torrent-name {
+                max-width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-emoji">📈</span>
+                    <h1>RatioUp</h1>
+                </div>
+                <div class="header-stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="torrent-count">-</div>
+                        <div class="stat-label">📁 Torrents</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="total-uploaded">-</div>
+                        <div class="stat-label">⬆️ Total Uploaded</div>
+                    </div>
+                </div>
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                    <span id="theme-icon">🌙</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="info-cards">
+            <div class="info-card">
+                <div class="info-card-header">
+                    <span class="info-card-emoji">🕐</span>
+                    <span class="info-card-title">Started</span>
+                </div>
+                <div class="info-card-value" id="started-time">-</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">
+                    <span class="info-card-emoji">💻</span>
+                    <span class="info-card-title">Client</span>
+                </div>
+                <div class="info-card-value" id="client-name">-</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">
+                    <span class="info-card-emoji">📊</span>
+                    <span class="info-card-title">Upload Speed Range</span>
+                </div>
+                <div class="info-card-value" id="speed-range">-</div>
+            </div>
+            <div class="info-card">
+                <div class="info-card-header">
+                    <span class="info-card-emoji">⏱️</span>
+                    <span class="info-card-title">Uptime</span>
+                </div>
+                <div class="info-card-value" id="uptime">-</div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div class="table-header">
+                <div class="table-title">
+                    <span>📋</span>
+                    <span>Torrent List</span>
+                </div>
+                <div class="refresh-info">
+                    🔄 Auto-refresh every 60s | Last: <span id="last-refresh">-</span>
+                </div>
+            </div>
+            <div id="table-content">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading stats...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>📈 RatioUp Stats Dashboard | <a href="https://github.com/slundi/RatioUp" target="_blank">GitHub</a> | <a href="https://codeberg.org/slundi/RatioUp" target="_blank">Codeberg</a></p>
+    </footer>
+
+    <script>
+        let statsData = null;
+        let sortColumn = 'name';
+        let sortDirection = 'asc';
+        let startedDate = null;
+
+        // Format bytes to human readable
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // Format date/time
+        function formatDateTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleString();
+        }
+
+        // Calculate uptime
+        function calculateUptime(startedIso) {
+            const started = new Date(startedIso);
+            const now = new Date();
+            const diff = now - started;
+
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+            let parts = [];
+            if (days > 0) parts.push(days + 'd');
+            if (hours > 0) parts.push(hours + 'h');
+            parts.push(minutes + 'm');
+
+            return parts.join(' ');
+        }
+
+        // Toggle theme
+        function toggleTheme() {
+            const body = document.body;
+            const icon = document.getElementById('theme-icon');
+            if (body.getAttribute('data-theme') === 'dark') {
+                body.removeAttribute('data-theme');
+                icon.textContent = '🌙';
+                localStorage.setItem('theme', 'light');
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                icon.textContent = '☀️';
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+
+        // Load theme from localStorage
+        function loadTheme() {
+            const theme = localStorage.getItem('theme');
+            if (theme === 'dark') {
+                document.body.setAttribute('data-theme', 'dark');
+                document.getElementById('theme-icon').textContent = '☀️';
+            }
+        }
+
+        // Sort torrents
+        function sortTorrents(torrents, column, direction) {
+            return [...torrents].sort((a, b) => {
+                let valA = a[column];
+                let valB = b[column];
+
+                if (typeof valA === 'string') {
+                    valA = valA.toLowerCase();
+                    valB = valB.toLowerCase();
+                }
+
+                if (valA < valB) return direction === 'asc' ? -1 : 1;
+                if (valA > valB) return direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        // Handle column sort click
+        function handleSort(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            renderTable();
+        }
+
+        // Render the table
+        function renderTable() {
+            if (!statsData || !statsData.torrents) {
+                document.getElementById('table-content').innerHTML = '<div class="error-message">❌ No data available</div>';
+                return;
+            }
+
+            const sortedTorrents = sortTorrents(statsData.torrents, sortColumn, sortDirection);
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th onclick="handleSort('name')" class="${sortColumn === 'name' ? 'sorted-' + sortDirection : ''}">📄 Name</th>
+                            <th onclick="handleSort('length')" class="${sortColumn === 'length' ? 'sorted-' + sortDirection : ''}">📦 Size</th>
+                            <th onclick="handleSort('seeders')" class="${sortColumn === 'seeders' ? 'sorted-' + sortDirection : ''}">🌱 Seeders</th>
+                            <th onclick="handleSort('leechers')" class="${sortColumn === 'leechers' ? 'sorted-' + sortDirection : ''}">🔻 Leechers</th>
+                            <th onclick="handleSort('uploaded')" class="${sortColumn === 'uploaded' ? 'sorted-' + sortDirection : ''}">⬆️ Uploaded</th>
+                            <th onclick="handleSort('next_upload_speed')" class="${sortColumn === 'next_upload_speed' ? 'sorted-' + sortDirection : ''}">🚀 Speed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            for (const torrent of sortedTorrents) {
+                const icon = torrent.urls && torrent.urls.length > 1 ? '📁' : '📄';
+                const privateBadge = torrent.private ? '<span class="private-badge">🔒 Private</span>' : '';
+
+                html += `
+                    <tr>
+                        <td class="torrent-name" title="${torrent.name}">
+                            <span class="torrent-icon">${icon}</span>
+                            ${torrent.name}${privateBadge}
+                        </td>
+                        <td class="number-cell">${formatBytes(torrent.length)}</td>
+                        <td class="number-cell seeder-count">${torrent.seeders}</td>
+                        <td class="number-cell leecher-count">${torrent.leechers}</td>
+                        <td class="number-cell">${formatBytes(torrent.uploaded)}</td>
+                        <td class="number-cell">${formatBytes(torrent.next_upload_speed)}/s</td>
+                    </tr>
+                `;
+            }
+
+            html += '</tbody></table>';
+            document.getElementById('table-content').innerHTML = html;
+        }
+
+        // Update header stats
+        function updateStats() {
+            if (!statsData) return;
+
+            document.getElementById('torrent-count').textContent = statsData.torrents ? statsData.torrents.length : 0;
+            document.getElementById('total-uploaded').textContent = formatBytes(statsData.total_uploaded || 0);
+            document.getElementById('started-time').textContent = statsData.started ? formatDateTime(statsData.started) : '-';
+            document.getElementById('client-name').textContent = statsData.client || '-';
+
+            if (statsData.min_upload_rate !== undefined && statsData.max_upload_rate !== undefined) {
+                document.getElementById('speed-range').textContent =
+                    formatBytes(statsData.min_upload_rate) + '/s - ' + formatBytes(statsData.max_upload_rate) + '/s';
+            }
+
+            if (statsData.started) {
+                startedDate = statsData.started;
+                updateUptime();
+            }
+
+            document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+        }
+
+        // Update uptime display
+        function updateUptime() {
+            if (startedDate) {
+                document.getElementById('uptime').textContent = calculateUptime(startedDate);
+            }
+        }
+
+        // Fetch stats from JSON file
+        async function fetchStats() {
+            try {
+                // Try to fetch stats.json from the same directory
+                const response = await fetch('RatioUp.json?' + Date.now());
+                if (!response.ok) {
+                    throw new Error('Failed to load stats');
+                }
+                statsData = await response.json();
+                updateStats();
+                renderTable();
+            } catch (error) {
+                console.error('Error fetching stats:', error);
+                document.getElementById('table-content').innerHTML =
+                    '<div class="error-message">❌ Could not load stats.json<br><small>Make sure stats.json is in the same directory</small></div>';
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTheme();
+            fetchStats();
+
+            // Refresh every 60 seconds
+            setInterval(fetchStats, 60000);
+
+            // Update uptime every minute
+            setInterval(updateUptime, 60000);
+        });
+    </script>
+</body>
+</html>
