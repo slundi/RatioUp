@@ -90,7 +90,7 @@ pub struct Torrent {
 
 impl Torrent {
     /// Tells if we can announce to tracker(s) depending on the last announce
-    pub fn shound_announce(&self) -> bool {
+    pub fn should_announce(&self) -> bool {
         self.last_announce.elapsed().as_secs() >= self.interval
     }
 
