@@ -35,13 +35,24 @@ pub struct TrackerResponse {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)] // Fields are used in Debug output for logging
 pub enum TrackerError {
     IoError(std::io::Error),
     Timeout,
     InvalidResponse,
     TrackerError(String),
     ParseError,
+}
+
+impl std::fmt::Display for TrackerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TrackerError::IoError(e) => write!(f, "IO error: {}", e),
+            TrackerError::Timeout => write!(f, "connection timed out"),
+            TrackerError::InvalidResponse => write!(f, "invalid response from tracker"),
+            TrackerError::TrackerError(msg) => write!(f, "tracker error: {}", msg),
+            TrackerError::ParseError => write!(f, "failed to parse tracker URL"),
+        }
+    }
 }
 
 impl From<std::io::Error> for TrackerError {
@@ -257,7 +268,7 @@ pub async fn announce_udp(url: &str, torrent: &mut Torrent, client: &Client, eve
     let tracker_addr = match resolve_tracker_addr(url).await {
         Ok(addr) => addr,
         Err(e) => {
-            error!("Cannot resolve UDP tracker {}: {:?}", url, e);
+            error!("Cannot resolve UDP tracker {}: {}", url, e);
             torrent.error_count += 1;
             return;
         }
@@ -267,7 +278,7 @@ pub async fn announce_udp(url: &str, torrent: &mut Torrent, client: &Client, eve
     let tracker = match UdpTracker::new(tracker_addr).await {
         Ok(t) => t,
         Err(e) => {
-            error!("Cannot connect to UDP tracker {}: {:?}", url, e);
+            error!("Cannot connect to UDP tracker {}: {}", url, e);
             torrent.error_count += 1;
             return;
         }
@@ -324,7 +335,7 @@ pub async fn announce_udp(url: &str, torrent: &mut Torrent, client: &Client, eve
             );
         }
         Err(e) => {
-            warn!("UDP announce failed for {}: {:?}", url, e);
+            warn!("UDP announce failed for {}: {}", url, e);
             torrent.error_count += 1;
         }
     }
