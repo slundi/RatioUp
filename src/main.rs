@@ -107,9 +107,7 @@ async fn main() {
 
     // schedule client refresh key if applicable
     if let Some(refresh_every) = config::init_client(&config).await {
-        let _ = std::thread::Builder::new()
-            .name("ratioup-key-renewer".to_owned())
-            .spawn(move || run_key_renewer(refresh_every));
+        tokio::spawn(run_key_renewer(refresh_every));
     }
 
     directory::prepare_torrent_folder(config.torrent_dir.clone()).await;
