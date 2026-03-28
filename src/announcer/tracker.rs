@@ -61,7 +61,9 @@ pub async fn announce_stopped() {
     }
 }
 
-/// Check if the TLD is a ".local".
+/// Check if the tracker URL is supported.
+/// Supports HTTP, HTTPS, and UDP schemes.
+/// Rejects .local TLDs (mDNS).
 pub fn is_supported_url(url_str: &str) -> bool {
     let parsed_url = match Url::parse(url_str) {
         Ok(url) => url,
@@ -79,13 +81,16 @@ pub fn is_supported_url(url_str: &str) -> bool {
         }
     };
 
-    if parsed_url.scheme() == "udp" {
+    // Check supported schemes
+    let scheme = parsed_url.scheme();
+    if scheme != "http" && scheme != "https" && scheme != "udp" {
+        warn!("Unsupported tracker scheme: {}", scheme);
         return false;
     }
 
     match host {
         Host::Domain(domain_str) => {
-            // For “.local”, a simple split is sufficient, as “.local” is not a “public” TLD managed by the public
+            // For ".local", a simple split is sufficient, as ".local" is not a "public" TLD managed by the public
             // suffix list, but a pseudo-TLD for mDNS.
             let parts: Vec<&str> = domain_str.split('.').collect();
             if let Some(tld_candidate) = parts.last() {
@@ -96,11 +101,8 @@ pub fn is_supported_url(url_str: &str) -> bool {
                 false
             }
         }
-        // Check the host is not an IP but a domain
-        Host::Ipv4(_) | Host::Ipv6(_) => {
-            error!("Tracker is not a domain but an IP: {url_str}");
-            true
-        }
+        // IP addresses are supported
+        Host::Ipv4(_) | Host::Ipv6(_) => true,
     }
 }
 
@@ -121,8 +123,6 @@ pub async fn announce(torrent: &mut Torrent, event: Option<Event>) {
         for url in torrent.urls.clone() {
             debug!("\t{}", url);
             if url.to_lowercase().starts_with("udp://") {
-                warn!("UDP tracker not supported (yet): cannot announce");
-                // interval = futures::executor::block_on(announce_udp(&url, torrent, client, event));
                 crate::announcer::udp::announce_udp(&url, torrent, client, event).await;
             } else {
                 announce_http(&url, torrent, client, event).await;
@@ -403,12 +403,26 @@ mod tests {
 
     #[test]
     pub fn test_supported_url() {
-        assert!(!is_supported_url("udp://something/?param=test"));
+        // HTTP and HTTPS
         assert!(is_supported_url("http://localhost/?param=test"));
         assert!(is_supported_url("https://localhost/?param=test"));
         assert!(is_supported_url("http://another-host/?param=test"));
-        assert!(!is_supported_url("udp://udp-host.tld/?param=test"));
         assert!(is_supported_url("http://some-host.tld/?param=test"));
         assert!(is_supported_url("https://some-host.tld/?param=test"));
+
+        // UDP is now supported
+        assert!(is_supported_url("udp://tracker.example.com:1337/announce"));
+        assert!(is_supported_url("udp://udp-host.tld:6969/announce"));
+
+        // .local TLD should be rejected
+        assert!(!is_supported_url("http://myserver.local/announce"));
+        assert!(!is_supported_url("udp://tracker.local:6969/announce"));
+
+        // IP addresses are supported
+        assert!(is_supported_url("http://192.168.1.1:8080/announce"));
+        assert!(is_supported_url("udp://192.168.1.1:6969/announce"));
+
+        // Unsupported schemes
+        assert!(!is_supported_url("wss://tracker.example.com/announce"));
     }
 }
