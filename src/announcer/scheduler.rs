@@ -5,18 +5,28 @@ use tokio::time::Duration;
 
 pub async fn run(wait_time: u64) {
     info!("Starting scheduler");
-    let mut next_interval = wait_time;
     loop {
-        {
+        let next_interval = {
             let list = TORRENTS.read().await;
+            // Compute minimum time until next announce across all torrents
+            let mut min_interval = u64::MAX;
             for m in list.iter() {
                 let mut t = m.lock().await;
-                if t.shound_announce() {
+                if t.should_announce() {
                     super::tracker::announce(&mut t, None).await;
-                    next_interval = u64::min(next_interval, t.interval);
                 }
+                // Always update min_interval based on time until next announce
+                let elapsed = t.last_announce.elapsed().as_secs();
+                let time_until_announce = t.interval.saturating_sub(elapsed);
+                min_interval = u64::min(min_interval, time_until_announce);
             }
-        }
+            // Ensure we don't sleep forever if no torrents or all have 0 interval
+            if min_interval == u64::MAX || min_interval == 0 {
+                wait_time
+            } else {
+                min_interval
+            }
+        };
         debug!("Next announce in {}s", next_interval);
         crate::json_output::write().await;
         tokio::time::sleep(Duration::from_secs(next_interval)).await;
@@ -36,7 +46,7 @@ pub async fn run(wait_time: u64) {
 //         for t in list {
 //             // TODO: client.annouce(t, client);
 //             let mut interval: u64 = 4_294_967_295;
-//             if !t.shound_announce() {
+//             if !t.should_announce() {
 //                 next_announce = next_announce.min(t.interval.try_into().unwrap());
 //                 continue;
 //             }
