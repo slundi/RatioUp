@@ -52,13 +52,29 @@ pub async fn announce_started() -> u64 {
 }
 
 pub async fn announce_stopped() {
-    // TODO: compute uploaded and downloaded then announce
     info!("Announcing torrent(s) with STOPPED event");
     let list = TORRENTS.read().await;
+    let mut total_uploaded: u64 = 0;
+
     for m in list.iter() {
         let mut t = m.lock().await;
         announce(&mut t, Some(Event::Stopped)).await;
+        total_uploaded += t.uploaded;
+        info!(
+            "Torrent \"{}\": uploaded={}, seeders={}, leechers={}, errors={}",
+            t.name,
+            crate::utils::format_bytes_u64(t.uploaded),
+            t.seeders,
+            t.leechers,
+            t.error_count
+        );
     }
+
+    info!(
+        "Session total: {} torrents, uploaded={}",
+        list.len(),
+        crate::utils::format_bytes_u64(total_uploaded)
+    );
 }
 
 /// Check if the tracker URL is supported.

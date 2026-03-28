@@ -1,8 +1,12 @@
 pub fn format_bytes(bytes: u32) -> String {
-    const KB: u32 = 1024;
-    const MB: u32 = KB * 1024;
-    const GB: u32 = MB * 1024;
-    // const TB: u32 = GB * 1024; // Note: TB here will exceed u32 max, but used for comparison logic
+    format_bytes_u64(bytes as u64)
+}
+
+pub fn format_bytes_u64(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    const TB: u64 = GB * 1024;
 
     if bytes < KB {
         format!("{} B", bytes)
@@ -10,14 +14,10 @@ pub fn format_bytes(bytes: u32) -> String {
         format!("{:.1} KB", bytes as f64 / KB as f64)
     } else if bytes < GB {
         format!("{:.1} MB", bytes as f64 / MB as f64)
-    // } else if bytes < TB { // This condition will handle up to 4GB approx for u32 input
-    //     format!("{:.1} GB", bytes as f64 / GB as f64)
-    } else {
-        // For u32, reaching TB is impossible (max u32 is 4,294,967,295 bytes ~ 4GB)
-        // However, if the input type were larger (e.g., u64), this would be relevant.
-        // For u32, we'll default to GB for very large values that technically exceed GB threshold
-        // but not TB based on u32 max.
+    } else if bytes < TB {
         format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else {
+        format!("{:.1} TB", bytes as f64 / TB as f64)
     }
 }
 
@@ -92,6 +92,13 @@ mod tests {
     #[test]
     fn test_beyond_gigabytes_with_u32() {
         assert_eq!(format_bytes(u32::MAX), "4.0 GB");
+    }
+
+    #[test]
+    fn test_terabytes_u64() {
+        assert_eq!(format_bytes_u64(1_099_511_627_776), "1.0 TB"); // 1 TB
+        assert_eq!(format_bytes_u64(2_199_023_255_552), "2.0 TB"); // 2 TB
+        assert_eq!(format_bytes_u64(10_995_116_277_760), "10.0 TB"); // 10 TB
     }
 
     #[test]
