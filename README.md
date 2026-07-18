@@ -41,7 +41,7 @@ cargo build --release
 ln -s target/release/RatioUp
 
 # Run RatioUp everytime your machine reboot/startup
-echo "@reboot cd $(pwd) && $(pwd)/RatioUp" | crontab -
+(crontab -l 2>/dev/null; echo "@reboot cd $(pwd) && ./RatioUp") | crontab -
 
 # Uninstall rust if you do not need it
 rustup self uninstall
