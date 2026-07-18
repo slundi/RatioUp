@@ -10,5 +10,5 @@ git pull
 cargo build --release
 ln -s target/release/RatioUp
 
-echo "@reboot cd $(pwd) && ./RatioUp" | crontab -
+(crontab -l 2>/dev/null; echo "@reboot cd $(pwd) && ./RatioUp") | crontab -
 # rustup self uninstall
