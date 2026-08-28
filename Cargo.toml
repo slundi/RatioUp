@@ -1,7 +1,7 @@
 [package]
 name = "RatioUp"
 authors = ["slundi"]
-version = "1.4.0"
+version = "1.4.1"
 edition = "2024"
 homepage = "https://codeberg.org/slundi/RatioUp"
 keywords = ["torrent", "ratio", "upload", "cli"]
@@ -9,10 +9,10 @@ license = "MIT"
 description = "CLI tool to fake your torrent upload in order to increase your ratio."
 
 [dependencies]
-fastrand = "2.4"
+fastrand = "2.5"
 chrono = { version = "0.4.45", features = ["serde"] }
-tokio = { version = "1.52", features = ["full"] }
-futures-util = { version = "0.3.32", default-features = false, features = ["std"] }
+tokio = { version = "1.53", features = ["full"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 once_cell = "1.21"
 sanitize-filename = "0.6"
 url = "2.5.6"

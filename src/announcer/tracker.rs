@@ -219,10 +219,10 @@ fn parse_http_response(bytes: &[u8]) -> Result<TrackerHttpUpdate, String> {
                 update.min_interval = Some(*mi as u64);
             }
 
-            if let Some(BencodeValue::ByteString(tid)) = dict.get(b"tracker_id".as_ref()) {
-                if let Ok(s) = std::str::from_utf8(tid) {
-                    update.tracker_id = Some(s.to_string());
-                }
+            if let Some(BencodeValue::ByteString(tid)) = dict.get(b"tracker_id".as_ref())
+                && let Ok(s) = std::str::from_utf8(tid)
+            {
+                update.tracker_id = Some(s.to_string());
             }
 
             if let Some(BencodeValue::Integer(value)) = dict.get(b"complete".as_ref()) {

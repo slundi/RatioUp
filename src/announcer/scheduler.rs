@@ -75,7 +75,6 @@ pub async fn run(wait_time: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     fn make_torrent(interval: u64, min_interval: Option<u64>) -> Torrent {
         Torrent {
@@ -107,7 +106,7 @@ mod tests {
         let t = make_torrent(1800, None);
         let remaining = time_until_announce(&t);
         assert!(
-            remaining >= 1799 && remaining <= 1800,
+            (1799..=1800).contains(&remaining),
             "expected ≈1800, got {remaining}"
         );
     }
@@ -124,7 +123,7 @@ mod tests {
         let t = make_torrent(1800, Some(3600));
         let remaining = time_until_announce(&t);
         assert!(
-            remaining >= 3599 && remaining <= 3600,
+            (3599..=3600).contains(&remaining),
             "expected ≈3600, got {remaining}"
         );
     }
