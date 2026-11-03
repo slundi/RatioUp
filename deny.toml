@@ -7,7 +7,6 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 # flag crates we depend on directly.
 unmaintained = "all"
 yanked = "warn"
-notice = "warn"
 ignore = []
 
 [licenses]

@@ -17,7 +17,7 @@
     flake-utils,
     rust-overlay,
   }:
-    # System-agnostic outputs come first.
+  # System-agnostic outputs come first.
     {
       # Raw module — does not set a default package; callers must set
       # services.ratioup.package themselves.
@@ -25,45 +25,61 @@
 
       # Convenience wrapper that pre-fills services.ratioup.package from
       # this flake's build output, keyed on the target system.
-      nixosModules.default =
-        { pkgs, lib, ... }:
-        {
-          imports = [ self.nixosModules.ratioup ];
-          services.ratioup.package = lib.mkDefault
-            self.packages.${pkgs.stdenv.hostPlatform.system}.default;
-        };
+      nixosModules.default = {
+        pkgs,
+        lib,
+        ...
+      }: {
+        imports = [self.nixosModules.ratioup];
+        services.ratioup.package =
+          lib.mkDefault
+          self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      };
 
       # Overlay that adds ratioup to a pkgs set.
       overlays.default = final: _prev: {
         ratioup = self.packages.${final.system}.default;
       };
     }
-    //
-    flake-utils.lib.eachDefaultSystem (system: let
+    // flake-utils.lib.eachDefaultSystem (system: let
       overlays = [(import rust-overlay)];
       pkgs = import nixpkgs {inherit system overlays;};
       marketplaceExtensions = map pkgs.vscode-utils.buildVscodeMarketplaceExtension [
         {
-          mktplcRef = { publisher = "ryanluker"; name = "vscode-coverage-gutters"; version = "2.14.0"; };
+          mktplcRef = {
+            publisher = "ryanluker";
+            name = "vscode-coverage-gutters";
+            version = "2.14.0";
+          };
           sha256 = "sha256-kCJK+Hq08cl0OqJbDOI8nvdDFUiuTolr+Rqrc86OqRo=";
         }
         {
-          mktplcRef = { publisher = "swellaby"; name = "vscode-rust-test-adapter"; version = "0.11.0"; };
+          mktplcRef = {
+            publisher = "swellaby";
+            name = "vscode-rust-test-adapter";
+            version = "0.11.0";
+          };
           sha256 = "sha256-BHcShZ3h4OvSQT+0jQSuQIOCfAMc26bxVJPXloAY3Z8=";
         }
         {
-          mktplcRef = { publisher = "nefrob"; name = "vscode-just-syntax"; version = "0.10.1"; };
+          mktplcRef = {
+            publisher = "nefrob";
+            name = "vscode-just-syntax";
+            version = "0.10.1";
+          };
           sha256 = "sha256-Eyye+kFdDI2SWtUdyR36QvZ9YVkvRma5aPqDxMfSZKw=";
         }
       ];
-      extensions = with pkgs.vscode-extensions; [
-        rust-lang.rust-analyzer
-        tamasfe.even-better-toml
-        jnoortheen.nix-ide
-        mkhl.direnv
-        vadimcn.vscode-lldb
-        redhat.vscode-yaml
-      ] ++ marketplaceExtensions;
+      extensions = with pkgs.vscode-extensions;
+        [
+          rust-lang.rust-analyzer
+          tamasfe.even-better-toml
+          jnoortheen.nix-ide
+          mkhl.direnv
+          vadimcn.vscode-lldb
+          redhat.vscode-yaml
+        ]
+        ++ marketplaceExtensions;
       # Create a custom VSCodium with these extensions
       custom-codium = pkgs.vscode-with-extensions.override {
         vscode = pkgs.vscodium;
@@ -107,6 +123,7 @@
           cargo-machete
           cargo-audit
           cargo-deny
+          cargo-outdated # Reports dependencies with newer releases available
           cargo-llvm-cov # Coverage instrumentation via LLVM
           jaq # JSON processor (used by coverage-check)
           prek # pre-commit
