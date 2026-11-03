@@ -1,14 +1,18 @@
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "warn"
+# `vulnerability` and `notice` were removed in cargo-deny 0.16: vulnerabilities
+# are always denied, and informational advisories are controlled by the keys below.
+# "all" also reports unmaintained transitive dependencies; use "workspace" to only
+# flag crates we depend on directly.
+unmaintained = "all"
 yanked = "warn"
 notice = "warn"
 ignore = []
 
 [licenses]
-unlicensed = "deny"
+# `unlicensed` was removed in cargo-deny 0.16: a crate whose license is not in
+# `allow` (including no license at all) is denied.
 # Adjust this list to match the licenses your project accepts.
 allow = [
     "MIT",
