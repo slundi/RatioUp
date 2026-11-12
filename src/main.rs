@@ -1,20 +1,21 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::time::Duration;
-use tracing::{self, info, warn};
+use tracing::{self, error, info, warn};
 use utils::format_bytes;
 
 use crate::announcer::scheduler::run as run_announcer;
 use crate::config::Config;
 use crate::context::AppContext;
+use crate::service::torrents::{TorrentService, prepare_dir};
 
 mod announcer;
 pub mod bencode;
 mod config;
 mod context;
-mod directory;
 pub mod json_output;
 mod repository;
+mod service;
 pub mod torrent;
 mod utils;
 mod watcher;
@@ -97,11 +98,20 @@ async fn main() {
     }
 
     let torrent_dir = ctx.config.torrent_dir.clone();
-    directory::prepare_torrent_folder(torrent_dir.clone()).await;
-    let count = directory::load_torrents(&ctx.torrents, torrent_dir.clone()).await;
-    if count == 0 {
-        info!("No torrent, exiting");
-        return;
+    prepare_dir(&torrent_dir).await;
+    match TorrentService::new(&ctx).load_dir(&torrent_dir) {
+        Ok(0) => {
+            info!("No torrent, exiting");
+            return;
+        }
+        Ok(_) => {}
+        Err(e) => {
+            error!(
+                "Cannot read torrent directory {}: {e}",
+                torrent_dir.display()
+            );
+            return;
+        }
     }
     let pid_file: Option<PathBuf> = if ctx.config.use_pid_file {
         write_pid_file().await
@@ -153,18 +163,21 @@ async fn remove_pid_file(pid_file: Option<PathBuf>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
 
-    /// Test if it creates the torrent directory and do not panic when it exists
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn test_torrent_directory() {
-        let mut dir = env::temp_dir();
-        dir.push("ratioup-test-torrents-dir");
-        if dir.is_dir() {
-            let _ = std::fs::remove_dir(dir.clone());
-        }
-        directory::prepare_torrent_folder(dir.clone()).await;
-        assert!(dir.is_dir());
-        directory::prepare_torrent_folder(dir).await;
+    #[tokio::test]
+    async fn test_remove_pid_file_deletes_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_file = dir.path().join("ratio_up.pid");
+        std::fs::write(&pid_file, b"1234").unwrap();
+
+        remove_pid_file(Some(pid_file.clone())).await;
+        assert!(!pid_file.exists());
+    }
+
+    #[tokio::test]
+    async fn test_remove_pid_file_none_or_missing_is_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        remove_pid_file(None).await;
+        remove_pid_file(Some(dir.path().join("missing.pid"))).await;
     }
 }
