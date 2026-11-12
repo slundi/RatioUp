@@ -120,9 +120,9 @@ impl Torrent {
         }
     }
 
-    pub fn compute_speeds(&mut self) {
-        let config = crate::CONFIG.get().unwrap();
-        self.uploaded(config.min_upload_rate, config.max_upload_rate);
+    /// Pick the upload speed to report on the next announce, within `[min_rate, max_rate)`.
+    pub fn compute_speeds(&mut self, min_rate: u32, max_rate: u32) {
+        self.uploaded(min_rate, max_rate);
     }
 
     // /// Load essential data from a parsed torrent using the full parsed torrent file. It reduces the RAM use to have smaller data
@@ -604,6 +604,31 @@ mod tests {
         assert!((16..=64).contains(&speed));
         let speed = t.uploaded(16, 64);
         assert!((16..=64).contains(&speed));
+    }
+
+    // --- compute_speeds ---
+
+    #[test]
+    fn test_compute_speeds_within_given_rates() {
+        // seeders=3, leechers=7 → can upload
+        let mut t = make_torrent([0u8; 20], Vec::new());
+        for _ in 0..50 {
+            t.compute_speeds(100, 200);
+            assert!(
+                (100..200).contains(&t.next_upload_speed),
+                "speed {} out of [100, 200)",
+                t.next_upload_speed
+            );
+        }
+    }
+
+    #[test]
+    fn test_compute_speeds_no_leechers_keeps_previous_speed() {
+        let mut t = make_torrent([0u8; 20], Vec::new());
+        t.seeders = 0;
+        t.leechers = 0;
+        t.compute_speeds(100, 200);
+        assert_eq!(t.next_upload_speed, 1024);
     }
 
     // --- from_bencode_bytes (real fixtures) ---

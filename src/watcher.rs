@@ -1,15 +1,14 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 use crate::announcer::tracker::{Event, announce};
+use crate::context::AppContext;
 use crate::torrent::Torrent;
 use crate::utils::format_bytes_u64;
-use crate::{CLIENT, TORRENTS};
 
 /// File system event that we care about
 #[derive(Debug, Clone)]
@@ -19,7 +18,7 @@ enum FsEvent {
 }
 
 /// Start watching the torrent directory for file changes.
-pub async fn watch_directory(directory: PathBuf) {
+pub async fn watch_directory(ctx: Arc<AppContext>, directory: PathBuf) {
     let (sync_tx, sync_rx) = mpsc::channel::<notify::Result<notify::Event>>();
     let (async_tx, mut async_rx) = tokio::sync::mpsc::unbounded_channel::<FsEvent>();
 
@@ -93,17 +92,17 @@ pub async fn watch_directory(directory: PathBuf) {
                 // Small delay to ensure file is fully written
                 info!("File added: {}", path.display());
                 tokio::time::sleep(Duration::from_millis(500)).await;
-                handle_file_added(path).await;
+                handle_file_added(&ctx, path).await;
             }
             FsEvent::Removed(path) => {
                 info!("File removed: {}", path.display());
-                handle_file_removed(path).await;
+                handle_file_removed(&ctx, path).await;
             }
         }
     }
 }
 
-async fn handle_file_added(path: PathBuf) {
+async fn handle_file_added(ctx: &AppContext, path: PathBuf) {
     info!("New torrent file detected: {}", path.display());
 
     let torrent = match Torrent::from_file(path.clone()) {
@@ -122,93 +121,179 @@ async fn handle_file_added(path: PathBuf) {
         return;
     }
 
-    let info_hash = torrent.info_hash;
-    if TORRENTS.contains_key(&info_hash) {
-        warn!("Torrent with same hash already exists: {}", torrent.name);
-        return;
-    }
-
     let name = torrent.name.clone();
-    let arc = Arc::new(Mutex::new(torrent));
-    TORRENTS.insert(info_hash, Arc::clone(&arc));
+    let Some(handle) = ctx.torrents.insert_if_absent(torrent) else {
+        warn!("Torrent with same hash already exists: {name}");
+        return;
+    };
 
-    if CLIENT.read().await.is_some() {
-        let mut t = arc.lock().await;
-        announce(&mut t, Some(Event::Started)).await;
-        info!(
-            "Added and announced torrent: {} (interval: {}s)",
-            name, t.interval
-        );
+    let mut torrent = handle.lock().await;
+    announce(ctx, &mut torrent, Some(Event::Started)).await;
+    info!(
+        "Added and announced torrent: {} (interval: {}s)",
+        name, torrent.interval
+    );
+}
+
+/// Tell whether a torrent was loaded from `path`.
+///
+/// Torrents without a known source file are matched on the file stem.
+fn matches_path(torrent: &Torrent, path: &Path) -> bool {
+    if let Some(source) = &torrent.source_path {
+        source == path
+    } else {
+        path.file_stem().is_some_and(|stem| {
+            let filename = stem.to_string_lossy();
+            torrent.name.starts_with(filename.as_ref())
+        })
     }
 }
 
-async fn handle_file_removed(path: PathBuf) {
+async fn handle_file_removed(ctx: &AppContext, path: PathBuf) {
     info!("Torrent file removed: {}", path.display());
 
-    // Snapshot all entries before any async operation so we never hold a
-    // DashMap shard lock across an await point.
-    let entries: Vec<([u8; 20], Arc<Mutex<Torrent>>)> = TORRENTS
-        .iter()
-        .map(|e| (*e.key(), Arc::clone(e.value())))
-        .collect();
-
-    let mut found_key: Option<[u8; 20]> = None;
-    let mut removed_info: Option<(String, u64, u16, u16, u16)> = None;
-
-    for (key, arc) in &entries {
-        let t = arc.lock().await;
-        let matches = if let Some(ref source) = t.source_path {
-            source == &path
-        } else {
-            path.file_stem().is_some_and(|stem| {
-                let filename = stem.to_string_lossy();
-                t.name == filename.as_ref() || t.name.starts_with(filename.as_ref())
-            })
-        };
-        if matches {
-            found_key = Some(*key);
-            removed_info = Some((
-                t.name.clone(),
-                t.uploaded,
-                t.seeders,
-                t.leechers,
-                t.error_count,
-            ));
+    let mut found = None;
+    for (info_hash, handle) in ctx.torrents.entries() {
+        if matches_path(&*handle.lock().await, &path) {
+            found = Some((info_hash, handle));
             break;
         }
     }
 
-    if let Some(hash) = found_key {
-        if CLIENT.read().await.is_some()
-            && let Some((_, arc)) = entries.iter().find(|(k, _)| k == &hash)
-        {
-            let mut t = arc.lock().await;
-            announce(&mut t, Some(Event::Stopped)).await;
-        }
-
-        TORRENTS.remove(&hash);
-
-        if let Some((name, uploaded, seeders, leechers, errors)) = removed_info {
-            info!(
-                "Removed torrent \"{}\": uploaded={}, seeders={}, leechers={}, errors={}",
-                name,
-                format_bytes_u64(uploaded),
-                seeders,
-                leechers,
-                errors
-            );
-        }
-    } else {
+    let Some((info_hash, handle)) = found else {
         warn!(
             "Could not find torrent matching removed file: {}",
             path.display()
         );
-    }
+        return;
+    };
+
+    let mut torrent = handle.lock().await;
+    announce(ctx, &mut torrent, Some(Event::Stopped)).await;
+    ctx.torrents.remove(&info_hash);
+    info!(
+        "Removed torrent \"{}\": uploaded={}, seeders={}, leechers={}, errors={}",
+        torrent.name,
+        format_bytes_u64(torrent.uploaded),
+        torrent.seeders,
+        torrent.leechers,
+        torrent.error_count
+    );
 }
 
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+
+    use super::{handle_file_added, handle_file_removed, matches_path};
+    use crate::config::Config;
+    use crate::context::AppContext;
+    use crate::torrent::Torrent;
+
+    fn ubuntu_fixture() -> &'static str {
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/ubuntu-20.04.4-desktop-amd64.iso.torrent"
+        )
+    }
+
+    // --- handlers (only paths that never reach a tracker) ---
+
+    #[tokio::test]
+    async fn test_handle_file_added_invalid_torrent_is_ignored() {
+        let ctx = AppContext::new(Config::default());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("broken.torrent");
+        std::fs::write(&path, b"not bencode").unwrap();
+
+        handle_file_added(&ctx, path).await;
+        assert_eq!(ctx.torrents.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_handle_file_added_duplicate_is_ignored() {
+        let ctx = AppContext::new(Config::default());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ubuntu.torrent");
+        std::fs::copy(ubuntu_fixture(), &path).unwrap();
+        let mut existing = Torrent::from_file(path.clone()).unwrap();
+        existing.name = String::from("already there");
+        ctx.torrents.insert_if_absent(existing);
+
+        handle_file_added(&ctx, path).await;
+        assert_eq!(ctx.torrents.len(), 1);
+        assert_eq!(
+            ctx.torrents.snapshot()[0].lock().await.name,
+            "already there"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_file_removed_unknown_file_keeps_torrents() {
+        let ctx = AppContext::new(Config::default());
+        ctx.torrents
+            .insert_if_absent(make_torrent("kept", Some("/data/kept.torrent")));
+
+        handle_file_removed(&ctx, Path::new("/data/other.torrent").to_path_buf()).await;
+        assert_eq!(ctx.torrents.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_handle_file_removed_matching_file_removes_torrent() {
+        let ctx = AppContext::new(Config::default());
+        // No tracker URL → the STOPPED announce makes no network call.
+        let mut torrent = make_torrent("gone", Some("/data/gone.torrent"));
+        torrent.urls.clear();
+        ctx.torrents.insert_if_absent(torrent);
+
+        handle_file_removed(&ctx, Path::new("/data/gone.torrent").to_path_buf()).await;
+        assert_eq!(ctx.torrents.len(), 0);
+    }
+
+    fn make_torrent(name: &str, source_path: Option<&str>) -> Torrent {
+        Torrent {
+            name: String::from(name),
+            urls: vec![String::from("http://tracker.example.com/announce")],
+            length: 1024,
+            private: false,
+            uploaded: 0,
+            last_announce: std::time::Instant::now(),
+            info_hash: [0u8; 20],
+            info_hash_urlencoded: String::new(),
+            seeders: 0,
+            leechers: 0,
+            next_upload_speed: 0,
+            interval: 1800,
+            error_count: 0,
+            encoding: None,
+            min_interval: None,
+            tracker_id: None,
+            source_path: source_path.map(std::path::PathBuf::from),
+        }
+    }
+
+    #[test]
+    fn test_matches_path_by_source_path() {
+        let torrent = make_torrent("Some name", Some("/data/a.torrent"));
+        assert!(matches_path(&torrent, Path::new("/data/a.torrent")));
+        assert!(!matches_path(&torrent, Path::new("/data/b.torrent")));
+        // With a known source, the name is ignored.
+        assert!(!matches_path(
+            &torrent,
+            Path::new("/data/Some name.torrent")
+        ));
+    }
+
+    #[test]
+    fn test_matches_path_by_file_stem() {
+        let torrent = make_torrent("ubuntu-20.04.4-desktop-amd64.iso", None);
+        assert!(matches_path(
+            &torrent,
+            Path::new("/data/ubuntu-20.04.4-desktop-amd64.iso.torrent")
+        ));
+        assert!(matches_path(&torrent, Path::new("/data/ubuntu.torrent")));
+        assert!(!matches_path(&torrent, Path::new("/data/debian.torrent")));
+    }
 
     #[test]
     fn test_torrent_extension_check() {

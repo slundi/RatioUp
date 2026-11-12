@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use tracing::{error, info, warn};
 
@@ -154,40 +153,6 @@ impl Config {
     fn speeds_ok(&self) -> bool {
         self.min_upload_rate <= self.max_upload_rate
     }
-}
-
-/// Init the client from the configuration and returns the interval to refresh client key if applicable
-pub async fn init_client(config: &Config) -> Option<u16> {
-    let mut client = fake_torrent_client::Client::default();
-    match fake_torrent_client::clients::ClientVersion::from_str(&config.client) {
-        Ok(selected) => {
-            client.build(selected);
-        }
-        Err(e) => {
-            error!(
-                "Client {} does not exist, using default one: {e}",
-                config.client
-            );
-        }
-    }
-    info!(
-        "Client {} (key: {}, peer ID:{})",
-        client.name, client.key, client.peer_id
-    );
-    let key_interval = client.key_refresh_every;
-    let user_agent = client.user_agent.clone();
-    let mut guard = crate::CLIENT.write().await;
-    *guard = Some(client);
-    drop(guard);
-
-    let reqwest_client = reqwest::Client::builder()
-        .user_agent(user_agent)
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .expect("Failed to build HTTP client");
-    let _ = crate::HTTP_CLIENT.set(reqwest_client);
-
-    key_interval
 }
 
 #[cfg(test)]

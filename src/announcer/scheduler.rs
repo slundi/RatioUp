@@ -3,7 +3,7 @@ use tokio::task::JoinSet;
 use tokio::time::Duration;
 use tracing::{debug, info, warn};
 
-use crate::TORRENTS;
+use crate::context::AppContext;
 use crate::torrent::Torrent;
 
 /// Add jitter (±5%) to an interval to prevent thundering herd effect.
@@ -29,22 +29,18 @@ fn time_until_announce(torrent: &Torrent) -> u64 {
 /// Announce all due torrents concurrently and return the number of seconds
 /// until the next torrent is due. Falls back to `fallback_interval` when
 /// there are no torrents or every torrent has a zero interval.
-async fn announce_all_due(fallback_interval: u64) -> u64 {
-    let keys: Vec<[u8; 20]> = TORRENTS.iter().map(|e| *e.key()).collect();
+async fn announce_all_due(ctx: &Arc<AppContext>, fallback_interval: u64) -> u64 {
     let mut join_set: JoinSet<u64> = JoinSet::new();
 
-    for key in keys {
-        if let Some(entry) = TORRENTS.get(&key) {
-            let arc = Arc::clone(entry.value());
-            drop(entry); // release DashMap shard lock before awaiting
-            join_set.spawn(async move {
-                let mut t = arc.lock().await;
-                if t.should_announce() {
-                    crate::announcer::tracker::announce(&mut t, None).await;
-                }
-                time_until_announce(&t)
-            });
-        }
+    for handle in ctx.torrents.snapshot() {
+        let task_ctx = Arc::clone(ctx);
+        join_set.spawn(async move {
+            let mut torrent = handle.lock().await;
+            if torrent.should_announce() {
+                crate::announcer::tracker::announce(&task_ctx, &mut torrent, None).await;
+            }
+            time_until_announce(&torrent)
+        });
     }
 
     let mut min_secs = u64::MAX;
@@ -62,12 +58,12 @@ async fn announce_all_due(fallback_interval: u64) -> u64 {
     }
 }
 
-pub async fn run(wait_time: u64) {
+pub async fn run(ctx: Arc<AppContext>, wait_time: u64) {
     info!("Starting scheduler");
     loop {
-        let next_interval = announce_all_due(wait_time).await;
+        let next_interval = announce_all_due(&ctx, wait_time).await;
         debug!("Next announce in {}s", next_interval);
-        crate::json_output::write().await;
+        crate::json_output::write(&ctx).await;
         tokio::time::sleep(Duration::from_secs(next_interval)).await;
     }
 }
@@ -135,6 +131,33 @@ mod tests {
         // Backdate last_announce by simulating an old announce
         t.last_announce = std::time::Instant::now() - std::time::Duration::from_secs(9999);
         assert_eq!(time_until_announce(&t), 0);
+    }
+
+    // --- announce_all_due (no torrent due → no network) ---
+
+    #[tokio::test]
+    async fn test_announce_all_due_empty_repository_uses_fallback() {
+        let ctx = Arc::new(AppContext::new(crate::config::Config::default()));
+        assert_eq!(announce_all_due(&ctx, 42).await, 42);
+    }
+
+    #[tokio::test]
+    async fn test_announce_all_due_returns_time_until_next_torrent() {
+        let ctx = Arc::new(AppContext::new(crate::config::Config::default()));
+        let mut soon = make_torrent(600, None);
+        soon.info_hash = [1u8; 20];
+        let mut later = make_torrent(1800, None);
+        later.info_hash = [2u8; 20];
+        ctx.torrents.insert_if_absent(soon);
+        ctx.torrents.insert_if_absent(later);
+
+        // Neither torrent is due: the smallest remaining time (≈600s ± 5% jitter) wins.
+        let next = announce_all_due(&ctx, 42).await;
+        assert!((569..=630).contains(&next), "expected ≈600, got {next}");
+        // Nothing was announced, so no error was recorded.
+        for handle in ctx.torrents.snapshot() {
+            assert_eq!(handle.lock().await.error_count, 0);
+        }
     }
 
     // --- parallel execution via JoinSet ---

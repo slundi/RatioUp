@@ -1,37 +1,27 @@
-use dashmap::DashMap;
-use fake_torrent_client::Client;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock};
-use tokio::sync::{Mutex, OnceCell, RwLock};
+use std::sync::Arc;
 use tokio::time::Duration;
-use tracing::{self, error, info, warn};
+use tracing::{self, info, warn};
 use utils::format_bytes;
 
 use crate::announcer::scheduler::run as run_announcer;
 use crate::config::Config;
-use crate::torrent::Torrent;
+use crate::context::AppContext;
 
 mod announcer;
 pub mod bencode;
 mod config;
+mod context;
 mod directory;
 pub mod json_output;
+mod repository;
 pub mod torrent;
 mod utils;
 mod watcher;
 
-static STARTED: OnceCell<chrono::DateTime<chrono::Utc>> = OnceCell::const_new();
-static CONFIG: OnceCell<Config> = OnceCell::const_new();
-static CLIENT: RwLock<Option<Client>> = RwLock::const_new(None);
-static HTTP_CLIENT: OnceCell<reqwest::Client> = OnceCell::const_new();
-static TORRENTS: LazyLock<DashMap<[u8; 20], Arc<Mutex<Torrent>>>> = LazyLock::new(DashMap::new);
-
-async fn run_key_renewer(refresh_every: u16) {
+async fn run_key_renewer(ctx: Arc<AppContext>, refresh_every: u16) {
     loop {
-        if let Some(client) = &mut *CLIENT.write().await {
-            client.generate_key();
-        }
-        // std::thread::sleep(Duration::from_secs(u64::from(refresh_every)));
+        ctx.client.write().await.generate_key();
         tokio::time::sleep(Duration::from_secs(u64::from(refresh_every))).await;
     }
 }
@@ -98,51 +88,42 @@ async fn main() {
         format_bytes(config.max_upload_rate)
     );
 
-    if let Err(e) = CONFIG.set(config.clone()) {
-        error!("Cannot set config: {e}");
-        return;
-    }
-    if let Err(e) = STARTED.set(chrono::offset::Utc::now()) {
-        error!("Cannot set start time: {e}");
-        return;
-    }
+    let ctx = Arc::new(AppContext::new(config));
 
     // schedule client refresh key if applicable
-    if let Some(refresh_every) = config::init_client(&config).await {
-        tokio::spawn(run_key_renewer(refresh_every));
+    let key_refresh_every = ctx.client.read().await.key_refresh_every;
+    if let Some(refresh_every) = key_refresh_every {
+        tokio::spawn(run_key_renewer(Arc::clone(&ctx), refresh_every));
     }
 
-    directory::prepare_torrent_folder(config.torrent_dir.clone()).await;
-    let count = directory::load_torrents(config.torrent_dir).await;
+    let torrent_dir = ctx.config.torrent_dir.clone();
+    directory::prepare_torrent_folder(torrent_dir.clone()).await;
+    let count = directory::load_torrents(&ctx.torrents, torrent_dir.clone()).await;
     if count == 0 {
         info!("No torrent, exiting");
         return;
     }
-    let mut pid_file: Option<PathBuf> = None;
-    if config.use_pid_file {
-        // Create PID file
-        pid_file = write_pid_file().await;
-    }
-    let wait_time = announcer::tracker::announce_started().await;
+    let pid_file: Option<PathBuf> = if ctx.config.use_pid_file {
+        write_pid_file().await
+    } else {
+        None
+    };
+    let wait_time = announcer::tracker::announce_started(&ctx).await;
 
     // Start file watcher for dynamic torrent management
-    let watch_dir = CONFIG.get().unwrap().torrent_dir.clone();
-    tokio::spawn(async move {
-        watcher::watch_directory(watch_dir).await;
-    });
+    tokio::spawn(watcher::watch_directory(Arc::clone(&ctx), torrent_dir));
 
+    let shutdown_ctx = Arc::clone(&ctx);
     tokio::spawn(async move {
         // graceful exit when Ctrl + C / SIGINT
         tokio::signal::ctrl_c().await.unwrap();
         info!("Exiting...");
-        announcer::tracker::announce_stopped().await;
-        if config.use_pid_file && pid_file.is_some() {
-            remove_pid_file(pid_file).await;
-        }
+        announcer::tracker::announce_stopped(&shutdown_ctx).await;
+        remove_pid_file(pid_file).await;
         std::process::exit(0);
     });
 
-    run_announcer(wait_time).await;
+    run_announcer(ctx, wait_time).await;
 }
 
 async fn write_pid_file() -> Option<PathBuf> {

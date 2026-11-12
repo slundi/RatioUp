@@ -8,10 +8,10 @@ use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-use crate::CONFIG;
+use crate::config::Config;
 use crate::torrent::Torrent;
 
-use super::tracker::Event;
+use super::tracker::{DEFAULT_NUMWANT, Event};
 
 #[derive(Debug)]
 pub struct TrackerRequest {
@@ -259,7 +259,13 @@ async fn resolve_tracker_addr(url: &str) -> Result<SocketAddr, TrackerError> {
         .ok_or_else(|| TrackerError::Remote(format!("Could not resolve hostname: {}", host)))
 }
 
-pub async fn announce_udp(url: &str, torrent: &mut Torrent, client: &Client, event: Option<Event>) {
+pub async fn announce_udp(
+    url: &str,
+    torrent: &mut Torrent,
+    client: &Client,
+    config: &Config,
+    event: Option<Event>,
+) {
     debug!("UDP announce to {}", url);
 
     // Resolve tracker address
@@ -301,9 +307,8 @@ pub async fn announce_udp(url: &str, torrent: &mut Torrent, client: &Client, eve
     };
 
     // Get config values
-    let config = CONFIG.get().expect("Config not initialized");
     let port = config.port;
-    let numwant = config.numwant.unwrap_or(80) as i32;
+    let numwant = i32::from(config.numwant.unwrap_or(DEFAULT_NUMWANT));
 
     let request = TrackerRequest {
         info_hash: torrent.info_hash,
