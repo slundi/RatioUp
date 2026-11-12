@@ -8,9 +8,10 @@ use std::path::{Path, PathBuf};
 
 use tracing::{error, info, warn};
 
-use crate::announcer::tracker::{Event, announce};
+use crate::announcer::tracker::Event;
 use crate::context::AppContext;
 use crate::repository::torrents::{InfoHash, TorrentHandle};
+use crate::service::announce::AnnounceService;
 use crate::torrent::{Torrent, TorrentError};
 use crate::utils::format_bytes_u64;
 
@@ -137,7 +138,9 @@ impl<'ctx> TorrentService<'ctx> {
         let handle = self.register(path)?;
         {
             let mut torrent = handle.lock().await;
-            announce(self.ctx, &mut torrent, Some(Event::Started)).await;
+            AnnounceService::new(self.ctx)
+                .announce(&mut torrent, Some(Event::Started))
+                .await;
             info!(
                 "Added and announced torrent: {} (interval: {}s)",
                 torrent.name, torrent.interval
@@ -163,7 +166,9 @@ impl<'ctx> TorrentService<'ctx> {
         let (info_hash, handle) = self.find_by_path(path).await?;
         {
             let mut torrent = handle.lock().await;
-            announce(self.ctx, &mut torrent, Some(Event::Stopped)).await;
+            AnnounceService::new(self.ctx)
+                .announce(&mut torrent, Some(Event::Stopped))
+                .await;
             self.ctx.torrents.remove(&info_hash);
             info!(
                 "Removed torrent \"{}\": uploaded={}, seeders={}, leechers={}, errors={}",

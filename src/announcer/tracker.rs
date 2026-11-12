@@ -1,5 +1,5 @@
 use crate::bencode::{BencodeDecoder, BencodeValue};
-use crate::context::AppContext;
+use crate::config::Config;
 use crate::torrent::Torrent;
 use fake_torrent_client::Client;
 use tracing::{debug, error, info, warn};
@@ -36,41 +36,6 @@ pub enum Event {
     // Completed,
     /// Must be sent to tracker if the client is shutting down gracefully.
     Stopped,
-}
-
-pub async fn announce_started(ctx: &AppContext) -> u64 {
-    info!("Announcing torrent(s) with STARTED event");
-    let mut wait_time = u64::MAX;
-    for handle in ctx.torrents.snapshot() {
-        let mut torrent = handle.lock().await;
-        announce(ctx, &mut torrent, Some(Event::Started)).await;
-        wait_time = wait_time.min(torrent.interval);
-        debug!("Time: {}", wait_time);
-    }
-    wait_time
-}
-
-pub async fn announce_stopped(ctx: &AppContext) {
-    info!("Announcing torrent(s) with STOPPED event");
-    let mut total_uploaded: u64 = 0;
-    for handle in ctx.torrents.snapshot() {
-        let mut torrent = handle.lock().await;
-        announce(ctx, &mut torrent, Some(Event::Stopped)).await;
-        total_uploaded += torrent.uploaded;
-        info!(
-            "Torrent \"{}\": uploaded={}, seeders={}, leechers={}, errors={}",
-            torrent.name,
-            crate::utils::format_bytes_u64(torrent.uploaded),
-            torrent.seeders,
-            torrent.leechers,
-            torrent.error_count
-        );
-    }
-    info!(
-        "Session total: {} torrents, uploaded={}",
-        ctx.torrents.len(),
-        crate::utils::format_bytes_u64(total_uploaded)
-    );
 }
 
 /// Check if the tracker URL is supported.
@@ -124,45 +89,6 @@ pub fn is_supported_url(url_str: &str) -> bool {
         Host::Ipv4(_) | Host::Ipv6(_) => true,
     }
 }
-
-/// Sends an announce request to the tracker with the specified parameters.
-///
-/// This may be used by a torrent to request peers to download from and to
-/// report statistics to the tracker.
-///
-/// # Important
-///
-/// The tracker may not be contacted more often than the minimum interval
-/// returned in the first announce response.
-pub async fn announce(ctx: &AppContext, torrent: &mut Torrent, event: Option<Event>) {
-    // TODO: prepare announce (uploaded and downloaded if applicable)
-    torrent.compute_speeds(ctx.config.min_upload_rate, ctx.config.max_upload_rate);
-    let client = ctx.client.read().await;
-    debug!("Torrent has {} url(s)", torrent.urls.len());
-    for url in torrent.urls.clone() {
-        debug!("\t{}", url);
-        if url.to_lowercase().starts_with("udp://") {
-            crate::announcer::udp::announce_udp(&url, torrent, &client, &ctx.config, event).await;
-        } else {
-            announce_http(ctx, &url, torrent, &client, event).await;
-        }
-    }
-    info!(
-        "Announced: interval={}, event={:?}, downloaded=0, uploaded={}, seeders={}, leechers={}, torrent={}",
-        torrent.interval, event, torrent.uploaded, torrent.seeders, torrent.leechers, torrent.name
-    );
-}
-
-// /// Check which torrents need to be announced and call the announce function when applicable
-// pub fn check_and_announce() {
-//     let list = TORRENTS.read().expect("Cannot get torrent list");
-//     for m in list.iter() {
-//         let mut t = m.lock().unwrap();
-//         if t.should_announce() {
-//             announce(&mut t, None);
-//         }
-//     }
-// }
 
 /// Parsed fields from a tracker HTTP response (BEP 3).
 #[derive(Debug, Default)]
@@ -226,8 +152,12 @@ fn parse_http_response(bytes: &[u8]) -> Result<TrackerHttpUpdate, String> {
     }
 }
 
-async fn announce_http(
-    ctx: &AppContext,
+/// Send one HTTP(S) announce and update the torrent from the tracker response.
+///
+/// Returns the effective interval (the stricter of `interval` and `min interval`).
+pub async fn announce_http(
+    http: &reqwest::Client,
+    config: &Config,
     url: &str,
     torrent: &mut Torrent,
     client: &Client,
@@ -288,12 +218,12 @@ async fn announce_http(
         torrent,
         event,
         client,
-        ctx.config.port,
-        ctx.config.numwant.unwrap_or(DEFAULT_NUMWANT),
+        config.port,
+        config.numwant.unwrap_or(DEFAULT_NUMWANT),
     );
     info!("Announce HTTP URL {built_url}");
 
-    let mut request_builder = ctx.http.get(&built_url);
+    let mut request_builder = http.get(&built_url);
 
     for (name, value) in headers_to_set {
         request_builder = request_builder.header(&name, &value);
@@ -654,37 +584,5 @@ mod tests {
         );
         assert!(url.contains("port=51413"), "expected port in: {url}");
         assert!(url.contains("numwant=42"), "expected numwant in: {url}");
-    }
-
-    // --- context-based announces (empty repository → no network) ---
-
-    #[tokio::test]
-    async fn test_announce_started_empty_repository() {
-        let ctx = AppContext::new(crate::config::Config::default());
-        assert_eq!(announce_started(&ctx).await, u64::MAX);
-    }
-
-    #[tokio::test]
-    async fn test_announce_stopped_empty_repository() {
-        let ctx = AppContext::new(crate::config::Config::default());
-        announce_stopped(&ctx).await;
-        assert_eq!(ctx.torrents.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_announce_without_urls_only_updates_speed() {
-        let config = crate::config::Config {
-            min_upload_rate: 100,
-            max_upload_rate: 200,
-            ..crate::config::Config::default()
-        };
-        let ctx = AppContext::new(config);
-        let mut torrent = make_torrent();
-        torrent.urls.clear();
-        torrent.seeders = 1;
-        torrent.leechers = 1;
-        announce(&ctx, &mut torrent, None).await;
-        assert!((100..200).contains(&torrent.next_upload_speed));
-        assert_eq!(torrent.error_count, 0);
     }
 }

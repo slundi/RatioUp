@@ -1,10 +1,101 @@
+//! Announce use cases: contacting trackers for one torrent, for all torrents at
+//! startup and shutdown, and the periodic scheduler loop.
+
 use std::sync::Arc;
+
 use tokio::task::JoinSet;
 use tokio::time::Duration;
 use tracing::{debug, info, warn};
 
+use crate::announcer::tracker::{Event, announce_http};
+use crate::announcer::udp::announce_udp;
 use crate::context::AppContext;
+use crate::service::stats::StatsService;
 use crate::torrent::Torrent;
+use crate::utils::format_bytes_u64;
+
+/// Use cases that talk to trackers.
+pub struct AnnounceService<'ctx> {
+    ctx: &'ctx AppContext,
+}
+
+impl<'ctx> AnnounceService<'ctx> {
+    pub fn new(ctx: &'ctx AppContext) -> Self {
+        Self { ctx }
+    }
+
+    /// Announce one torrent to every tracker URL it lists.
+    ///
+    /// The upload speed reported in the following announce is picked first.
+    /// The tracker may not be contacted more often than the minimum interval
+    /// returned in the first announce response.
+    pub async fn announce(&self, torrent: &mut Torrent, event: Option<Event>) {
+        let config = &self.ctx.config;
+        // TODO: prepare announce (uploaded and downloaded if applicable)
+        torrent.compute_speeds(config.min_upload_rate, config.max_upload_rate);
+        let client = self.ctx.client.read().await;
+        debug!("Torrent has {} url(s)", torrent.urls.len());
+        for url in torrent.urls.clone() {
+            debug!("\t{}", url);
+            if url.to_lowercase().starts_with("udp://") {
+                announce_udp(&url, torrent, &client, config, event).await;
+            } else {
+                announce_http(&self.ctx.http, config, &url, torrent, &client, event).await;
+            }
+        }
+        info!(
+            "Announced: interval={}, event={:?}, downloaded=0, uploaded={}, seeders={}, leechers={}, torrent={}",
+            torrent.interval,
+            event,
+            torrent.uploaded,
+            torrent.seeders,
+            torrent.leechers,
+            torrent.name
+        );
+    }
+
+    /// Announce every torrent with the STARTED event.
+    ///
+    /// Returns the smallest interval given by the trackers (`u64::MAX` without torrents).
+    pub async fn start_all(&self) -> u64 {
+        info!("Announcing torrent(s) with STARTED event");
+        let mut wait_time = u64::MAX;
+        for handle in self.ctx.torrents.snapshot() {
+            let mut torrent = handle.lock().await;
+            self.announce(&mut torrent, Some(Event::Started)).await;
+            wait_time = wait_time.min(torrent.interval);
+            debug!("Time: {}", wait_time);
+        }
+        wait_time
+    }
+
+    /// Announce every torrent with the STOPPED event and log the session summary.
+    ///
+    /// Returns the total uploaded during the session, in bytes.
+    pub async fn stop_all(&self) -> u64 {
+        info!("Announcing torrent(s) with STOPPED event");
+        let mut total_uploaded: u64 = 0;
+        for handle in self.ctx.torrents.snapshot() {
+            let mut torrent = handle.lock().await;
+            self.announce(&mut torrent, Some(Event::Stopped)).await;
+            total_uploaded += torrent.uploaded;
+            info!(
+                "Torrent \"{}\": uploaded={}, seeders={}, leechers={}, errors={}",
+                torrent.name,
+                format_bytes_u64(torrent.uploaded),
+                torrent.seeders,
+                torrent.leechers,
+                torrent.error_count
+            );
+        }
+        info!(
+            "Session total: {} torrents, uploaded={}",
+            self.ctx.torrents.len(),
+            format_bytes_u64(total_uploaded)
+        );
+        total_uploaded
+    }
+}
 
 /// Add jitter (±5%) to an interval to prevent thundering herd effect.
 /// Multiple torrents with similar intervals will announce at slightly different times.
@@ -29,7 +120,9 @@ fn time_until_announce(torrent: &Torrent) -> u64 {
 /// Announce all due torrents concurrently and return the number of seconds
 /// until the next torrent is due. Falls back to `fallback_interval` when
 /// there are no torrents or every torrent has a zero interval.
-async fn announce_all_due(ctx: &Arc<AppContext>, fallback_interval: u64) -> u64 {
+///
+/// Each torrent is announced in its own task, hence the owned context.
+async fn announce_due(ctx: &Arc<AppContext>, fallback_interval: u64) -> u64 {
     let mut join_set: JoinSet<u64> = JoinSet::new();
 
     for handle in ctx.torrents.snapshot() {
@@ -37,7 +130,9 @@ async fn announce_all_due(ctx: &Arc<AppContext>, fallback_interval: u64) -> u64 
         join_set.spawn(async move {
             let mut torrent = handle.lock().await;
             if torrent.should_announce() {
-                crate::announcer::tracker::announce(&task_ctx, &mut torrent, None).await;
+                AnnounceService::new(&task_ctx)
+                    .announce(&mut torrent, None)
+                    .await;
             }
             time_until_announce(&torrent)
         });
@@ -58,12 +153,13 @@ async fn announce_all_due(ctx: &Arc<AppContext>, fallback_interval: u64) -> u64 
     }
 }
 
-pub async fn run(ctx: Arc<AppContext>, wait_time: u64) {
+/// Scheduler loop: announce due torrents, refresh the stats file, sleep until the next one is due.
+pub async fn run_scheduler(ctx: Arc<AppContext>, wait_time: u64) {
     info!("Starting scheduler");
     loop {
-        let next_interval = announce_all_due(&ctx, wait_time).await;
+        let next_interval = announce_due(&ctx, wait_time).await;
         debug!("Next announce in {}s", next_interval);
-        crate::json_output::write(&ctx).await;
+        StatsService::new(&ctx).write().await;
         tokio::time::sleep(Duration::from_secs(next_interval)).await;
     }
 }
@@ -133,16 +229,94 @@ mod tests {
         assert_eq!(time_until_announce(&t), 0);
     }
 
-    // --- announce_all_due (no torrent due → no network) ---
+    // --- AnnounceService (torrents without tracker URL → no network) ---
 
-    #[tokio::test]
-    async fn test_announce_all_due_empty_repository_uses_fallback() {
-        let ctx = Arc::new(AppContext::new(crate::config::Config::default()));
-        assert_eq!(announce_all_due(&ctx, 42).await, 42);
+    fn offline_torrent(hash_byte: u8, interval: u64, uploaded: u64) -> Torrent {
+        let mut torrent = make_torrent(interval, None);
+        torrent.info_hash = [hash_byte; 20];
+        torrent.urls.clear();
+        torrent.uploaded = uploaded;
+        torrent
     }
 
     #[tokio::test]
-    async fn test_announce_all_due_returns_time_until_next_torrent() {
+    async fn test_announce_without_urls_only_updates_speed() {
+        let config = crate::config::Config {
+            min_upload_rate: 100,
+            max_upload_rate: 200,
+            ..crate::config::Config::default()
+        };
+        let ctx = AppContext::new(config);
+        let mut torrent = offline_torrent(1, 1800, 0);
+        torrent.seeders = 1;
+        torrent.leechers = 1;
+        AnnounceService::new(&ctx)
+            .announce(&mut torrent, None)
+            .await;
+        assert!((100..200).contains(&torrent.next_upload_speed));
+        assert_eq!(torrent.error_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_start_all_empty_repository() {
+        let ctx = AppContext::new(crate::config::Config::default());
+        assert_eq!(AnnounceService::new(&ctx).start_all().await, u64::MAX);
+    }
+
+    #[tokio::test]
+    async fn test_start_all_returns_smallest_interval() {
+        let ctx = AppContext::new(crate::config::Config::default());
+        ctx.torrents.insert_if_absent(offline_torrent(1, 1800, 0));
+        ctx.torrents.insert_if_absent(offline_torrent(2, 900, 0));
+        assert_eq!(AnnounceService::new(&ctx).start_all().await, 900);
+    }
+
+    #[tokio::test]
+    async fn test_stop_all_empty_repository() {
+        let ctx = AppContext::new(crate::config::Config::default());
+        assert_eq!(AnnounceService::new(&ctx).stop_all().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_stop_all_returns_session_total_and_keeps_torrents() {
+        let ctx = AppContext::new(crate::config::Config::default());
+        ctx.torrents.insert_if_absent(offline_torrent(1, 1800, 100));
+        ctx.torrents.insert_if_absent(offline_torrent(2, 1800, 250));
+        assert_eq!(AnnounceService::new(&ctx).stop_all().await, 350);
+        // Stopping announces does not remove torrents from the repository.
+        assert_eq!(ctx.torrents.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_announce_due_announces_due_torrent_and_falls_back() {
+        let config = crate::config::Config {
+            min_upload_rate: 100,
+            max_upload_rate: 200,
+            ..crate::config::Config::default()
+        };
+        let ctx = Arc::new(AppContext::new(config));
+        // interval 0 → always due; remaining time 0 → fallback interval is used.
+        let mut torrent = offline_torrent(1, 0, 0);
+        torrent.seeders = 1;
+        torrent.leechers = 1;
+        ctx.torrents.insert_if_absent(torrent);
+
+        assert_eq!(announce_due(&ctx, 42).await, 42);
+        // The announce ran: an upload speed was picked from the configured range.
+        let speed = ctx.torrents.snapshot()[0].lock().await.next_upload_speed;
+        assert!((100..200).contains(&speed), "speed {speed} not announced");
+    }
+
+    // --- announce_due (no torrent due → no network) ---
+
+    #[tokio::test]
+    async fn test_announce_due_empty_repository_uses_fallback() {
+        let ctx = Arc::new(AppContext::new(crate::config::Config::default()));
+        assert_eq!(announce_due(&ctx, 42).await, 42);
+    }
+
+    #[tokio::test]
+    async fn test_announce_due_returns_time_until_next_torrent() {
         let ctx = Arc::new(AppContext::new(crate::config::Config::default()));
         let mut soon = make_torrent(600, None);
         soon.info_hash = [1u8; 20];
@@ -152,7 +326,7 @@ mod tests {
         ctx.torrents.insert_if_absent(later);
 
         // Neither torrent is due: the smallest remaining time (≈600s ± 5% jitter) wins.
-        let next = announce_all_due(&ctx, 42).await;
+        let next = announce_due(&ctx, 42).await;
         assert!((569..=630).contains(&next), "expected ≈600, got {next}");
         // Nothing was announced, so no error was recorded.
         for handle in ctx.torrents.snapshot() {

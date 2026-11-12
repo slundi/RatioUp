@@ -4,9 +4,9 @@ use tokio::time::Duration;
 use tracing::{self, error, info, warn};
 use utils::format_bytes;
 
-use crate::announcer::scheduler::run as run_announcer;
 use crate::config::Config;
 use crate::context::AppContext;
+use crate::service::announce::{AnnounceService, run_scheduler};
 use crate::service::torrents::{TorrentService, prepare_dir};
 
 mod announcer;
@@ -118,7 +118,7 @@ async fn main() {
     } else {
         None
     };
-    let wait_time = announcer::tracker::announce_started(&ctx).await;
+    let wait_time = AnnounceService::new(&ctx).start_all().await;
 
     // Start file watcher for dynamic torrent management
     tokio::spawn(watcher::watch_directory(Arc::clone(&ctx), torrent_dir));
@@ -128,12 +128,12 @@ async fn main() {
         // graceful exit when Ctrl + C / SIGINT
         tokio::signal::ctrl_c().await.unwrap();
         info!("Exiting...");
-        announcer::tracker::announce_stopped(&shutdown_ctx).await;
+        AnnounceService::new(&shutdown_ctx).stop_all().await;
         remove_pid_file(pid_file).await;
         std::process::exit(0);
     });
 
-    run_announcer(ctx, wait_time).await;
+    run_scheduler(ctx, wait_time).await;
 }
 
 async fn write_pid_file() -> Option<PathBuf> {
