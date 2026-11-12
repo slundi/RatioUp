@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use tracing::{error, info, warn};
 
-use crate::announcer::tracker::Event;
 use crate::context::AppContext;
+use crate::infra::tracker::Event;
 use crate::repository::torrents::{InfoHash, TorrentHandle};
 use crate::service::announce::AnnounceService;
 use crate::torrent::{Torrent, TorrentError};
@@ -29,7 +29,7 @@ pub enum AddError {
 impl fmt::Display for AddError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AddError::Invalid(e) => write!(formatter, "invalid torrent: {e}"),
+            AddError::Invalid(error) => write!(formatter, "invalid torrent: {error}"),
             AddError::NoTrackerUrl => {
                 write!(formatter, "no tracker URL (DHT or not supported URLs)")
             }
@@ -70,8 +70,8 @@ pub async fn prepare_dir(directory: &Path) {
     if !directory.is_dir() {
         match tokio::fs::create_dir_all(directory).await {
             Ok(()) => info!("Torrent directory created: {}", directory.display()),
-            Err(e) => error!(
-                "Cannot create torrent directory {}: {e}",
+            Err(error) => error!(
+                "Cannot create torrent directory {}: {error}",
                 directory.display()
             ),
         }
@@ -110,8 +110,8 @@ impl<'ctx> TorrentService<'ctx> {
         for entry in std::fs::read_dir(directory)? {
             let path = match entry {
                 Ok(entry) => entry.path(),
-                Err(e) => {
-                    error!("Cannot read entry in {}: {e}", directory.display());
+                Err(error) => {
+                    error!("Cannot read entry in {}: {error}", directory.display());
                     continue;
                 }
             };
@@ -123,10 +123,10 @@ impl<'ctx> TorrentService<'ctx> {
                     info!("Found torrent {}", path.display());
                     count += 1;
                 }
-                Err(e @ AddError::Invalid(_)) => {
-                    error!("Cannot add torrent {}: {e}", path.display());
+                Err(error @ AddError::Invalid(_)) => {
+                    error!("Cannot add torrent {}: {error}", path.display());
                 }
-                Err(e) => warn!("Skipping torrent {}: {e}", path.display()),
+                Err(error) => warn!("Skipping torrent {}: {error}", path.display()),
             }
         }
         info!("{} torrent(s) loaded", count);
@@ -187,6 +187,8 @@ impl<'ctx> TorrentService<'ctx> {
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::infra::tracker::AnnounceResponse;
+    use crate::infra::tracker::testing::FakeTransport;
 
     fn ubuntu_fixture() -> &'static str {
         concat!(
@@ -412,6 +414,53 @@ mod tests {
             ctx.torrents.snapshot()[0].lock().await.name,
             "already there"
         );
+    }
+
+    // --- add_file / remove_file with a fake transport ---
+
+    #[tokio::test]
+    async fn test_add_file_stores_and_announces_started() {
+        let fake = FakeTransport::default().answer(Ok(AnnounceResponse {
+            interval: Some(1234),
+            ..AnnounceResponse::default()
+        }));
+        let calls = fake.calls();
+        let ctx = AppContext::with_transport(Config::default(), Box::new(fake));
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ubuntu.torrent");
+        std::fs::copy(ubuntu_fixture(), &path).unwrap();
+
+        let handle = TorrentService::new(&ctx).add_file(path).await.unwrap();
+
+        assert_eq!(ctx.torrents.len(), 1);
+        assert_eq!(handle.lock().await.interval, 1234);
+        let calls = calls.lock().unwrap();
+        assert!(!calls.is_empty());
+        assert!(
+            calls
+                .iter()
+                .all(|(_, request)| request.event == Some(Event::Started))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_remove_file_announces_stopped() {
+        let fake = FakeTransport::default();
+        let calls = fake.calls();
+        let ctx = AppContext::with_transport(Config::default(), Box::new(fake));
+        ctx.torrents
+            .insert_if_absent(make_torrent(1, "gone", Some("/data/gone.torrent")));
+
+        let removed = TorrentService::new(&ctx)
+            .remove_file(Path::new("/data/gone.torrent"))
+            .await;
+
+        assert!(removed.is_some());
+        assert_eq!(ctx.torrents.len(), 0);
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "http://tracker.example.com/announce");
+        assert_eq!(calls[0].1.event, Some(Event::Stopped));
     }
 
     // --- remove_file ---

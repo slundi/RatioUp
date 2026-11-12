@@ -5,14 +5,60 @@ use std::sync::Arc;
 
 use tokio::task::JoinSet;
 use tokio::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
-use crate::announcer::tracker::{Event, announce_http};
-use crate::announcer::udp::announce_udp;
+use crate::config::Config;
 use crate::context::AppContext;
+use crate::infra::tracker::{
+    AnnounceError, AnnounceRequest, AnnounceResponse, DEFAULT_NUMWANT, Event,
+};
 use crate::service::stats::StatsService;
 use crate::torrent::Torrent;
 use crate::utils::format_bytes_u64;
+
+/// Bytes to report as uploaded since the last announce (none on STARTED).
+fn uploaded_since_last_announce(torrent: &Torrent, event: Option<Event>) -> u64 {
+    if event == Some(Event::Started) {
+        return 0;
+    }
+    u64::from(torrent.next_upload_speed) * torrent.last_announce.elapsed().as_secs()
+}
+
+fn build_request(torrent: &Torrent, event: Option<Event>, config: &Config) -> AnnounceRequest {
+    AnnounceRequest {
+        info_hash: torrent.info_hash,
+        info_hash_urlencoded: torrent.info_hash_urlencoded.clone(),
+        uploaded: uploaded_since_last_announce(torrent, event),
+        event,
+        port: config.port,
+        numwant: config.numwant.unwrap_or(DEFAULT_NUMWANT),
+    }
+}
+
+/// Update the torrent after a successful announce of `uploaded` bytes.
+fn apply_response(torrent: &mut Torrent, uploaded: u64, response: AnnounceResponse) {
+    if let Some(warning) = response.warning {
+        warn!("Announce with warning: {warning:?}");
+    }
+    if let Some(interval) = response.interval {
+        torrent.interval = interval;
+    }
+    if let Some(min_interval) = response.min_interval {
+        torrent.min_interval = Some(min_interval);
+    }
+    if let Some(tracker_id) = response.tracker_id {
+        torrent.tracker_id = Some(tracker_id);
+    }
+    if let Some(seeders) = response.seeders {
+        torrent.seeders = seeders;
+    }
+    if let Some(leechers) = response.leechers {
+        torrent.leechers = leechers;
+    }
+    torrent.uploaded += uploaded;
+    torrent.last_announce = std::time::Instant::now();
+    torrent.error_count = 0;
+}
 
 /// Use cases that talk to trackers.
 pub struct AnnounceService<'ctx> {
@@ -36,11 +82,26 @@ impl<'ctx> AnnounceService<'ctx> {
         let client = self.ctx.client.read().await;
         debug!("Torrent has {} url(s)", torrent.urls.len());
         for url in torrent.urls.clone() {
-            debug!("\t{}", url);
-            if url.to_lowercase().starts_with("udp://") {
-                announce_udp(&url, torrent, &client, config, event).await;
-            } else {
-                announce_http(&self.ctx.http, config, &url, torrent, &client, event).await;
+            debug!(
+                "Announce {:?} to {url}: time since last announce {}s, interval {}s",
+                event,
+                torrent.last_announce.elapsed().as_secs(),
+                torrent.interval
+            );
+            let request = build_request(torrent, event, config);
+            match self.ctx.transport.announce(&url, &request, &client).await {
+                Ok(response) => apply_response(torrent, request.uploaded, response),
+                Err(failure) => {
+                    match &failure {
+                        AnnounceError::Rejected(_) => {
+                            error!("Cannot announce {} to {url}: {failure}", torrent.name);
+                        }
+                        AnnounceError::Transport(_) => {
+                            warn!("Cannot announce {} to {url}: {failure}", torrent.name);
+                        }
+                    }
+                    torrent.error_count += 1;
+                }
             }
         }
         info!(
@@ -142,7 +203,7 @@ async fn announce_due(ctx: &Arc<AppContext>, fallback_interval: u64) -> u64 {
     while let Some(result) = join_set.join_next().await {
         match result {
             Ok(secs) => min_secs = min_secs.min(secs),
-            Err(e) => warn!("Announce task panicked: {e}"),
+            Err(error) => warn!("Announce task panicked: {error}"),
         }
     }
 
@@ -195,8 +256,8 @@ mod tests {
     #[test]
     fn test_time_until_announce_full_interval_remaining() {
         // Fresh torrent: elapsed ≈ 0 → remaining ≈ interval
-        let t = make_torrent(1800, None);
-        let remaining = time_until_announce(&t);
+        let torrent = make_torrent(1800, None);
+        let remaining = time_until_announce(&torrent);
         assert!(
             (1799..=1800).contains(&remaining),
             "expected ≈1800, got {remaining}"
@@ -205,15 +266,15 @@ mod tests {
 
     #[test]
     fn test_time_until_announce_zero_interval() {
-        let t = make_torrent(0, None);
-        assert_eq!(time_until_announce(&t), 0);
+        let torrent = make_torrent(0, None);
+        assert_eq!(time_until_announce(&torrent), 0);
     }
 
     #[test]
     fn test_time_until_announce_min_interval_dominates() {
         // min_interval(3600) > interval(1800) → effective = 3600
-        let t = make_torrent(1800, Some(3600));
-        let remaining = time_until_announce(&t);
+        let torrent = make_torrent(1800, Some(3600));
+        let remaining = time_until_announce(&torrent);
         assert!(
             (3599..=3600).contains(&remaining),
             "expected ≈3600, got {remaining}"
@@ -223,10 +284,223 @@ mod tests {
     #[test]
     fn test_time_until_announce_saturates_at_zero() {
         // interval=0, min_interval=None → saturating_sub(big, 0) = 0, not negative
-        let mut t = make_torrent(0, None);
+        let mut torrent = make_torrent(0, None);
         // Backdate last_announce by simulating an old announce
-        t.last_announce = std::time::Instant::now() - std::time::Duration::from_secs(9999);
-        assert_eq!(time_until_announce(&t), 0);
+        torrent.last_announce = std::time::Instant::now() - std::time::Duration::from_secs(9999);
+        assert_eq!(time_until_announce(&torrent), 0);
+    }
+
+    // --- AnnounceService with a fake transport ---
+
+    use crate::infra::tracker::testing::FakeTransport;
+
+    fn fake_ctx(fake: FakeTransport) -> AppContext {
+        let config = crate::config::Config {
+            port: 6881,
+            numwant: Some(25),
+            min_upload_rate: 100,
+            max_upload_rate: 200,
+            ..crate::config::Config::default()
+        };
+        AppContext::with_transport(config, Box::new(fake))
+    }
+
+    fn online_torrent(urls: &[&str]) -> Torrent {
+        let mut torrent = make_torrent(1800, None);
+        torrent.urls = urls.iter().map(|url| url.to_string()).collect();
+        torrent.info_hash_urlencoded = String::from("%01%02");
+        torrent
+    }
+
+    #[tokio::test]
+    async fn test_announce_success_applies_tracker_response() {
+        let fake = FakeTransport::default().answer(Ok(AnnounceResponse {
+            interval: Some(900),
+            min_interval: Some(600),
+            tracker_id: Some(String::from("tid")),
+            seeders: Some(4),
+            leechers: Some(9),
+            warning: Some(String::from("slow down")),
+        }));
+        let ctx = fake_ctx(fake);
+        let mut torrent = online_torrent(&["http://t.example.com/announce"]);
+        torrent.error_count = 3;
+
+        AnnounceService::new(&ctx)
+            .announce(&mut torrent, None)
+            .await;
+
+        assert_eq!(torrent.interval, 900);
+        assert_eq!(torrent.min_interval, Some(600));
+        assert_eq!(torrent.tracker_id.as_deref(), Some("tid"));
+        assert_eq!(torrent.seeders, 4);
+        assert_eq!(torrent.leechers, 9);
+        assert_eq!(torrent.error_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_announce_started_sends_zero_uploaded_and_config_values() {
+        let fake = FakeTransport::default();
+        let calls = fake.calls();
+        let ctx = fake_ctx(fake);
+        let mut torrent = online_torrent(&["http://t.example.com/announce"]);
+        torrent.next_upload_speed = 1000;
+        torrent.last_announce = std::time::Instant::now() - Duration::from_secs(60);
+
+        AnnounceService::new(&ctx)
+            .announce(&mut torrent, Some(Event::Started))
+            .await;
+
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        let (url, request) = &calls[0];
+        assert_eq!(url, "http://t.example.com/announce");
+        assert_eq!(request.event, Some(Event::Started));
+        assert_eq!(request.uploaded, 0);
+        assert_eq!(request.port, 6881);
+        assert_eq!(request.numwant, 25);
+        assert_eq!(request.info_hash_urlencoded, "%01%02");
+        assert_eq!(torrent.uploaded, 0);
+    }
+
+    #[tokio::test]
+    async fn test_announce_reports_and_accumulates_upload_since_last_announce() {
+        let fake = FakeTransport::default();
+        let calls = fake.calls();
+        let ctx = fake_ctx(fake);
+        // No leechers → the upload speed is kept as is (deterministic).
+        let mut torrent = online_torrent(&["udp://t.example.com:6969/announce"]);
+        torrent.next_upload_speed = 1000;
+        torrent.uploaded = 500;
+        torrent.last_announce = std::time::Instant::now() - Duration::from_secs(10);
+
+        AnnounceService::new(&ctx)
+            .announce(&mut torrent, None)
+            .await;
+
+        let reported = calls.lock().unwrap()[0].1.uploaded;
+        assert!(
+            (10_000..=11_000).contains(&reported),
+            "expected ≈10s × 1000 B/s, got {reported}"
+        );
+        assert_eq!(torrent.uploaded, 500 + reported);
+    }
+
+    #[tokio::test]
+    async fn test_announce_failures_count_errors_and_keep_state() {
+        let fake = FakeTransport::default()
+            .answer(Err(AnnounceError::Rejected(String::from("unregistered"))))
+            .answer(Err(AnnounceError::Transport(String::from("timeout"))));
+        let ctx = fake_ctx(fake);
+        let mut torrent = online_torrent(&["http://a.example.com/announce"]);
+        torrent.next_upload_speed = 1000;
+        torrent.last_announce = std::time::Instant::now() - Duration::from_secs(10);
+        let before = torrent.last_announce;
+
+        let service = AnnounceService::new(&ctx);
+        service.announce(&mut torrent, None).await;
+        service.announce(&mut torrent, None).await;
+
+        assert_eq!(torrent.error_count, 2);
+        assert_eq!(torrent.uploaded, 0);
+        assert_eq!(torrent.interval, 1800);
+        assert_eq!(torrent.last_announce, before);
+    }
+
+    #[tokio::test]
+    async fn test_announce_contacts_every_url() {
+        let fake = FakeTransport::default()
+            .answer(Err(AnnounceError::Transport(String::from("down"))))
+            .answer(Ok(AnnounceResponse {
+                interval: Some(1200),
+                ..AnnounceResponse::default()
+            }));
+        let calls = fake.calls();
+        let ctx = fake_ctx(fake);
+        let mut torrent = online_torrent(&[
+            "http://a.example.com/announce",
+            "udp://b.example.com:6969/announce",
+        ]);
+
+        AnnounceService::new(&ctx)
+            .announce(&mut torrent, None)
+            .await;
+
+        let urls: Vec<String> = calls
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(url, _)| url.clone())
+            .collect();
+        assert_eq!(
+            urls,
+            [
+                "http://a.example.com/announce",
+                "udp://b.example.com:6969/announce"
+            ]
+        );
+        // The second tracker succeeded: its interval wins and errors are reset.
+        assert_eq!(torrent.interval, 1200);
+        assert_eq!(torrent.error_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_start_and_stop_all_send_events_to_every_torrent() {
+        let fake = FakeTransport::default()
+            .answer(Ok(AnnounceResponse {
+                interval: Some(700),
+                ..AnnounceResponse::default()
+            }))
+            .answer(Ok(AnnounceResponse {
+                interval: Some(1500),
+                ..AnnounceResponse::default()
+            }));
+        let calls = fake.calls();
+        let ctx = fake_ctx(fake);
+        let mut first = online_torrent(&["http://a.example.com/announce"]);
+        first.info_hash = [1u8; 20];
+        let mut second = online_torrent(&["http://b.example.com/announce"]);
+        second.info_hash = [2u8; 20];
+        ctx.torrents.insert_if_absent(first);
+        ctx.torrents.insert_if_absent(second);
+
+        let service = AnnounceService::new(&ctx);
+        assert_eq!(service.start_all().await, 700);
+        service.stop_all().await;
+
+        let events: Vec<Option<Event>> = calls
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, request)| request.event)
+            .collect();
+        assert_eq!(
+            events,
+            [
+                Some(Event::Started),
+                Some(Event::Started),
+                Some(Event::Stopped),
+                Some(Event::Stopped)
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_announce_due_uses_interval_from_tracker() {
+        let fake = FakeTransport::default().answer(Ok(AnnounceResponse {
+            interval: Some(300),
+            ..AnnounceResponse::default()
+        }));
+        let ctx = Arc::new(fake_ctx(fake));
+        let mut torrent = online_torrent(&["http://a.example.com/announce"]);
+        torrent.interval = 0; // due now
+        ctx.torrents.insert_if_absent(torrent);
+
+        let next = announce_due(&ctx, 42).await;
+        assert!(
+            (285..=315).contains(&next),
+            "expected ≈300 ± 5%, got {next}"
+        );
     }
 
     // --- AnnounceService (torrents without tracker URL → no network) ---

@@ -52,8 +52,8 @@ impl<'ctx> StatsService<'ctx> {
             return;
         };
         let data = self.render().await;
-        if let Err(e) = tokio::fs::write(path, data.as_bytes()).await {
-            error!("Cannot write stat file: {e}");
+        if let Err(error) = tokio::fs::write(path, data.as_bytes()).await {
+            error!("Cannot write stat file: {error}");
         }
     }
 }

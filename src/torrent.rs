@@ -4,8 +4,8 @@ use std::fmt;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use crate::announcer::tracker::is_supported_url;
 use crate::bencode::{BencodeDecoder, BencodeDecoderError, BencodeValue, encode_bencode_value};
+use crate::infra::tracker::is_supported_url;
 use crate::utils::{get_sha1, percent_encoding};
 
 /// Errors that can occur when parsing a Torrent struct from Bencode.
@@ -151,7 +151,7 @@ impl Torrent {
     //     t.urls = torrent.get_urls();
     //     t.info_hash_urlencoded = percent_encoding::percent_encode(
     //         &hash_bytes,
-    //         crate::announcer::tracker::URL_ENCODE_RESERVED,
+    //         crate::infra::tracker::URL_ENCODE_RESERVED,
     //     )
     //     .to_string();
     //     debug!("Torrent: {:?}", t);

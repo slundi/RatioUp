@@ -9,10 +9,10 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use crate::config::Config;
+use crate::infra::http::HttpTransport;
+use crate::infra::tracker::{NetworkTransport, TrackerTransport};
+use crate::infra::udp::UdpTransport;
 use crate::repository::torrents::TorrentRepository;
-
-/// HTTP timeout used for tracker announces.
-const HTTP_TIMEOUT_SECS: u64 = 60;
 
 /// Everything the services need at runtime, built once at startup and shared
 /// as `Arc<AppContext>`.
@@ -23,20 +23,35 @@ pub struct AppContext {
     pub started: DateTime<Utc>,
     /// Emulated torrent client. Write-locked when its key is renewed.
     pub client: RwLock<Client>,
-    /// HTTP client used for tracker announces (user agent of the emulated client).
-    pub http: reqwest::Client,
+    /// How announces reach the trackers (network in production, fake in tests).
+    pub transport: Box<dyn TrackerTransport>,
     pub torrents: TorrentRepository,
 }
 
 impl AppContext {
+    /// Build the production context: real HTTP and UDP transports.
     pub fn new(config: Config) -> Self {
         let client = build_client(&config.client);
-        let http = build_http_client(&client.user_agent);
+        let transport = NetworkTransport::new(
+            HttpTransport::new(&client.user_agent),
+            UdpTransport::default(),
+        );
+        Self::assemble(config, client, Box::new(transport))
+    }
+
+    /// Build a context announcing through the given transport.
+    #[cfg(test)]
+    pub fn with_transport(config: Config, transport: Box<dyn TrackerTransport>) -> Self {
+        let client = build_client(&config.client);
+        Self::assemble(config, client, transport)
+    }
+
+    fn assemble(config: Config, client: Client, transport: Box<dyn TrackerTransport>) -> Self {
         Self {
             config,
             started: Utc::now(),
             client: RwLock::new(client),
-            http,
+            transport,
             torrents: TorrentRepository::new(),
         }
     }
@@ -47,21 +62,13 @@ fn build_client(name: &str) -> Client {
     let mut client = Client::default();
     match ClientVersion::from_str(name) {
         Ok(selected) => client.build(selected),
-        Err(e) => error!("Client {name} does not exist, using default one: {e}"),
+        Err(error) => error!("Client {name} does not exist, using default one: {error}"),
     }
     info!(
         "Client {} (key: {}, peer ID:{})",
         client.name, client.key, client.peer_id
     );
     client
-}
-
-fn build_http_client(user_agent: &str) -> reqwest::Client {
-    reqwest::Client::builder()
-        .user_agent(user_agent)
-        .timeout(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS))
-        .build()
-        .expect("Failed to build HTTP client")
 }
 
 #[cfg(test)]

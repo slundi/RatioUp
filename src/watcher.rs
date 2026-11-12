@@ -45,10 +45,10 @@ async fn handle_event(ctx: &AppContext, event: FsEvent) {
             tokio::time::sleep(SETTLE_DELAY).await;
             match service.add_file(path.clone()).await {
                 Ok(_) => {}
-                Err(e @ AddError::Invalid(_)) => {
-                    error!("Cannot add torrent {}: {e}", path.display());
+                Err(error @ AddError::Invalid(_)) => {
+                    error!("Cannot add torrent {}: {error}", path.display());
                 }
-                Err(e) => warn!("Skipping torrent {}: {e}", path.display()),
+                Err(error) => warn!("Skipping torrent {}: {error}", path.display()),
             }
         }
         FsEvent::Removed(path) => {
@@ -70,21 +70,21 @@ pub async fn watch_directory(ctx: Arc<AppContext>, directory: PathBuf) {
 
     let mut watcher = match RecommendedWatcher::new(
         move |res| {
-            if let Err(e) = sync_tx.send(res) {
-                error!("Watcher channel send error: {e}");
+            if let Err(error) = sync_tx.send(res) {
+                error!("Watcher channel send error: {error}");
             }
         },
         Config::default().with_poll_interval(Duration::from_secs(2)),
     ) {
-        Ok(w) => w,
-        Err(e) => {
-            error!("Cannot create file watcher: {e}");
+        Ok(created) => created,
+        Err(error) => {
+            error!("Cannot create file watcher: {error}");
             return;
         }
     };
 
-    if let Err(e) = watcher.watch(&directory, RecursiveMode::NonRecursive) {
-        error!("Cannot watch directory {}: {e}", directory.display());
+    if let Err(error) = watcher.watch(&directory, RecursiveMode::NonRecursive) {
+        error!("Cannot watch directory {}: {error}", directory.display());
         return;
     }
 
@@ -103,7 +103,7 @@ pub async fn watch_directory(ctx: Arc<AppContext>, directory: PathBuf) {
                         }
                     }
                 }
-                Err(e) => error!("Watch error: {e}"),
+                Err(error) => error!("Watch error: {error}"),
             }
         }
     });
@@ -169,7 +169,31 @@ mod tests {
         }
     }
 
-    // --- handle_event (only paths that never reach a tracker) ---
+    // --- handle_event ---
+
+    #[tokio::test]
+    async fn test_handle_event_added_valid_file_is_announced() {
+        use crate::infra::tracker::Event;
+        use crate::infra::tracker::testing::FakeTransport;
+
+        let fake = FakeTransport::default();
+        let calls = fake.calls();
+        let ctx = AppContext::with_transport(crate::config::Config::default(), Box::new(fake));
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ubuntu.torrent");
+        std::fs::copy(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/ubuntu-20.04.4-desktop-amd64.iso.torrent"
+            ),
+            &path,
+        )
+        .unwrap();
+
+        handle_event(&ctx, FsEvent::Added(path)).await;
+        assert_eq!(ctx.torrents.len(), 1);
+        assert_eq!(calls.lock().unwrap()[0].1.event, Some(Event::Started));
+    }
 
     #[tokio::test]
     async fn test_handle_event_added_invalid_file() {

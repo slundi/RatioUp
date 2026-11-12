@@ -9,10 +9,10 @@ use crate::context::AppContext;
 use crate::service::announce::{AnnounceService, run_scheduler};
 use crate::service::torrents::{TorrentService, prepare_dir};
 
-mod announcer;
 pub mod bencode;
 mod config;
 mod context;
+mod infra;
 pub mod json_output;
 mod repository;
 mod service;
@@ -54,7 +54,7 @@ fn get_config_from_xdg() -> Option<PathBuf> {
     let xdg = xdg::BaseDirectories::with_prefix("RatioUp");
     match xdg.place_config_file("config.toml") {
         Ok(path) => return Some(path),
-        Err(e) => tracing::error!("Cannot create config file: {e}"),
+        Err(error) => tracing::error!("Cannot create config file: {error}"),
     }
     None
 }
@@ -105,9 +105,9 @@ async fn main() {
             return;
         }
         Ok(_) => {}
-        Err(e) => {
+        Err(error) => {
             error!(
-                "Cannot read torrent directory {}: {e}",
+                "Cannot read torrent directory {}: {error}",
                 torrent_dir.display()
             );
             return;
@@ -141,14 +141,14 @@ async fn write_pid_file() -> Option<PathBuf> {
         Ok(file) => {
             match tokio::fs::write(file.clone(), std::process::id().to_string().as_bytes()).await {
                 Ok(_) => Some(file),
-                Err(e) => {
-                    warn!("Cannot create PID file: {e}");
+                Err(error) => {
+                    warn!("Cannot create PID file: {error}");
                     None
                 }
             }
         }
-        Err(e) => {
-            warn!("Cannot create PID file: {e}");
+        Err(error) => {
+            warn!("Cannot create PID file: {error}");
             None
         }
     }
