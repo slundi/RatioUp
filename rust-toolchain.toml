@@ -16,8 +16,8 @@ targets = [
   "aarch64-unknown-linux-musl",
   "i686-unknown-linux-musl",
   "armv7-unknown-linux-musleabihf",
-  "arm-unknown-linux-musleabihf",
-  "x86_64-pc-windows-gnu",
+  # "arm-unknown-linux-musleabihf",
+  # "x86_64-pc-windows-gnu",
   # "wasm32-unknown-unknown",
 ]
 profile = "default"

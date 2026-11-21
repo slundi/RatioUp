@@ -35,3 +35,5 @@ lcov.info
 result
 result-*
 .envrc
+
+dist/
