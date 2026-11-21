@@ -27,16 +27,27 @@ async fn run_key_renewer(ctx: Arc<AppContext>, refresh_every: u16) {
     }
 }
 
-/// Parse CLI args. Only a config file can be there.
-fn parse_cli_args() -> Option<PathBuf> {
-    let mut args = std::env::args().skip(1); // Skip the program name
+/// What the CLI arguments ask the program to do.
+#[derive(Debug, PartialEq)]
+enum CliAction {
+    /// Run the daemon, with an optional config file path
+    Run(Option<PathBuf>),
+    /// Print the version and exit
+    Version,
+}
+
+/// Parse CLI args (program name already skipped). Only a config file or a
+/// version request can be there.
+fn parse_cli_args(args: impl IntoIterator<Item = String>) -> CliAction {
+    let mut args = args.into_iter();
 
     // Manually parse arguments
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "-V" | "--version" => return CliAction::Version,
             "-c" | "--config" => {
                 if let Some(path_str) = args.next() {
-                    return Some(PathBuf::from(path_str));
+                    return CliAction::Run(Some(PathBuf::from(path_str)));
                 } else {
                     tracing::error!("Missing value for -c/--config");
                 }
@@ -47,7 +58,7 @@ fn parse_cli_args() -> Option<PathBuf> {
             }
         }
     }
-    None
+    CliAction::Run(None)
 }
 
 fn get_config_from_xdg() -> Option<PathBuf> {
@@ -69,7 +80,13 @@ async fn main() {
         .init();
 
     // get config path if possible
-    let mut config_path: Option<PathBuf> = parse_cli_args();
+    let mut config_path: Option<PathBuf> = match parse_cli_args(std::env::args().skip(1)) {
+        CliAction::Version => {
+            println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+            return;
+        }
+        CliAction::Run(path) => path,
+    };
     if config_path.is_none() {
         config_path = get_config_from_xdg();
     }
@@ -163,6 +180,39 @@ async fn remove_pid_file(pid_file: Option<PathBuf>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|arg| arg.to_string()).collect()
+    }
+
+    #[test]
+    fn test_parse_cli_args_version() {
+        assert_eq!(parse_cli_args(args(&["--version"])), CliAction::Version);
+        assert_eq!(parse_cli_args(args(&["-V"])), CliAction::Version);
+        assert_eq!(
+            parse_cli_args(args(&["--unknown", "--version"])),
+            CliAction::Version
+        );
+    }
+
+    #[test]
+    fn test_parse_cli_args_config() {
+        assert_eq!(
+            parse_cli_args(args(&["-c", "my.toml"])),
+            CliAction::Run(Some(PathBuf::from("my.toml")))
+        );
+        assert_eq!(
+            parse_cli_args(args(&["--config", "my.toml"])),
+            CliAction::Run(Some(PathBuf::from("my.toml")))
+        );
+    }
+
+    #[test]
+    fn test_parse_cli_args_defaults_to_run_without_config() {
+        assert_eq!(parse_cli_args(args(&[])), CliAction::Run(None));
+        assert_eq!(parse_cli_args(args(&["--unknown"])), CliAction::Run(None));
+        assert_eq!(parse_cli_args(args(&["--config"])), CliAction::Run(None));
+    }
 
     #[tokio::test]
     async fn test_remove_pid_file_deletes_file() {

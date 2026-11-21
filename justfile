@@ -144,10 +144,11 @@ verify-static TARGET:
         exit 1
     fi
     # Only execute binaries the host CPU can run (x86_64 also runs i686).
+    # timeout: if --version ever stops exiting, the daemon would start and hang.
     arch="$(echo {{TARGET}} | cut -d- -f1)"
     host="$(uname -m)"
     if [[ "$arch" == "$host" || ( "$arch" == i686 && "$host" == x86_64 ) ]]; then
-        "$bin" --version >/dev/null
+        timeout 10 "$bin" --version >/dev/null
         echo "  ✓ {{TARGET}} is fully static and runs"
     else
         echo "  ✓ {{TARGET}} is fully static (foreign arch, not executed)"
